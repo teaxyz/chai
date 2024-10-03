@@ -41,10 +41,11 @@ class Package(Base):
     derived_id = Column(String, nullable=False, unique=True)  # package_manager/name
     name = Column(String, nullable=False, index=True)
     package_manager_id = Column(
-        UUID(as_uuid=True), ForeignKey("package_managers.id"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("package_managers.id"),
+        nullable=False,
+        index=True,
     )
-    # the import_id is from our data source (e.g., crate_id)
-    # it is non-nullable, and we'll default to name if not provided by source
     import_id = Column(String, nullable=False, index=True)
     readme = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, default=func.now())
@@ -63,27 +64,7 @@ class Package(Base):
 class PackageManager(Base):
     __tablename__ = "package_managers"
     id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
-    name = Column(String, nullable=False, unique=True)
-    created_at = Column(DateTime, nullable=False, default=func.now())
-    updated_at = Column(DateTime, nullable=False, default=func.now())
-
-
-# this is a collection of all the different type of URLs
-class URL(Base):
-    __tablename__ = "urls"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
-    url = Column(String, nullable=False, unique=True)
-    created_at = Column(DateTime, nullable=False, default=func.now())
-    updated_at = Column(DateTime, nullable=False, default=func.now())
-
-    def to_dict(self):
-        return {"url": self.url}
-
-
-class URLType(Base):
-    __tablename__ = "url_types"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
-    name = Column(String, nullable=False, unique=True)  # repo, homepage, etc
+    source_id = Column(UUID(as_uuid=True), ForeignKey("sources.id"), nullable=False)
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now())
 
@@ -94,7 +75,9 @@ class Version(Base):
         UniqueConstraint("package_id", "version", name="uq_package_version"),
     )
     id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
-    package_id = Column(UUID(as_uuid=True), ForeignKey("packages.id"), nullable=False)
+    package_id = Column(
+        UUID(as_uuid=True), ForeignKey("packages.id"), nullable=False, index=True
+    )
     version = Column(String, nullable=False, index=True)
     import_id = Column(String, nullable=False, index=True)
     # size, published_at, license_id, downloads, checksum
@@ -142,12 +125,16 @@ class DependsOn(Base):
         ),
     )
     id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
-    version_id = Column(UUID(as_uuid=True), ForeignKey("versions.id"), nullable=False)
+    version_id = Column(
+        UUID(as_uuid=True), ForeignKey("versions.id"), nullable=False, index=True
+    )
     dependency_id = Column(
-        UUID(as_uuid=True), ForeignKey("packages.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("packages.id"), nullable=False, index=True
     )
     # ideally, these are non-nullable but diff package managers are picky about this
-    dependency_type = Column(String, nullable=True)
+    dependency_type_id = Column(
+        UUID(as_uuid=True), ForeignKey("depends_on_types.id"), nullable=True, index=True
+    )
     semver_range = Column(String, nullable=True)
     # TODO: make these default now now
     created_at = Column(DateTime, nullable=False)
@@ -157,9 +144,17 @@ class DependsOn(Base):
         return {
             "version_id": self.version_id,
             "dependency_id": self.dependency_id,
+            # "dependency_type_id": self.dependency_type_id,
             "semver_range": self.semver_range,
-            # "dependency_type": self.dependency_type,
         }
+
+
+class DependsOnType(Base):
+    __tablename__ = "depends_on_types"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
+    name = Column(String, nullable=False, unique=True, index=True)
+    created_at = Column(DateTime, nullable=False, default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=func.now())
 
 
 class LoadHistory(Base):
@@ -172,61 +167,56 @@ class LoadHistory(Base):
     updated_at = Column(DateTime, nullable=False, default=func.now())
 
 
-class PackageURL(Base):
-    __tablename__ = "package_urls"
-    __table_args__ = (
-        UniqueConstraint(
-            "package_id", "url_id", "url_type_id", name="uq_package_url_type"
-        ),
-    )
+# authoritative source of truth for all our sources
+class Source(Base):
+    __tablename__ = "sources"
     id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
-    package_id = Column(UUID(as_uuid=True), ForeignKey("packages.id"), nullable=False)
-    url_id = Column(UUID(as_uuid=True), ForeignKey("urls.id"), nullable=False)
-    url_type_id = Column(UUID(as_uuid=True), ForeignKey("url_types.id"), nullable=False)
+    type = Column(String, nullable=False, unique=True)
+    created_at = Column(DateTime, nullable=False, default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=func.now())
+
+
+# this is a collection of all the different type of URLs
+class URL(Base):
+    __tablename__ = "urls"
+    __table_args__ = (UniqueConstraint("url_type_id", "url", name="uq_url_type_url"),)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
+    url = Column(String, nullable=False, unique=True, index=True)
+    url_type_id = Column(
+        UUID(as_uuid=True), ForeignKey("url_types.id"), nullable=False, index=True
+    )
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now())
 
     def to_dict(self):
-        return {
-            "package_id": self.package_id,
-            "url_id": self.url_id,
-            "url_type_id": self.url_type_id,
-        }
+        return {"url": self.url, "url_type_id": self.url_type_id}
+
+
+# homepage, repository, documentation, etc.
+class URLType(Base):
+    __tablename__ = "url_types"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
+    name = Column(String, nullable=False, unique=True)
+    created_at = Column(DateTime, nullable=False, default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=func.now())
 
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("source_id", "import_id", name="uq_source_import_id"),
+    )
     id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
-    username = Column(String, nullable=False, unique=True)
-    import_id = Column(String, nullable=False, unique=True)
+    username = Column(String, nullable=False, unique=True, index=True)
+    source_id = Column(
+        UUID(as_uuid=True), ForeignKey("sources.id"), nullable=False, index=True
+    )
+    import_id = Column(String, nullable=False, unique=True, index=True)
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now())
 
     def to_dict(self):
         return {"username": self.username}
-
-
-class UserType(Base):
-    __tablename__ = "user_types"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
-    name = Column(String, nullable=False, unique=True)  # github, gitlab, crates, etc.
-    created_at = Column(DateTime, nullable=False, default=func.now())
-    updated_at = Column(DateTime, nullable=False, default=func.now())
-
-
-class UserURL(Base):
-    __tablename__ = "user_urls"
-    __table_args__ = (
-        UniqueConstraint("user_id", "url_id", "user_type_id", name="uq_user_url_type"),
-    )
-    id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    url_id = Column(UUID(as_uuid=True), ForeignKey("urls.id"), nullable=False)
-    user_type_id = Column(
-        UUID(as_uuid=True), ForeignKey("user_types.id"), nullable=False
-    )
-    created_at = Column(DateTime, nullable=False, default=func.now())
-    updated_at = Column(DateTime, nullable=False, default=func.now())
 
 
 class UserVersion(Base):
@@ -235,8 +225,12 @@ class UserVersion(Base):
         UniqueConstraint("user_id", "version_id", name="uq_user_version"),
     )
     id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    version_id = Column(UUID(as_uuid=True), ForeignKey("versions.id"), nullable=False)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
+    version_id = Column(
+        UUID(as_uuid=True), ForeignKey("versions.id"), nullable=False, index=True
+    )
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now())
 
@@ -247,7 +241,25 @@ class UserPackage(Base):
         UniqueConstraint("user_id", "package_id", name="uq_user_package"),
     )
     id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    package_id = Column(UUID(as_uuid=True), ForeignKey("packages.id"), nullable=False)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
+    package_id = Column(
+        UUID(as_uuid=True), ForeignKey("packages.id"), nullable=False, index=True
+    )
+    created_at = Column(DateTime, nullable=False, default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=func.now())
+
+
+class PackageURL(Base):
+    __tablename__ = "package_urls"
+    __table_args__ = (UniqueConstraint("package_id", "url_id", name="uq_package_url"),)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
+    package_id = Column(
+        UUID(as_uuid=True), ForeignKey("packages.id"), nullable=False, index=True
+    )
+    url_id = Column(
+        UUID(as_uuid=True), ForeignKey("urls.id"), nullable=False, index=True
+    )
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now())
