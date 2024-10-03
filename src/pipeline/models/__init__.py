@@ -120,7 +120,7 @@ class DependsOn(Base):
         UniqueConstraint(
             "version_id",
             "dependency_id",
-            "dependency_type",
+            "dependency_type_id",
             name="uq_version_dependency_type",
         ),
     )
