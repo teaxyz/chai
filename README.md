@@ -12,38 +12,8 @@ are 3 services to it:
 
 ## Setup
 
-first run `mkdir -p data/{crates,pkgx,homebrew,npm,pypi,rubys}`, to setup the data
-directory where the fetchers will store the data.
-
-then, running `docker compose up` will setup the db and run the pipeline. a successful
-run will look something like this:
-
-```
-db-1       | 2024-09-23 18:33:31.199 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
-db-1       | 2024-09-23 18:33:31.199 UTC [1] LOG:  listening on IPv6 address "::", port 5432
-db-1       | 2024-09-23 18:33:31.202 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
-db-1       | 2024-09-23 18:33:31.230 UTC [30] LOG:  database system was shut down at 2024-09-23 18:04:05 UTC
-db-1       | 2024-09-23 18:33:31.242 UTC [1] LOG:  database system is ready to accept connections
-alembic-1  | db:5432 - accepting connections
-alembic-1  | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-alembic-1  | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-alembic-1  | db currently at 0db06140525f (head)
-alembic-1  | INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-alembic-1  | INFO  [alembic.runtime.migration] Will assume transactional DDL.
-alembic-1  | migrations run
-alembic-1 exited with code 0
-alembic-1   | postgresql://postgres:s3cr3t@db:5432/chai
-alembic-1   | s3cr3t
-pipeline-1  | 0.01: [crates_orchestrator]: [DEBUG]: logging is working
-pipeline-1  | 0.01: [main_pipeline]: [DEBUG]: logging is working
-pipeline-1  | 0.01: [DB]: [DEBUG]: logging is working
-pipeline-1  | 0.03: [DB]: [DEBUG]: created engine
-pipeline-1  | 0.03: [DB]: [DEBUG]: created session
-pipeline-1  | 0.03: [DB]: [DEBUG]: connected to postgresql://postgres:s3cr3t@db:5432/chai
-pipeline-1  | 0.03: [crates_orchestrator]: fetching crates packages
-pipeline-1  | 0.03: [crates_fetcher]: [DEBUG]: logging is working
-pipeline-1  | 0.03: [crates_fetcher]: [DEBUG]: adding package manager crates
-```
+1. Run `docker compose build` to create the latest Docker images.
+2. Run `docker compose up` to launch.
 
 > [!IMPORTANT]
 >
@@ -58,10 +28,8 @@ pipeline-1  | 0.03: [crates_fetcher]: [DEBUG]: adding package manager crates
 
 if at all you need to do a hard reset, here's the steps
 
-1. `rm -rf db/data`: removes all the data that was loaded into the db
-1. `rm -rf .venv`: if you created a virtual environment for local dev, this removes it
 1. `rm -rf data`: removes all the data the fetcher is putting
-1. `docker system prune -a -f --volumes`: removes **everything** docker-related
+2. `docker system prune -a -f --volumes`: removes **everything** docker-related
 
 > [!WARNING]
 >

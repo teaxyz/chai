@@ -7,27 +7,26 @@ services:
     ports:
       - "5435:5432"
     volumes:
-      - ./db/data:/var/lib/postgresql/data
-      - ./db/init-scripts/init-script.sql:/docker-entrypoint-initdb.d/create-database.sql
+      - ./data/db/data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d chai"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
-  
+
   alembic:
-    build: alembic
+    build:
+      context: ./
+      dockerfile: ./alembic/Dockerfile
     environment:
       - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
-      - POSTGRES_PASSWORD=s3cr3t
-    volumes:
-      - .:/app
+      - PGPASSWORD=s3cr3t
     depends_on:
       db:
         condition: service_healthy
-    working_dir: /app/alembic
+    working_dir: /alembic
     entrypoint: ["./run_migrations.sh"]
-  
+
   pipeline:
     build: src
     environment:
@@ -51,8 +50,8 @@ services:
     volumes:
       - ./monitor:/app
       - /var/run/docker.sock:/var/run/docker.sock
-    working_dir: /app
     depends_on:
       pipeline:
         condition: service_started
+    working_dir: /usr/src/monitor
     entrypoint: ["./run_monitor.sh"]
