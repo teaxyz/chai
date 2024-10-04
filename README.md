@@ -112,44 +112,19 @@ ORDER BY number_of_packages DESC;
 ### url types available
 
 ```sql
-SELECT ut."name", count(1)
-FROM package_urls pu
-JOIN url_types ut ON pu.url_type_id = ut.id
-GROUP BY ut."name";
+-- #TODO
 ```
 
 ### what platform is most used for code hosting?
 
 ```sql
-SELECT
-	CASE
-		WHEN u.url ~ 'github' AND ut."name" = 'repository' THEN 'GitHub'
-		WHEN u.url ~ 'gitlab' AND ut."name" = 'repository' THEN 'GitLab'
-		ELSE 'Other'
-	END,
-	count(1)
-FROM package_urls pu
-JOIN urls u ON pu.url_id = u.id
-JOIN packages p ON pu.package_id = p.id
-JOIN url_types ut ON ut.id = pu.url_type_id
-WHERE ut."name" = 'repository'
-GROUP BY
-	CASE
-		WHEN u.url ~ 'github' AND ut."name" = 'repository' THEN 'GitHub'
-		WHEN u.url ~ 'gitlab' AND ut."name" = 'repository' THEN 'GitLab'
-		ELSE 'Other'
-	END;
+-- #TODO
 ```
 
 ### packages where we're missing repo urls
 
 ```sql
-SELECT p."name"
-FROM packages p
-LEFT JOIN package_urls pu ON p.id = pu.package_id AND pu.url_type_id = (
-    SELECT id FROM url_types WHERE "name" = 'repository'
-)
-WHERE pu.id IS NULL;
+-- #TODO
 ```
 
 ## FAQs / common issues
