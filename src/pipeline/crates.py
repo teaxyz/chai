@@ -1,4 +1,3 @@
-from src.pipeline.models import PackageManager
 from src.pipeline.utils.fetcher import TarballFetcher
 from src.pipeline.utils.logger import Logger
 from src.pipeline.utils.pg import DB
@@ -18,8 +17,7 @@ logger = Logger("crates_orchestrator", mode=Logger.VERBOSE)
 # 3. load the data into the db
 def get_crates_packages(db: DB) -> None:
     # get crates's package manager id, insert it if it doesn't exist
-    package_manager_id = db.select_package_manager_id("crates", create=True)
-    package_manager = PackageManager(id=package_manager_id, name="crates")
+    package_manager = db.select_package_manager_id("crates", create=True)
 
     # get the homepage and repository url types, insert them if they don't exist
     # homepage / repository because that is what crates provides
@@ -56,6 +54,6 @@ def get_crates_packages(db: DB) -> None:
     db.insert_dependencies(transformer.dependencies())
 
     # insert load history
-    db.insert_load_history(package_manager_id)
+    db.insert_load_history(package_manager.id)
     logger.log("✅ crates")
     logger.log("in a new terminal, run README.md/db-list-history to verify")

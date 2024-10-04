@@ -14,6 +14,7 @@ from src.pipeline.models import (
     Package,
     PackageManager,
     PackageURL,
+    Source,
     URLType,
     User,
     URL,
@@ -22,6 +23,7 @@ from src.pipeline.models import (
 from src.pipeline.utils.logger import Logger
 
 CHAI_DATABASE_URL = os.getenv("CHAI_DATABASE_URL")
+DEFAULT_BATCH_SIZE = 10000
 
 
 # ORMs suck, go back to SQL
@@ -38,7 +40,7 @@ class DB:
         self,
         items: Iterable[DeclarativeMeta],
         model: Type[DeclarativeMeta],
-        batch_size: int = 10000,
+        batch_size: int = DEFAULT_BATCH_SIZE,
     ) -> None:
         """just handles batching logic for any type of model we wanna insert"""
         self.logger.debug("starting a batch insert")
@@ -91,15 +93,21 @@ class DB:
                 name = item["name"]
                 import_id = item["import_id"]
                 readme = item["readme"]
+
+                package_manager_name = self.select_package_manager_name_by_id(
+                    package_manager.id
+                )
+
+                # get the package manager name
                 yield Package(
-                    derived_id=f"{package_manager.name}/{name}",
+                    derived_id=f"{package_manager_name}/{name}",
                     name=name,
                     package_manager_id=package_manager.id,
                     import_id=import_id,
                     readme=readme,
                 )
 
-        return self._batch(package_object_generator(), Package)
+        return self._batch(package_object_generator(), Package, DEFAULT_BATCH_SIZE)
 
     def insert_versions(self, version_generator: Iterable[dict[str, str]]):
         def version_object_generator():
@@ -134,7 +142,7 @@ class DB:
                     checksum=checksum,
                 )
 
-        self._batch(version_object_generator(), Version)
+        self._batch(version_object_generator(), Version, DEFAULT_BATCH_SIZE)
 
     def insert_dependencies(self, dependency_generator: Iterable[dict[str, str]]):
         def dependency_object_generator():
@@ -142,7 +150,7 @@ class DB:
                 start_id = item["start_id"]
                 end_id = item["end_id"]
                 semver_range = item["semver_range"]
-                dependency_type = item["dependency_type"]
+                _ = item["dependency_type"]  # dependency_type
 
                 version = self.select_version_by_import_id(start_id)
                 if version is None:
@@ -168,25 +176,12 @@ class DB:
                     # dependency_type=dependency_type, TODO: add this
                 )
 
-        self._batch(dependency_object_generator(), DependsOn, 100000)
+        self._batch(dependency_object_generator(), DependsOn, DEFAULT_BATCH_SIZE)
 
     def insert_load_history(self, package_manager_id: str):
         with self.session() as session:
             session.add(LoadHistory(package_manager_id=package_manager_id))
             session.commit()
-
-    def insert_package_manager(self, package_manager: str) -> UUID | None:
-        with self.session() as session:
-            exists = self.select_package_manager_id(package_manager) is not None
-            if not exists:
-                session.add(PackageManager(name=package_manager))
-                session.commit()
-                return (
-                    session.query(PackageManager)
-                    .filter_by(name=package_manager)
-                    .first()
-                    .id
-                )
 
     def insert_url_types(self, name: str) -> UUID:
         with self.session() as session:
@@ -200,14 +195,14 @@ class DB:
                 username = item["username"]
                 yield User(username=username)
 
-        self._batch(user_object_generator(), User, 10000)
+        self._batch(user_object_generator(), User, DEFAULT_BATCH_SIZE)
 
     def insert_urls(self, url_generator: Iterable[str]):
         def url_object_generator():
             for item in url_generator:
                 yield URL(url=item)
 
-        self._batch(url_object_generator(), URL, 10000)
+        self._batch(url_object_generator(), URL, DEFAULT_BATCH_SIZE)
 
     def insert_package_urls(self, package_url_generator: Iterable[dict[str, str]]):
         def package_url_object_generator():
@@ -219,6 +214,20 @@ class DB:
                 )
 
         self._batch(package_url_object_generator(), PackageURL)
+
+    def insert_source(self, name: str) -> UUID:
+        with self.session() as session:
+            session.add(Source(type=name))
+            session.commit()
+            return session.query(Source).filter_by(type=name).first().id
+
+    def insert_package_manager(self, source_id: UUID) -> PackageManager:
+        with self.session() as session:
+            session.add(PackageManager(source_id=source_id))
+            session.commit()
+            return (
+                session.query(PackageManager).filter_by(source_id=source_id).first().id
+            )
 
     def print_statement(self, stmt):
         dialect = postgresql.dialect()
@@ -241,24 +250,25 @@ class DB:
 
     def select_package_manager_id(
         self, package_manager: str, create: bool = False
-    ) -> UUID | None:
+    ) -> PackageManager | None:
         with self.session() as session:
+            # get the package manager
             result = (
-                session.query(PackageManager).filter_by(name=package_manager).first()
+                session.query(PackageManager.id)
+                .join(Source, PackageManager.source_id == Source.id)
+                .filter(Source.type == package_manager)
+                .first()
             )
 
+            # return it if it exists
             if result:
                 self.logger.debug(f"id: {result.id}")
-                return result.id
+                return result
+
             if create:
-                session.add(PackageManager(name=package_manager))
-                session.commit()
-                return (
-                    session.query(PackageManager)
-                    .filter_by(name=package_manager)
-                    .first()
-                    .id
-                )
+                source = self.insert_source(package_manager)
+                return self.insert_package_manager(source.id)
+
             return None
 
     def select_package_by_import_id(self, import_id: str) -> Package | None:
@@ -285,6 +295,17 @@ class DB:
             result = session.query(Version).filter_by(import_id=import_id).first()
             if result:
                 return result
+
+    def select_package_manager_name_by_id(self, id: UUID) -> str | None:
+        with self.session() as session:
+            result = (
+                session.query(Source.type)
+                .join(PackageManager, PackageManager.source_id == Source.id)
+                .filter(PackageManager.id == id)
+                .first()
+            )
+            if result:
+                return result.type
 
 
 if __name__ == "__main__":

@@ -136,9 +136,8 @@ class DependsOn(Base):
         UUID(as_uuid=True), ForeignKey("depends_on_types.id"), nullable=True, index=True
     )
     semver_range = Column(String, nullable=True)
-    # TODO: make these default now now
-    created_at = Column(DateTime, nullable=False)
-    updated_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=func.now())
 
     def to_dict(self):
         return {
