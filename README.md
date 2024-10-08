@@ -117,54 +117,53 @@ inject into your environment. if you don't...go get it.
 rm -rf db/data data .venv
 ```
 
-### setup
+### build
 
 ```sh
-mkdir -p data/{crates,pkgx,homebrew,npm,pypi,rubys}
+docker-compose build
 ```
 
-### local-dev
+### start
 
-```sh
-uv venv
-cd src
-uv pip install -r requirements.txt
-```
-
-### chai-start
-
-Requires: setup
-Inputs: FORCE
-Env: FORCE=${FORCE:-not-force}
+Requires: build
 Env: PKG_MANAGER=${PKG_MANAGER:-crates}
+Env: CHAI_DATABASE_URL=${CHAI_DATABASE_URL:-"postgresql://postgres:s3cr3t@localhost:5435/chai"}
 
 ```sh
-if [ "$FORCE" = "force" ]; then
-    docker-compose up --force-recreate --build -d
-else
-    docker-compose up -d
-fi
-export CHAI_DATABASE_URL="postgresql://postgres:s3cr3t@localhost:5435/chai"
+export
+docker compose up -d
 ```
 
-### chai-stop
+### test
+
+Requires: build
+Env: PKG_MANAGER=${PKG_MANAGER:-crates}
+Env: CHAI_DATABASE_URL=${CHAI_DATABASE_URL:-"postgresql://postgres:s3cr3t@localhost:5435/chai"}
+Env: TEST=true
+Env: DEBUG=true
 
 ```sh
-docker-compose down
+docker compose up
+```
+
+### stop
+
+```sh
+docker compose down
+```
+
+### logs
+
+```sh
+docker compose logs
 ```
 
 ### db-reset
 
-Requires: chai-stop
+Requires: stop
 
 ```sh
 rm -rf db/data
-```
-
-### db-logs
-
-```sh
-docker-compose logs db
 ```
 
 ### db-generate-migration
