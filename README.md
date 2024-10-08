@@ -130,7 +130,6 @@ Env: PKG_MANAGER=${PKG_MANAGER:-crates}
 Env: CHAI_DATABASE_URL=${CHAI_DATABASE_URL:-"postgresql://postgres:s3cr3t@localhost:5435/chai"}
 
 ```sh
-export
 docker compose up -d
 ```
 

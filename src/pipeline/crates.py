@@ -11,6 +11,7 @@ from src.pipeline.utils.crates.transformer import CratesTransformer
 logger = Logger("crates_orchestrator", mode=Logger.VERBOSE)
 
 
+# TODO: we can make a global version of this
 @dataclass
 class Config:
     file_location: str
@@ -18,6 +19,11 @@ class Config:
     package_manager_id: str
     url_types: URLTypes
     user_types: UserTypes
+
+    def __str__(self):
+        return f"Config(file_location={self.file_location}, test={self.test}, \
+            package_manager_id={self.package_manager_id}, url_types={self.url_types}, \
+            user_types={self.user_types})"
 
 
 def initialize(db: DB) -> Config:
@@ -55,6 +61,7 @@ def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
     if not config.test:
         db.insert_versions(transformer.versions())
         db.insert_dependencies(transformer.dependencies())
+        db.insert_users(transformer.users())
     else:
         logger.log("skipping loading everything because test mode")
 
@@ -64,6 +71,7 @@ def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
 
 def main(db: DB) -> None:
     config = initialize(db)
+    logger.debug(config)
     fetch(config)
 
     transformer = CratesTransformer(config.url_types, config.user_types)

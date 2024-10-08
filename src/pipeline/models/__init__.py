@@ -210,12 +210,16 @@ class User(Base):
     source_id = Column(
         UUID(as_uuid=True), ForeignKey("sources.id"), nullable=False, index=True
     )
-    import_id = Column(String, nullable=False, unique=True, index=True)
+    import_id = Column(String, nullable=False, unique=False, index=True)
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now())
 
     def to_dict(self):
-        return {"username": self.username}
+        return {
+            "username": self.username,
+            "source_id": self.source_id,
+            "import_id": self.import_id,
+        }
 
 
 class UserVersion(Base):

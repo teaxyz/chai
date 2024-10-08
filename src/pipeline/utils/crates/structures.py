@@ -15,12 +15,12 @@ class DependencyType(IntEnum):
 
 
 @dataclass
-class URLTypes(TypedDict):
+class URLTypes:
     homepage: UUID
     repository: UUID
 
 
 @dataclass
-class UserTypes(TypedDict):
+class UserTypes:
     crates: UUID
     github: UUID
