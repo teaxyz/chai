@@ -33,6 +33,7 @@ services:
       - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
       - PKG_MANAGER=${PKG_MANAGER:-crates}
       - PYTHONPATH=/app
+      - DEPENDENCIES=${DEPENDENCIES:-false}
     volumes:
       - .:/app
     working_dir: /app

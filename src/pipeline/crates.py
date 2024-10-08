@@ -1,9 +1,12 @@
+from os import getenv
+
 from src.pipeline.utils.fetcher import TarballFetcher
 from src.pipeline.utils.logger import Logger
 from src.pipeline.utils.pg import DB
 from src.pipeline.utils.crates.transformer import CratesTransformer
 
 FILE_LOCATION = "https://static.crates.io/db-dump.tar.gz"
+DEPENDENCIES = getenv("DEPENDENCIES", "false").lower() == "true"
 
 logger = Logger("crates_orchestrator", mode=Logger.VERBOSE)
 
@@ -51,7 +54,11 @@ def get_crates_packages(db: DB) -> None:
     db.insert_versions(transformer.versions())
 
     # dependencies
-    db.insert_dependencies(transformer.dependencies())
+    logger.warn("dependencies will take an hour or so. set DEPENDENCIES=true to load")
+    if DEPENDENCIES:
+        db.insert_dependencies(transformer.dependencies())
+
+    # users
 
     # insert load history
     db.insert_load_history(package_manager.id)
