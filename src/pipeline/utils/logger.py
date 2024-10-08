@@ -1,6 +1,9 @@
+from os import getenv
 import time
 import sys
 import traceback
+
+DEBUG = getenv("DEBUG", "false").lower() == "true"
 
 # use inspect to print the line of code as well?
 # caller = inspect.currentframe().f_back
@@ -16,10 +19,10 @@ class Logger:
     NORMAL = 1
     VERBOSE = 2
 
-    def __init__(self, name: str, mode=VERBOSE, start=time.time()) -> None:
+    def __init__(self, name: str, mode=NORMAL, start=time.time()) -> None:
         self.name = name
         self.start = start
-        self.mode = int(mode)
+        self.mode = Logger.VERBOSE if DEBUG else Logger.NORMAL
 
     def print(self, msg: str):
         print(f"{self.time_diff():.2f}: [{self.name}]: {msg}")

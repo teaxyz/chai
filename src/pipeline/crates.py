@@ -1,66 +1,81 @@
 from os import getenv
 
+from dataclasses import dataclass
+
+from src.pipeline.utils.crates.structures import URLTypes, UserTypes
 from src.pipeline.utils.fetcher import TarballFetcher
 from src.pipeline.utils.logger import Logger
 from src.pipeline.utils.pg import DB
 from src.pipeline.utils.crates.transformer import CratesTransformer
 
-FILE_LOCATION = "https://static.crates.io/db-dump.tar.gz"
-DEPENDENCIES = getenv("DEPENDENCIES", "false").lower() == "true"
-
 logger = Logger("crates_orchestrator", mode=Logger.VERBOSE)
 
 
-# this is the orchestrator for crates
-# in general, the orchestrators:
-# 0. prep the db for the package manager, getting its id, and anything else
-#    that needs to be inserted before we load data (url types, etc)
-# 1. fetch data associated with that package manager
-# 2. call the various transformer methods associated with that package manager
-# 3. load the data into the db
-def get_crates_packages(db: DB) -> None:
-    # get crates's package manager id, insert it if it doesn't exist
+@dataclass
+class Config:
+    file_location: str
+    test: bool
+    package_manager_id: str
+    url_types: URLTypes
+    user_types: UserTypes
+
+
+def initialize(db: DB) -> Config:
+    file_location = "https://static.crates.io/db-dump.tar.gz"
+    test = getenv("TEST", "false").lower() == "true"
     package_manager = db.select_package_manager_by_name("crates", create=True)
+    homepage_url = db.select_url_types_homepage(create=True)
+    repository_url = db.select_url_types_repository(create=True)
+    crates_source = db.select_source_by_name("crates", create=True)
+    github_source = db.select_source_by_name("github", create=True)
+    url_types = URLTypes(homepage=homepage_url.id, repository=repository_url.id)
+    user_types = UserTypes(crates=crates_source.id, github=github_source.id)
 
-    # get the homepage and repository url types, insert them if they don't exist
-    # homepage / repository because that is what crates provides
-    homepage_url_type_id = db.select_url_types_homepages()
-    if homepage_url_type_id is None:
-        homepage_url_type_id = db.insert_url_types("homepage")
-    logger.debug(f"homepage_url_type_id: {homepage_url_type_id}")
+    logger.debug("initialized config")
 
-    repository_url_type_id = db.select_url_types_repositories()
-    if repository_url_type_id is None:
-        repository_url_type_id = db.insert_url_types("repository")
-    logger.debug(f"repository_url_type_id: {repository_url_type_id}")
+    return Config(
+        file_location=file_location,
+        test=test,
+        package_manager_id=package_manager.id,
+        url_types=url_types,
+        user_types=user_types,
+    )
 
-    # get the raw files
-    logger.log("need to unravel a ~3GB tarball, this takes ~42 seconds")
-    fetcher = TarballFetcher("crates", FILE_LOCATION)
+
+def fetch(config: Config) -> None:
+    fetcher = TarballFetcher("crates", config.file_location)
     files = fetcher.fetch()
     fetcher.write(files)
 
-    # use the transformer to figure out what we'd need for our ranker
-    transformer = CratesTransformer(homepage_url_type_id, repository_url_type_id)
-    logger.log("transforming crates packages")
 
-    # load the projects, versions, and dependencies into our db
-    logger.log("loading crates packages into db, currently this might take a while")
+def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
+    # always insert packages
+    db.insert_packages(transformer.packages(), config.package_manager_id, "crates")
 
-    # packages
-    db.insert_packages(transformer.packages(), package_manager.id, "crates")
-
-    # versions
-    db.insert_versions(transformer.versions())
-
-    # dependencies
-    logger.warn("dependencies will take an hour or so. set DEPENDENCIES=true to load")
-    if DEPENDENCIES:
+    if not config.test:
+        db.insert_versions(transformer.versions())
         db.insert_dependencies(transformer.dependencies())
+    else:
+        logger.log("skipping loading everything because test mode")
 
-    # users
-
-    # insert load history
-    db.insert_load_history(package_manager.id)
+    db.insert_load_history(config.package_manager_id)
     logger.log("✅ crates")
-    logger.log("in a new terminal, run README.md/db-list-history to verify")
+
+
+def main(db: DB) -> None:
+    config = initialize(db)
+    fetch(config)
+
+    transformer = CratesTransformer(config.url_types, config.user_types)
+    load(db, transformer, config)
+
+    coda = """
+        validate by running 
+        `psql "postgresql://postgres:s3cr3t@localhost:5435/chai" \
+            -c "SELECT * FROM load_history;"`
+    """
+    logger.log(coda)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,4 +1,7 @@
 from enum import IntEnum
+from typing import TypedDict
+from dataclasses import dataclass
+from sqlalchemy import UUID
 
 
 class DependencyType(IntEnum):
@@ -9,3 +12,15 @@ class DependencyType(IntEnum):
 
     def __str__(self):
         return self.name.lower()
+
+
+@dataclass
+class URLTypes(TypedDict):
+    homepage: UUID
+    repository: UUID
+
+
+@dataclass
+class UserTypes(TypedDict):
+    crates: UUID
+    github: UUID

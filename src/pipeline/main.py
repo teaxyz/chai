@@ -1,8 +1,7 @@
 import sys
 from os import getenv
 
-from src.pipeline.crates import get_crates_packages
-from src.pipeline.pkgx import get_pkgx_packages
+from src.pipeline.crates import main as crates_main
 from src.pipeline.utils.logger import Logger
 from src.pipeline.utils.pg import DB
 
@@ -22,10 +21,8 @@ def main():
         package_manager = sys.argv[1]
 
         # run the pipeline for the specified package manager
-        if package_manager == "pkgx":
-            get_pkgx_packages(db)
-        elif package_manager == "crates":
-            get_crates_packages(db)
+        if package_manager == "crates":
+            crates_main(db)
         else:
             raise ValueError("invalid package manager")
     except Exception:

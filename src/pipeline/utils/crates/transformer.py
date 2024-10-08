@@ -1,16 +1,15 @@
 import csv
 from typing import Dict, Generator
-from sqlalchemy import UUID
 
 from src.pipeline.utils.utils import safe_int
-from src.pipeline.utils.crates.structures import DependencyType
+from src.pipeline.utils.crates.structures import DependencyType, URLTypes, UserTypes
 from src.pipeline.utils.transformer import Transformer
 
 
 # crates provides homepage and repository urls, so we'll initialize this transformer
 # with the ids for those url types
 class CratesTransformer(Transformer):
-    def __init__(self, homepage_url_type_id: UUID, repository_url_type_id: UUID):
+    def __init__(self, url_types: URLTypes, user_types: UserTypes):
         super().__init__("crates")
         self.files = {
             "projects": "crates.csv",
@@ -19,10 +18,8 @@ class CratesTransformer(Transformer):
             "users": "users.csv",
             "urls": "crates.csv",
         }
-        self.url_types = {
-            "homepage": homepage_url_type_id,
-            "repository": repository_url_type_id,
-        }
+        self.url_types = url_types
+        self.user_types = user_types
 
     def packages(self) -> Generator[str, None, None]:
         projects_path = self.finder(self.files["projects"])
@@ -84,3 +81,21 @@ class CratesTransformer(Transformer):
                     "semver_range": req,
                     "dependency_type": dependency_type,
                 }
+
+    def users(self):
+        users_path = self.finder(self.files["users"])
+
+        with open(users_path) as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                gh_id = row["gh_id"]
+                gh_login = row["gh_login"]
+                id = row["id"]
+                name = row["name"]
+
+                # yield two rows, one for crates and one for GitHub
+                source_id = self.user_types.crates
+                yield {"import_id": id, "username": name, "source_id": source_id}
+
+                source_id = self.user_types.github
+                yield {"import_id": gh_id, "username": gh_login, "source_id": source_id}

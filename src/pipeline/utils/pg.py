@@ -182,17 +182,20 @@ class DB:
             session.add(LoadHistory(package_manager_id=package_manager_id))
             session.commit()
 
-    def insert_url_types(self, name: str) -> UUID:
+    def insert_url_types(self, name: str) -> URLType:
         with self.session() as session:
             session.add(URLType(name=name))
             session.commit()
-            return session.query(URLType).filter_by(name=name).first().id
+            return session.query(URLType).filter_by(name=name).first()
 
     def insert_users(self, user_generator: Iterable[dict[str, str]]):
         def user_object_generator():
             for item in user_generator:
                 username = item["username"]
-                yield User(username=username)
+                import_id = item["import_id"]
+                source_id = item["source_id"]
+
+                yield User(username=username, import_id=import_id, source_id=source_id)
 
         self._batch(user_object_generator(), User, DEFAULT_BATCH_SIZE)
 
@@ -218,7 +221,7 @@ class DB:
         with self.session() as session:
             session.add(Source(type=name))
             session.commit()
-            return session.query(Source).filter_by(type=name).first().id
+            return session.query(Source).filter_by(type=name).first()
 
     def insert_package_manager(self, source_id: UUID) -> PackageManager:
         with self.session() as session:
@@ -235,17 +238,20 @@ class DB:
         )
         self.logger.log(str(compiled_stmt))
 
-    def select_url_types_homepages(self) -> List[URLType]:
+    def select_url_type(self, url_type: str, create: bool = False) -> URLType:
         with self.session() as session:
-            result = session.query(URLType).filter_by(name="homepage").first()
+            result = session.query(URLType).filter_by(name=url_type).first()
             if result:
-                return result.id
+                return result
+            if create:
+                return self.insert_url_types(url_type)
+            return None
 
-    def select_url_types_repositories(self) -> List[URLType]:
-        with self.session() as session:
-            result = session.query(URLType).filter_by(name="repository").first()
-            if result:
-                return result.id
+    def select_url_types_homepage(self, create: bool = False) -> URLType | None:
+        return self.select_url_type("homepage", create)
+
+    def select_url_types_repository(self, create: bool = False) -> URLType | None:
+        return self.select_url_type("repository", create)
 
     # TODO: rename this to select_package_manager
     def select_package_manager_by_name(
@@ -262,12 +268,12 @@ class DB:
 
             # return it if it exists
             if result:
-                self.logger.debug(f"id: {result.id}")
                 return result
 
             if create:
-                source = self.insert_source(package_manager)
-                return self.insert_package_manager(source)
+                result = self.insert_source(package_manager)
+                id = result.id
+                return self.insert_package_manager(id)
 
             return None
 
@@ -307,7 +313,17 @@ class DB:
             if result:
                 return result.type
 
+    def select_source_by_name(self, name: str, create: bool = False) -> Source | None:
+        with self.session() as session:
+            result = session.query(Source).filter_by(type=name).first()
+            if result:
+                return result
+            if create:
+                return self.insert_source(name)
+            return None
+
 
 if __name__ == "__main__":
     db = DB()
+
     # random tests
