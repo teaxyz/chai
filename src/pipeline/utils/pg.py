@@ -211,6 +211,7 @@ class DB:
                 user = self.select_crates_user_by_import_id(owner_id, crates_sources_id)
                 if user is None:
                     self.logger.warn(f"user with import_id {owner_id} not found")
+                    raise Exception(f"user with import_id {owner_id} not found")
                     continue
 
                 package = self.select_package_by_import_id(crate_id)
@@ -250,9 +251,7 @@ class DB:
         with self.session() as session:
             session.add(PackageManager(source_id=source_id))
             session.commit()
-            return (
-                session.query(PackageManager).filter_by(source_id=source_id).first().id
-            )
+            return session.query(PackageManager).filter_by(source_id=source_id).first()
 
     def print_statement(self, stmt):
         dialect = postgresql.dialect()
