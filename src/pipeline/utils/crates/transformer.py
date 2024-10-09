@@ -23,7 +23,7 @@ class CratesTransformer(Transformer):
         self.url_types = url_types
         self.user_types = user_types
 
-    def packages(self) -> Generator[str, None, None]:
+    def packages(self) -> Generator[Dict[str, str], None, None]:
         projects_path = self.finder(self.files["projects"])
 
         with open(projects_path) as f:
@@ -35,7 +35,7 @@ class CratesTransformer(Transformer):
 
                 yield {"name": name, "import_id": crate_id, "readme": readme}
 
-    def versions(self) -> Generator[Dict[str, int], None, None]:
+    def versions(self) -> Generator[Dict[str, str], None, None]:
         versions_path = self.finder(self.files["versions"])
 
         with open(versions_path) as f:
@@ -63,7 +63,7 @@ class CratesTransformer(Transformer):
                     "checksum": checksum,
                 }
 
-    def dependencies(self):
+    def dependencies(self) -> Generator[Dict[str, str], None, None]:
         dependencies_path = self.finder(self.files["dependencies"])
 
         with open(dependencies_path) as f:
@@ -87,7 +87,7 @@ class CratesTransformer(Transformer):
     # gh_id is unique to github, and is from GitHub
     # our users table is unique on import_id and source_id
     # so, we actually get some github data for free here!
-    def users(self):
+    def users(self) -> Generator[Dict[str, str], None, None]:
         users_path = self.finder(self.files["users"])
         usernames = set()
 
@@ -111,7 +111,7 @@ class CratesTransformer(Transformer):
     # for crate_owners, owner_id and created_by are foreign keys on users.id
     # and owner_kind is 0 for user and 1 for team
     # secondly, created_at is nullable. we'll ignore for now and focus on owners
-    def user_packages(self):
+    def user_packages(self) -> Generator[Dict[str, str], None, None]:
         user_packages_path = self.finder(self.files["user_packages"])
 
         with open(user_packages_path) as f:
@@ -129,8 +129,8 @@ class CratesTransformer(Transformer):
                     "owner_id": owner_id,
                 }
 
-    # TODO: here, we are in the business of reopning files we've already opened before
-    def user_versions(self):
+    # TODO: here, we are in the business of reopening files we've already opened before
+    def user_versions(self) -> Generator[Dict[str, str], None, None]:
         user_versions_path = self.finder(self.files["user_versions"])
 
         with open(user_versions_path) as f:
@@ -147,7 +147,7 @@ class CratesTransformer(Transformer):
     # crates provides three urls for each crate: homepage, repository, and documentation
     # however, any of these could be null, so we should check for that
     # also, we're not going to deduplicate here
-    def urls(self):
+    def urls(self) -> Generator[Dict[str, str], None, None]:
         urls_path = self.finder(self.files["urls"])
 
         with open(urls_path) as f:
@@ -169,6 +169,41 @@ class CratesTransformer(Transformer):
                         "url_type_id": self.url_types.documentation,
                     }
 
+    # TODO: this method also opens the same file again, which is something we want to
+    # avoid. crates.csv contains all the urls and crates, and relationships between
+    # them, so we should be able to do this in one pass
+    def package_urls(self) -> Generator[Dict[str, str], None, None]:
+        urls_path = self.finder(self.files["urls"])
+
+        with open(urls_path) as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                crate_id = row["id"]
+                homepage = row["homepage"]
+                repository = row["repository"]
+                documentation = row["documentation"]
+
+                if homepage:
+                    yield {
+                        "import_id": crate_id,
+                        "url": homepage,
+                        "url_type_id": self.url_types.homepage,
+                    }
+
+                if repository:
+                    yield {
+                        "import_id": crate_id,
+                        "url": repository,
+                        "url_type_id": self.url_types.repository,
+                    }
+
+                if documentation:
+                    yield {
+                        "import_id": crate_id,
+                        "url": documentation,
+                        "url_type_id": self.url_types.documentation,
+                    }
+
 
 if __name__ == "__main__":
     from src.pipeline.crates import initialize
@@ -179,3 +214,6 @@ if __name__ == "__main__":
     x = CratesTransformer(config.url_types, config.user_types)
 
     db.insert_urls(x.urls())
+    print("***** done urls *****")
+    db.insert_package_urls(x.package_urls())
+    print("***** done package urls *****")

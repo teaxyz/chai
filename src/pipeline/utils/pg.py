@@ -257,13 +257,31 @@ class DB:
     def insert_package_urls(self, package_url_generator: Iterable[dict[str, str]]):
         def package_url_object_generator():
             for item in package_url_generator:
+                package_import_id = item["import_id"]
+                url = item["url"]
+                url_type_id = item["url_type_id"]
+
+                self.logger.debug(f"looking for package {package_import_id}")
+                package = self.select_package_by_import_id(package_import_id)
+                if package is None:
+                    self.logger.warn(
+                        f"package with import_id {package_import_id} not found"
+                    )
+                    continue
+                package_id = package.id
+
+                url = self.select_url_by_url_and_type(url, url_type_id)
+                if url is None:
+                    self.logger.warn(f"url {url} not found")
+                    continue
+                url_id = url.id
+
                 yield PackageURL(
-                    package_id=item["package_id"],
-                    url_id=item["url_id"],
-                    url_type_id=item["url_type_id"],
+                    package_id=package_id,
+                    url_id=url_id,
                 )
 
-        self._batch(package_url_object_generator(), PackageURL)
+        self._batch(package_url_object_generator(), PackageURL, DEFAULT_BATCH_SIZE / 10)
 
     def insert_source(self, name: str) -> UUID:
         with self.session() as session:
@@ -383,8 +401,10 @@ class DB:
             if result:
                 return result
 
-
-if __name__ == "__main__":
-    db = DB()
-
-    # random tests
+    def select_url_by_url_and_type(self, url: str, url_type_id: UUID) -> URL | None:
+        with self.session() as session:
+            result = (
+                session.query(URL).filter_by(url=url, url_type_id=url_type_id).first()
+            )
+            if result:
+                return result

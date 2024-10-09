@@ -282,3 +282,9 @@ class PackageURL(Base):
     )
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now())
+
+    def to_dict(self):
+        return {
+            "package_id": self.package_id,
+            "url_id": self.url_id,
+        }
