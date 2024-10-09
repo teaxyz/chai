@@ -143,3 +143,39 @@ class CratesTransformer(Transformer):
                     continue
 
                 yield {"version_id": version_id, "published_by": published_by}
+
+    # crates provides three urls for each crate: homepage, repository, and documentation
+    # however, any of these could be null, so we should check for that
+    # also, we're not going to deduplicate here
+    def urls(self):
+        urls_path = self.finder(self.files["urls"])
+
+        with open(urls_path) as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                homepage = row["homepage"]
+                repository = row["repository"]
+                documentation = row["documentation"]
+
+                if homepage:
+                    yield {"url": homepage, "url_type_id": self.url_types.homepage}
+
+                if repository:
+                    yield {"url": repository, "url_type_id": self.url_types.repository}
+
+                if documentation:
+                    yield {
+                        "url": documentation,
+                        "url_type_id": self.url_types.documentation,
+                    }
+
+
+if __name__ == "__main__":
+    from src.pipeline.crates import initialize
+    from src.pipeline.utils.pg import DB
+
+    db = DB()
+    config = initialize(db)
+    x = CratesTransformer(config.url_types, config.user_types)
+
+    db.insert_urls(x.urls())

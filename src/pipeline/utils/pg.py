@@ -248,7 +248,9 @@ class DB:
     def insert_urls(self, url_generator: Iterable[str]):
         def url_object_generator():
             for item in url_generator:
-                yield URL(url=item)
+                url = item["url"]
+                url_type_id = item["url_type_id"]
+                yield URL(url=url, url_type_id=url_type_id)
 
         self._batch(url_object_generator(), URL, DEFAULT_BATCH_SIZE)
 
