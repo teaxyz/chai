@@ -202,14 +202,14 @@ class DB:
         self._batch(user_object_generator(), User, DEFAULT_BATCH_SIZE)
 
     def insert_user_packages(
-        self, user_package_generator: Iterable[dict[str, str]], crates_sources_id: UUID
+        self, user_package_generator: Iterable[dict[str, str]], source_id: UUID
     ):
         def user_package_object_generator():
             for item in user_package_generator:
                 crate_id = item["crate_id"]
                 owner_id = item["owner_id"]
 
-                user = self.select_crates_user_by_import_id(owner_id, crates_sources_id)
+                user = self.select_crates_user_by_import_id(owner_id, source_id)
                 if user is None:
                     self.logger.warn(f"user with import_id {owner_id} not found")
                     continue
@@ -224,14 +224,14 @@ class DB:
         self._batch(user_package_object_generator(), UserPackage, DEFAULT_BATCH_SIZE)
 
     def insert_user_versions(
-        self, user_version_generator: Iterable[dict[str, str]], crates_sources_id: UUID
+        self, user_version_generator: Iterable[dict[str, str]], source_id: UUID
     ):
         def user_version_object_generator():
             for item in user_version_generator:
                 version_id = item["version_id"]
                 user_id = item["published_by"]
 
-                user = self.select_crates_user_by_import_id(user_id, crates_sources_id)
+                user = self.select_crates_user_by_import_id(user_id, source_id)
                 if user is None:
                     self.logger.warn(f"user with import_id {user_id} not found")
                     continue
