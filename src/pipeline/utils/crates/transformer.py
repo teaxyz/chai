@@ -18,6 +18,7 @@ class CratesTransformer(Transformer):
             "users": "users.csv",
             "urls": "crates.csv",
             "user_packages": "crate_owners.csv",
+            "user_versions": "versions.csv",
         }
         self.url_types = url_types
         self.user_types = user_types
@@ -127,3 +128,15 @@ class CratesTransformer(Transformer):
                     "crate_id": crate_id,
                     "owner_id": owner_id,
                 }
+
+    # TODO: here, we are in the business of reopning files we've already opened before
+    def user_versions(self):
+        user_versions_path = self.finder(self.files["user_versions"])
+
+        with open(user_versions_path) as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                version_id = row["id"]
+                published_by = row["published_by"]
+
+                yield {"version_id": version_id, "published_by": published_by}

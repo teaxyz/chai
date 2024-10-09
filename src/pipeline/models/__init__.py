@@ -241,6 +241,12 @@ class UserVersion(Base):
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now())
 
+    def to_dict(self):
+        return {
+            "user_id": self.user_id,
+            "version_id": self.version_id,
+        }
+
 
 class UserPackage(Base):
     __tablename__ = "user_packages"

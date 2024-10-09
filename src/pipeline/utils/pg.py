@@ -19,6 +19,7 @@ from src.pipeline.models import (
     User,
     URL,
     UserPackage,
+    UserVersion,
     Version,
 )
 from src.pipeline.utils.logger import Logger
@@ -221,6 +222,28 @@ class DB:
                 yield UserPackage(user_id=user.id, package_id=package.id)
 
         self._batch(user_package_object_generator(), UserPackage, DEFAULT_BATCH_SIZE)
+
+    def insert_user_versions(
+        self, user_version_generator: Iterable[dict[str, str]], crates_sources_id: UUID
+    ):
+        def user_version_object_generator():
+            for item in user_version_generator:
+                version_id = item["version_id"]
+                user_id = item["published_by"]
+
+                user = self.select_crates_user_by_import_id(user_id, crates_sources_id)
+                if user is None:
+                    self.logger.warn(f"user with import_id {user_id} not found")
+                    continue
+
+                version = self.select_version_by_import_id(version_id)
+                if version is None:
+                    self.logger.warn(f"version with import_id {version_id} not found")
+                    continue
+
+                yield UserVersion(user_id=user.id, version_id=version.id)
+
+        self._batch(user_version_object_generator(), UserVersion, DEFAULT_BATCH_SIZE)
 
     def insert_urls(self, url_generator: Iterable[str]):
         def url_object_generator():
