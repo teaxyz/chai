@@ -180,7 +180,7 @@ class URL(Base):
     __tablename__ = "urls"
     __table_args__ = (UniqueConstraint("url_type_id", "url", name="uq_url_type_url"),)
     id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
-    url = Column(String, nullable=False, unique=True, index=True)
+    url = Column(String, nullable=False, index=True)
     url_type_id = Column(
         UUID(as_uuid=True), ForeignKey("url_types.id"), nullable=False, index=True
     )
