@@ -17,6 +17,7 @@ class DependencyType(IntEnum):
 class URLTypes:
     homepage: UUID
     repository: UUID
+    documentation: UUID
 
 
 @dataclass
