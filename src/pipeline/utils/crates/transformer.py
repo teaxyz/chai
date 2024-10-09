@@ -139,4 +139,7 @@ class CratesTransformer(Transformer):
                 version_id = row["id"]
                 published_by = row["published_by"]
 
+                if published_by == "":
+                    continue
+
                 yield {"version_id": version_id, "published_by": published_by}
