@@ -211,7 +211,6 @@ class DB:
                 user = self.select_crates_user_by_import_id(owner_id, crates_sources_id)
                 if user is None:
                     self.logger.warn(f"user with import_id {owner_id} not found")
-                    raise Exception(f"user with import_id {owner_id} not found")
                     continue
 
                 package = self.select_package_by_import_id(crate_id)

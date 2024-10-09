@@ -22,7 +22,7 @@ class Logger:
     def __init__(self, name: str, mode=NORMAL, start=time.time()) -> None:
         self.name = name
         self.start = start
-        self.mode = Logger.VERBOSE if DEBUG else Logger.NORMAL
+        self.mode = Logger.VERBOSE if DEBUG else mode
 
     def print(self, msg: str):
         print(f"{self.time_diff():.2f}: [{self.name}]: {msg}")

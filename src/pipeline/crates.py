@@ -55,16 +55,18 @@ def fetch(config: Config) -> None:
 
 
 def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
-    # always insert packages
-    db.insert_users(transformer.users())
+    # always inserts user and packages
     db.insert_packages(transformer.packages(), config.package_manager_id, "crates")
-    db.insert_user_packages(transformer.user_packages(), config.user_types.crates)
+    db.insert_users(transformer.users())
+
+    # crates provides a gh_login for every single crate publisher
+    # this is the only user type we load, with the GitHub source as `source_id`
+    db.insert_user_packages(transformer.user_packages(), config.user_types.github)
 
     if not config.test:
+        # these are bigger files, so we skip them in tests
         db.insert_versions(transformer.versions())
         db.insert_dependencies(transformer.dependencies())
-    else:
-        logger.log("skipping loading everything because test mode")
 
     db.insert_load_history(config.package_manager_id)
     logger.log("✅ crates")

@@ -88,21 +88,24 @@ class CratesTransformer(Transformer):
     # so, we actually get some github data for free here!
     def users(self):
         users_path = self.finder(self.files["users"])
+        usernames = set()
 
         with open(users_path) as f:
             reader = csv.DictReader(f)
             for row in reader:
-                gh_id = row["gh_id"]
                 gh_login = row["gh_login"]
                 id = row["id"]
-                name = row["name"]
 
-                # yield two rows, one for crates and one for GitHub
-                source_id = self.user_types.crates
-                yield {"import_id": id, "username": name, "source_id": source_id}
+                # deduplicate
+                if gh_login in usernames:
+                    self.logger.warn(f"duplicate username: {id}, {gh_login}")
+                    continue
+                usernames.add(gh_login)
 
+                # gh_login is a non-nullable column in crates, so we'll always be
+                # able to load this
                 source_id = self.user_types.github
-                yield {"import_id": gh_id, "username": gh_login, "source_id": source_id}
+                yield {"import_id": id, "username": gh_login, "source_id": source_id}
 
     # for crate_owners, owner_id and created_by are foreign keys on users.id
     # and owner_kind is 0 for user and 1 for team
