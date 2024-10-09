@@ -297,6 +297,9 @@ class DB:
     def select_url_types_repository(self, create: bool = False) -> URLType | None:
         return self.select_url_type("repository", create)
 
+    def select_url_types_documentation(self, create: bool = False) -> URLType | None:
+        return self.select_url_type("documentation", create)
+
     # TODO: rename this to select_package_manager
     def select_package_manager_by_name(
         self, package_manager: str, create: bool = False

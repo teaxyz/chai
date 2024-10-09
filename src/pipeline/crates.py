@@ -32,9 +32,14 @@ def initialize(db: DB) -> Config:
     package_manager = db.select_package_manager_by_name("crates", create=True)
     homepage_url = db.select_url_types_homepage(create=True)
     repository_url = db.select_url_types_repository(create=True)
+    documentation_url = db.select_url_types_documentation(create=True)
     crates_source = db.select_source_by_name("crates", create=True)
     github_source = db.select_source_by_name("github", create=True)
-    url_types = URLTypes(homepage=homepage_url.id, repository=repository_url.id)
+    url_types = URLTypes(
+        homepage=homepage_url.id,
+        repository=repository_url.id,
+        documentation=documentation_url.id,
+    )
     user_types = UserTypes(crates=crates_source.id, github=github_source.id)
 
     logger.debug("initialized config")
