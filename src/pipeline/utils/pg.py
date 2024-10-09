@@ -18,6 +18,7 @@ from src.pipeline.models import (
     URLType,
     User,
     URL,
+    UserPackage,
     Version,
 )
 from src.pipeline.utils.logger import Logger
@@ -199,6 +200,28 @@ class DB:
 
         self._batch(user_object_generator(), User, DEFAULT_BATCH_SIZE)
 
+    def insert_user_packages(
+        self, user_package_generator: Iterable[dict[str, str]], crates_sources_id: UUID
+    ):
+        def user_package_object_generator():
+            for item in user_package_generator:
+                crate_id = item["crate_id"]
+                owner_id = item["owner_id"]
+
+                user = self.select_crates_user_by_import_id(owner_id, crates_sources_id)
+                if user is None:
+                    self.logger.warn(f"user with import_id {owner_id} not found")
+                    continue
+
+                package = self.select_package_by_import_id(crate_id)
+                if package is None:
+                    self.logger.warn(f"package with import_id {crate_id} not found")
+                    continue
+
+                yield UserPackage(user_id=user.id, package_id=package.id)
+
+        self._batch(user_package_object_generator(), UserPackage, DEFAULT_BATCH_SIZE)
+
     def insert_urls(self, url_generator: Iterable[str]):
         def url_object_generator():
             for item in url_generator:
@@ -321,6 +344,18 @@ class DB:
             if create:
                 return self.insert_source(name)
             return None
+
+    def select_crates_user_by_import_id(
+        self, import_id: str, crates_sources_id: UUID
+    ) -> User | None:
+        with self.session() as session:
+            result = (
+                session.query(User)
+                .filter_by(import_id=import_id, source_id=crates_sources_id)
+                .first()
+            )
+            if result:
+                return result
 
 
 if __name__ == "__main__":

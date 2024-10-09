@@ -17,6 +17,7 @@ class CratesTransformer(Transformer):
             "dependencies": "dependencies.csv",
             "users": "users.csv",
             "urls": "crates.csv",
+            "user_packages": "crate_owners.csv",
         }
         self.url_types = url_types
         self.user_types = user_types
@@ -82,6 +83,9 @@ class CratesTransformer(Transformer):
                     "dependency_type": dependency_type,
                 }
 
+    # gh_id is unique to github, and is from GitHub
+    # our users table is unique on import_id and source_id
+    # so, we actually get some github data for free here!
     def users(self):
         users_path = self.finder(self.files["users"])
 
@@ -99,3 +103,24 @@ class CratesTransformer(Transformer):
 
                 source_id = self.user_types.github
                 yield {"import_id": gh_id, "username": gh_login, "source_id": source_id}
+
+    # for crate_owners, owner_id and created_by are foreign keys on users.id
+    # and owner_kind is 0 for user and 1 for team
+    # secondly, created_at is nullable. we'll ignore for now and focus on owners
+    def user_packages(self):
+        user_packages_path = self.finder(self.files["user_packages"])
+
+        with open(user_packages_path) as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                owner_kind = int(row["owner_kind"])
+                if owner_kind == 1:
+                    continue
+
+                crate_id = row["crate_id"]
+                owner_id = row["owner_id"]
+
+                yield {
+                    "crate_id": crate_id,
+                    "owner_id": owner_id,
+                }

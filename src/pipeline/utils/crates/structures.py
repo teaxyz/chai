@@ -1,5 +1,4 @@
 from enum import IntEnum
-from typing import TypedDict
 from dataclasses import dataclass
 from sqlalchemy import UUID
 

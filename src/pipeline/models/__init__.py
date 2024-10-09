@@ -253,6 +253,12 @@ class UserPackage(Base):
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now())
 
+    def to_dict(self):
+        return {
+            "user_id": self.user_id,
+            "package_id": self.package_id,
+        }
+
 
 class PackageURL(Base):
     __tablename__ = "package_urls"
