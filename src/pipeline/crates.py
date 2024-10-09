@@ -69,13 +69,12 @@ def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
 
     # crates provides a homepage, repository, and documentation url for every crate
     db.insert_urls(transformer.urls())
-    logger.debug("package urls takes a bit longer, because of some double querying...")
-    db.insert_package_urls(transformer.package_urls())
 
     if not config.test:
         # these are bigger files, so we skip them in tests
         db.insert_versions(transformer.versions())
         db.insert_user_versions(transformer.user_versions(), config.user_types.github)
+        db.insert_package_urls(transformer.package_urls())
         db.insert_dependencies(transformer.dependencies())
 
     db.insert_load_history(config.package_manager_id)
