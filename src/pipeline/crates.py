@@ -63,8 +63,8 @@ def fetch(config: Config) -> None:
 
 
 def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
-    db.insert_versions(transformer.versions())
     db.insert_packages(transformer.packages(), config.package_manager_id, "crates")
+    db.insert_versions(transformer.versions())
     db.insert_users(transformer.users(), config.user_types.crates)
     db.insert_user_packages(transformer.user_packages())
     db.insert_urls(transformer.urls())
