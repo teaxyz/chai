@@ -79,7 +79,7 @@ def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
 def main(db: DB) -> None:
     config = initialize(db)
     logger.debug(config)
-    # fetch(config)
+    fetch(config)
 
     transformer = CratesTransformer(config.url_types, config.user_types)
     load(db, transformer, config)
