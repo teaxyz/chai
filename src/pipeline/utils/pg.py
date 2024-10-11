@@ -35,6 +35,12 @@ class DB:
         self.session = sessionmaker(self.engine)
         self.logger.debug("connected")
 
+        # Initialize caches
+        self.package_cache = {}
+        self.user_cache = {}
+        self.version_cache = {}
+        self.license_cache = {}
+
     def _cache_objects(
         self, objects: List[DeclarativeMeta], key_attr: str, value_attr: str
     ):
@@ -94,111 +100,100 @@ class DB:
         if batch:
             self._insert_batch(Package, batch)
 
+    def _update_cache(self, cache, model, key_attr, value_attr, items, query_param):
+        ids_to_fetch = build_query_params(items, cache, query_param)
+        if ids_to_fetch:
+            fetched_objects = self._batch_fetch(model, key_attr, list(ids_to_fetch))
+            cache.update(self._cache_objects(fetched_objects, key_attr, value_attr))
+
+    def update_caches(
+        self,
+        items,
+        update_packages=False,
+        update_users=False,
+        update_versions=False,
+        update_licenses=False,
+    ):
+        if update_packages:
+            self._update_cache(
+                self.package_cache, Package, "import_id", "id", items, "crate_id"
+            )
+        if update_users:
+            self._update_cache(
+                self.user_cache, User, "import_id", "id", items, "owner_id"
+            )
+        if update_versions:
+            self._update_cache(
+                self.version_cache, Version, "import_id", "id", items, "version_id"
+            )
+        if update_licenses:
+            self._update_cache(
+                self.license_cache, License, "name", "id", items, "license"
+            )
+
     def insert_versions(self, version_generator: Iterable[dict[str, str]]):
-        package_cache = {}
-        license_cache = {}
-
-        # this function updates our cache of import_ids to packages and
-        # names to licenses
-        def fetch_packages_and_licenses(items: List[Dict[str, str]]):
-            # build the query params
-            crate_ids = build_query_params(items, package_cache, "crate_id")
-            license_names = build_query_params(items, license_cache, "license")
-
-            # fetch the packages and licenses
-            if crate_ids:
-                packages = self._batch_fetch(Package, "import_id", list(crate_ids))
-                package_cache.update(self._cache_objects(packages, "import_id", "id"))
-
-            if license_names:
-                licenses = self._batch_fetch(License, "name", list(license_names))
-                license_cache.update(self._cache_objects(licenses, "name", "id"))
-
-        def process_version(item: Dict[str, str]):
-            package_id = package_cache.get(item["crate_id"])
-            if not package_id:
-                self.logger.warn(f"package {item['crate_id']} not found")
-                return None
-
-            # create the license if it doesn't exist
-            # TODO: this is a hack
-            license_id = license_cache.get(item["license"])
-            if not license_id:
-                self.logger.log(f"creating an entry for {item['license']}")
-                license_id = self.select_license_by_name(item["license"], create=True)
-
-            if (
-                package_id is None
-                or item["version"] is None
-                or item["import_id"] is None
-            ):
-                self.logger.warn(f"something weird: {item}")
-                return None
-
-            return Version(
-                package_id=package_id,
-                version=item["version"],
-                import_id=item["import_id"],
-                size=item["size"],
-                published_at=item["published_at"],
-                license_id=license_id,
-                downloads=item["downloads"],
-                checksum=item["checksum"],
-            ).to_dict()
-
         batch = []
         for item in version_generator:
             batch.append(item)
             if len(batch) == DEFAULT_BATCH_SIZE:
-                # update the caches
-                fetch_packages_and_licenses(batch)
-                versions = self._process_batch(batch, process_version)
+                self.update_caches(batch, update_packages=True, update_licenses=True)
+                versions = self._process_batch(batch, self._process_version)
                 self._insert_batch(Version, versions)
-                batch = []  # reset
+                batch = []
 
         if batch:
-            fetch_packages_and_licenses(batch)
-            versions = self._process_batch(batch, process_version)
+            self.update_caches(batch, update_packages=True, update_licenses=True)
+            versions = self._process_batch(batch, self._process_version)
             self._insert_batch(Version, versions)
 
+    def _process_version(self, item: Dict[str, str]):
+        package_id = self.package_cache.get(item["crate_id"])
+        if not package_id:
+            self.logger.warn(f"package {item['crate_id']} not found")
+            return None
+
+        license_id = self.license_cache.get(item["license"])
+        if not license_id:
+            self.logger.log(f"creating an entry for {item['license']}")
+            license_id = self.select_license_by_name(item["license"], create=True)
+            self.license_cache[item["license"]] = license_id
+
+        if package_id is None or item["version"] is None or item["import_id"] is None:
+            self.logger.warn(f"something weird: {item}")
+            return None
+
+        return Version(
+            package_id=package_id,
+            version=item["version"],
+            import_id=item["import_id"],
+            size=item["size"],
+            published_at=item["published_at"],
+            license_id=license_id,
+            downloads=item["downloads"],
+            checksum=item["checksum"],
+        ).to_dict()
+
     def insert_dependencies(self, dependency_generator: Iterable[dict[str, str]]):
-        version_cache = {}
-        package_cache = {}
-
-        # builds the caches for versions and packages
-        def fetch_versions_and_packages(items: List[Dict[str, str]]):
-            viids = build_query_params(items, version_cache, "start_id")
-            piids = build_query_params(items, package_cache, "end_id")
-
-            if viids:
-                versions = self._batch_fetch(Version, "import_id", list(viids))
-                version_cache.update(self._cache_objects(versions, "import_id", "id"))
-
-            if piids:
-                packages = self._batch_fetch(Package, "import_id", list(piids))
-                package_cache.update(self._cache_objects(packages, "import_id", "id"))
-
-        def process_depends_on(item: Dict[str, str]):
-            return DependsOn(
-                version_id=version_cache[item["start_id"]],
-                dependency_id=package_cache[item["end_id"]],
-                semver_range=item["semver_range"],
-                # TODO: dependency_type_id
-            ).to_dict()
-
         batch = []
         for item in dependency_generator:
             batch.append(item)
             if len(batch) == DEFAULT_BATCH_SIZE:
-                fetch_versions_and_packages(batch)
-                dependencies = self._process_batch(batch, process_depends_on)
+                self.update_caches(batch, update_versions=True, update_packages=True)
+                dependencies = self._process_batch(batch, self._process_depends_on)
                 self._insert_batch(DependsOn, dependencies)
                 batch = []
 
         if batch:
-            fetch_versions_and_packages(batch)
-            dependencies = self._process_batch(batch, process_depends_on)
+            self.update_caches(batch, update_versions=True, update_packages=True)
+            dependencies = self._process_batch(batch, self._process_depends_on)
             self._insert_batch(DependsOn, dependencies)
+
+    def _process_depends_on(self, item: Dict[str, str]):
+        return DependsOn(
+            version_id=self.version_cache[item["start_id"]],
+            dependency_id=self.package_cache[item["end_id"]],
+            semver_range=item["semver_range"],
+        ).to_dict()
 
     def insert_users(self, user_generator: Iterable[dict[str, str]], source_id: UUID):
         def process_user(item: Dict[str, str]):
@@ -219,50 +214,33 @@ class DB:
             self._insert_batch(User, self._process_batch(batch, process_user))
 
     def insert_user_packages(self, user_package_generator: Iterable[dict[str, str]]):
-        package_cache = {}
-        user_cache = {}
-
-        def fetch_packages_and_users(items: List[Dict[str, str]]):
-            crate_ids = build_query_params(items, package_cache, "crate_id")
-            user_ids = build_query_params(items, user_cache, "owner_id")
-
-            if crate_ids:
-                packages = self._batch_fetch(Package, "import_id", list(crate_ids))
-                package_cache.update(self._cache_objects(packages, "import_id", "id"))
-
-            if user_ids:
-                users = self._batch_fetch(User, "import_id", list(user_ids))
-                user_cache.update(self._cache_objects(users, "import_id", "id"))
-
-        def process_user_package(item: Dict[str, str]):
-            if item["owner_id"] not in user_cache:
-                self.logger.warn(f"user {item['owner_id']} not found")
-                return None
-
-            if item["crate_id"] not in package_cache:
-                self.logger.warn(f"package {item['crate_id']} not found")
-                return None
-
-            return UserPackage(
-                user_id=user_cache[item["owner_id"]],
-                package_id=package_cache[item["crate_id"]],
-            ).to_dict()
-
         batch = []
         for item in user_package_generator:
             batch.append(item)
             if len(batch) == DEFAULT_BATCH_SIZE:
-                fetch_packages_and_users(batch)
-                self._insert_batch(
-                    UserPackage, self._process_batch(batch, process_user_package)
-                )
+                self.update_caches(batch, update_packages=True, update_users=True)
+                user_packages = self._process_batch(batch, self._process_user_package)
+                self._insert_batch(UserPackage, user_packages)
                 batch = []
 
         if batch:
-            fetch_packages_and_users(batch)
-            self._insert_batch(
-                UserPackage, self._process_batch(batch, process_user_package)
-            )
+            self.update_caches(batch, update_packages=True, update_users=True)
+            user_packages = self._process_batch(batch, self._process_user_package)
+            self._insert_batch(UserPackage, user_packages)
+
+    def _process_user_package(self, item: Dict[str, str]):
+        if item["owner_id"] not in self.user_cache:
+            self.logger.warn(f"user {item['owner_id']} not found")
+            return None
+
+        if item["crate_id"] not in self.package_cache:
+            self.logger.warn(f"package {item['crate_id']} not found")
+            return None
+
+        return UserPackage(
+            user_id=self.user_cache[item["owner_id"]],
+            package_id=self.package_cache[item["crate_id"]],
+        ).to_dict()
 
     def insert_user_versions(
         self, user_version_generator: Iterable[dict[str, str]], source_id: UUID
