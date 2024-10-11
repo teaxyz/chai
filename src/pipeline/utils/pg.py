@@ -100,7 +100,16 @@ class DB:
         if batch:
             self._insert_batch(Package, batch)
 
-    def _update_cache(self, cache, model, key_attr, value_attr, items, query_param):
+    # TODO: needs explanation or simplification
+    def _update_cache(
+        self,
+        cache: dict,
+        model: Type[DeclarativeMeta],
+        key_attr: str,
+        value_attr: str,
+        items: List[Dict[str, str]],
+        query_param: str,
+    ):
         ids_to_fetch = build_query_params(items, cache, query_param)
         if ids_to_fetch:
             fetched_objects = self._batch_fetch(model, key_attr, list(ids_to_fetch))
@@ -190,8 +199,8 @@ class DB:
 
     def _process_depends_on(self, item: Dict[str, str]):
         return DependsOn(
-            version_id=self.version_cache[item["start_id"]],
-            dependency_id=self.package_cache[item["end_id"]],
+            version_id=self.version_cache[item["version_id"]],
+            dependency_id=self.package_cache[item["crate_id"]],
             semver_range=item["semver_range"],
         ).to_dict()
 

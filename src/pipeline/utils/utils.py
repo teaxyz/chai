@@ -7,6 +7,7 @@ def safe_int(val: str) -> int | None:
     return int(val)
 
 
+# TODO: needs explanation or simplification
 def build_query_params(
     items: List[Dict[str, str]], cache: dict, attr: str
 ) -> List[str]:

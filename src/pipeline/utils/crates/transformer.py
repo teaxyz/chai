@@ -76,8 +76,8 @@ class CratesTransformer(Transformer):
                 dependency_type = DependencyType(kind)
 
                 yield {
-                    "start_id": start_id,
-                    "end_id": end_id,
+                    "version_id": start_id,
+                    "crate_id": end_id,
                     "semver_range": req,
                     "dependency_type": dependency_type,
                 }
@@ -199,17 +199,3 @@ class CratesTransformer(Transformer):
                         "url": documentation,
                         "url_type_id": self.url_types.documentation,
                     }
-
-
-if __name__ == "__main__":
-    from src.pipeline.crates import initialize
-    from src.pipeline.utils.pg import DB
-
-    db = DB()
-    config = initialize(db)
-    x = CratesTransformer(config.url_types, config.user_types)
-
-    db.insert_urls(x.urls())
-    print("***** done urls *****")
-    db.insert_package_urls(x.package_urls())
-    print("***** done package urls *****")
