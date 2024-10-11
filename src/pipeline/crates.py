@@ -23,8 +23,8 @@ class Config:
 
     def __str__(self):
         return f"Config(file_location={self.file_location}, test={self.test}, \
-            package_manager_id={self.package_manager_id}, url_types={self.url_types}, \
-            user_types={self.user_types})"
+            fetch={self.fetch}, package_manager_id={self.package_manager_id}, \
+            url_types={self.url_types}, user_types={self.user_types})"
 
 
 def initialize(db: DB) -> Config:
@@ -63,14 +63,14 @@ def fetch(config: Config) -> None:
 
 
 def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
-    db.insert_packages(transformer.packages(), config.package_manager_id, "crates")
-    db.insert_users(transformer.users(), config.user_types.crates)
-    db.insert_user_packages(transformer.user_packages())
-    db.insert_urls(transformer.urls())
+    db.insert_versions(transformer.versions())
+    # db.insert_packages(transformer.packages(), config.package_manager_id, "crates")
+    # db.insert_users(transformer.users(), config.user_types.crates)
+    # db.insert_user_packages(transformer.user_packages())
+    # db.insert_urls(transformer.urls())
 
     if not config.test:
         # these are bigger files, so we skip them in tests
-        db.insert_versions(transformer.versions())
         db.insert_user_versions(transformer.user_versions(), config.user_types.github)
         # db.insert_package_urls(transformer.package_urls())
         db.insert_dependencies(transformer.dependencies())

@@ -35,6 +35,7 @@ services:
       - PYTHONPATH=/app
       - TEST=${TEST:-false}
       - DEBUG=${DEBUG:-false}
+      - FETCH=${FETCH:-true}
     volumes:
       - .:/app
     working_dir: /app

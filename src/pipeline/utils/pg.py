@@ -116,7 +116,16 @@ class DB:
 
         def process_version(item: Dict[str, str]):
             package_id = package_cache[item["crate_id"]]
-            license_id = license_cache[item["name"]]
+            if not package_id:
+                self.logger.warn(f"package {item['crate_id']} not found")
+                return None
+
+            # create the license if it doesn't exist
+            # TODO: this is a hack
+            license_id = license_cache.get(item["license"])
+            if not license_id:
+                self.logger.log(f"creating an entry for {item['license']}")
+                license_id = self.select_license_by_name(item["license"], create=True)
 
             return Version(
                 package_id=package_id,
