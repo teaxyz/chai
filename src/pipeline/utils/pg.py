@@ -1,12 +1,11 @@
 import os
-from typing import Iterable, List, Type
+from typing import Any, Dict, Iterable, List, Type
 
 from sqlalchemy import UUID, create_engine, func
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.decl_api import DeclarativeMeta
-from sqlalchemy.orm.session import Session
 from src.pipeline.models import (
     DependsOn,
     License,
@@ -36,35 +35,27 @@ class DB:
         self.session = sessionmaker(self.engine)
         self.logger.debug("connected")
 
-    # TODO: transformer_utils should handle batching
-    def _batch(
-        self,
-        items: Iterable[DeclarativeMeta],
-        model: Type[DeclarativeMeta],
-        batch_size: int = DEFAULT_BATCH_SIZE,
-    ) -> None:
-        """just handles batching logic for any type of model we wanna insert"""
-        self.logger.debug("starting a batch insert")
+    def _cache_objects(
+        self, objects: List[DeclarativeMeta], key_attr: str, value_attr: str
+    ):
+        """cache an object based on a key and value attribute"""
+        return {getattr(obj, key_attr): getattr(obj, value_attr) for obj in objects}
+
+    def _batch_fetch(self, model: Type[DeclarativeMeta], attr: str, values: List[Any]):
+        """fetch a batch of objects based on a list of values for a given attribute"""
         with self.session() as session:
-            batch = []
-            for item in items:
-                batch.append(item)
-                if len(batch) == batch_size:
-                    self.logger.debug(f"inserting {len(batch)} {model.__name__}")
-                    self._insert_batch(batch, session, model)
-                    batch = []  # reset
+            return session.query(model).filter(getattr(model, attr).in_(values)).all()
 
-            if batch:
-                self.logger.debug(f"finally, inserting {len(batch)} {model.__name__}")
-                self._insert_batch(batch, session, model)
-
-            session.commit()  # commit here
+    def _process_batch(
+        self, items: List[Dict[str, Any]], process_func: callable
+    ) -> List[DeclarativeMeta]:
+        """process a batch of items, and filter out any Nones"""
+        return [obj for obj in (process_func(item) for item in items) if obj]
 
     def _insert_batch(
         self,
-        batch: List[DeclarativeMeta],
-        session: Session,
         model: Type[DeclarativeMeta],
+        objects: List[Dict[str, Any]],
     ) -> None:
         """
         inserts a batch of items, any model, into the database
@@ -72,14 +63,10 @@ class DB:
         """
         # we use statements here, not the ORM because of the on_conflict_do_nothing
         # https://github.com/sqlalchemy/sqlalchemy/issues/5374
-        stmt = (
-            insert(model)
-            .values([item.to_dict() for item in batch])
-            .on_conflict_do_nothing()
-        )
-        session.execute(stmt)
-
-    # TODO: import_id queries are inefficient, and should be cached somehow
+        with self.session() as session:
+            stmt = insert(model).values(objects).on_conflict_do_nothing()
+            session.execute(stmt)
+            session.commit()
 
     def insert_packages(
         self,
@@ -116,144 +103,56 @@ class DB:
         package_cache = {}
         license_cache = {}
 
+        # TODO: utils
+        def build_query_params(
+            items: List[Dict[str, str]], cache: dict, attr: str
+        ) -> List[str]:
+            params = set()
+            for item in items:
+                if item[attr] not in cache:
+                    params.add(item[attr])
+            return list(params)
+
         # this function updates our cache of import_ids to packages and
         # names to licenses
-        def query_packages_and_licenses(items: Iterable[dict[str, str]]):
-            # build the query parameters
-            crate_ids = set()
-            license_names = set()
-            for item in items:
-                crate_id = item["crate_id"]
-                license_name = item["license"]
+        def fetch_packages_and_licenses(items: List[Dict[str, str]]):
+            # build the query params
+            crate_ids = build_query_params(items, package_cache, "crate_id")
+            license_names = build_query_params(items, license_cache, "license")
 
-                if crate_id not in package_cache:
-                    crate_ids.add(crate_id)
-                if license_name not in license_cache:
-                    license_names.add(license_name)
-
-            self.logger.debug(f"querying {len(crate_ids)} packages")
-            # fetch all packages in one query, if anything to fetch
+            # fetch the packages and licenses
             if crate_ids:
-                packages = self.select_packages_by_import_ids(crate_ids)
+                packages = self._batch_fetch(Package, "import_id", list(crate_ids))
+                package_cache.update(self._cache_objects(packages, "import_id", "id"))
 
-                # update the cache
-                for package in packages:
-                    package_cache[package.import_id] = package.id
-                self.logger.debug(f"cached {len(package_cache)} packages")
+            if license_names:
+                licenses = self.select_licenses_by_name(license_names)
+                license_cache.update(self._cache_objects(licenses, "name", "id"))
 
-            # fetch all licenses in one query
-            self.logger.debug(f"querying {len(license_names)} licenses")
-            licenses = self.select_licenses_by_name(license_names)
+        def process_version(item: Dict[str, str]):
+            package_id = package_cache[item["crate_id"]]
+            license_id = license_cache[item["license"]]
 
-            # update the cache
-            for license in licenses:
-                license_cache[license.name] = license.id
-            self.logger.debug(f"cached {len(license_cache)} licenses")
+            return Version(
+                package_id=package_id,
+                version=item["version"],
+                import_id=item["import_id"],
+                size=item["size"],
+                published_at=item["published_at"],
+                license_id=license_id,
+                downloads=item["downloads"],
+                checksum=item["checksum"],
+            ).to_dict()
 
-        def version_object_generator():
-            versions = []
-            items_buffer = []
-
-            for item in version_generator:
-                items_buffer.append(item)
-
-                # this if statement is where we actually construct the versions list
-                # when the batch size is reached
-                if len(items_buffer) >= DEFAULT_BATCH_SIZE:
-                    query_packages_and_licenses(items_buffer)
-                    self.logger.debug(f"queried packages and licenses")
-
-                    # here, we know our cache is populated
-                    # so, we can use it to construct our versions
-                    self.logger.debug(f"constructing versions")
-                    for buffered_item in items_buffer:
-                        crate_id = buffered_item["crate_id"]
-                        license_name = buffered_item["license"]
-
-                        package_id = package_cache.get(crate_id)
-                        if package_id is None:
-                            self.logger.warn(
-                                f"package with import_id {crate_id} not found"
-                            )
-                            continue
-
-                        license_id = license_cache.get(license_name)
-                        if license_id is None:
-                            # if license is still not found, create it
-                            license_id = self.select_license_by_name(
-                                license_name, create=True
-                            )
-                            license_cache[license_name] = license_id
-
-                        versions.append(
-                            Version(
-                                package_id=package_id,
-                                version=buffered_item["version"],
-                                import_id=buffered_item["import_id"],
-                                size=buffered_item["size"],
-                                published_at=buffered_item["published_at"],
-                                license_id=license_id,
-                                downloads=buffered_item["downloads"],
-                                checksum=buffered_item["checksum"],
-                            )
-                        )
-
-                    # at the end of the if, after the batch is processed
-                    # yield it so that _batch can handle the commit
-                    self.logger.debug(f"yielding {len(versions)} versions")
-                    yield versions
-                    versions = []
-                    items_buffer = []
-
-            # all the remaining items will need to be processed
-            if items_buffer:
-                query_packages_and_licenses(items_buffer)
-
-                # this loop again! we can separate this out into a function
-                for buffered_item in items_buffer:
-                    crate_id = buffered_item["crate_id"]
-                    license_name = buffered_item["license"]
-
-                    package_id = package_cache.get(crate_id)
-                    if package_id is None:
-                        self.logger.warn(f"package with import_id {crate_id} not found")
-                        continue
-
-                    license_id = license_cache.get(license_name)
-                    if license_id is None:
-                        # If license is still not found, create it
-                        license_id = self.select_license_by_name(
-                            license_name, create=True
-                        )
-                        license_cache[license_name] = license_id
-
-                    versions.append(
-                        Version(
-                            package_id=package_id,
-                            version=buffered_item["version"],
-                            import_id=buffered_item["import_id"],
-                            size=buffered_item["size"],
-                            published_at=buffered_item["published_at"],
-                            license_id=license_id,
-                            downloads=buffered_item["downloads"],
-                            checksum=buffered_item["checksum"],
-                        )
-                    )
-
-                if versions:
-                    yield versions
-
-        with self.session() as session:
-            for batch in version_object_generator():
-                self.logger.debug(f"inserting {len(batch)} versions")
-                self.logger.debug(f"example row: {batch[0].to_dict()}")
-                stmt = (
-                    insert(Version)
-                    .values([item.to_dict() for item in batch])
-                    .on_conflict_do_nothing()
-                )
-                session.execute(stmt)
-            session.commit()
+        batch = []
+        for item in version_generator:
+            batch.append(item)
+            if len(batch) == DEFAULT_BATCH_SIZE:
+                # update the caches
+                fetch_packages_and_licenses(batch)
+                versions = self._process_batch(batch, process_version)
+                self._insert_batch(Version, versions)
+                batch = []  # reset
 
     def insert_dependencies(self, dependency_generator: Iterable[dict[str, str]]):
         def dependency_object_generator():
