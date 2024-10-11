@@ -222,6 +222,10 @@ class DB:
                 self.logger.warn(f"user {item['owner_id']} not found")
                 return None
 
+            if item["crate_id"] not in package_cache:
+                self.logger.warn(f"package {item['crate_id']} not found")
+                return None
+
             return UserPackage(
                 user_id=user_cache[item["owner_id"]],
                 package_id=package_cache[item["crate_id"]],

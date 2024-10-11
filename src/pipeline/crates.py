@@ -16,6 +16,7 @@ logger = Logger("crates_orchestrator")
 class Config:
     file_location: str
     test: bool
+    fetch: bool
     package_manager_id: str
     url_types: URLTypes
     user_types: UserTypes
@@ -29,6 +30,7 @@ class Config:
 def initialize(db: DB) -> Config:
     file_location = "https://static.crates.io/db-dump.tar.gz"
     test = getenv("TEST", "false").lower() == "true"
+    fetch = getenv("FETCH", "true").lower() == "true"
     package_manager = db.select_package_manager_by_name("crates", create=True)
     homepage_url = db.select_url_types_homepage(create=True)
     repository_url = db.select_url_types_repository(create=True)
@@ -47,6 +49,7 @@ def initialize(db: DB) -> Config:
     return Config(
         file_location=file_location,
         test=test,
+        fetch=fetch,
         package_manager_id=package_manager.id,
         url_types=url_types,
         user_types=user_types,
@@ -79,7 +82,8 @@ def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
 def main(db: DB) -> None:
     config = initialize(db)
     logger.debug(config)
-    fetch(config)
+    if config.fetch:
+        fetch(config)
 
     transformer = CratesTransformer(config.url_types, config.user_types)
     load(db, transformer, config)
