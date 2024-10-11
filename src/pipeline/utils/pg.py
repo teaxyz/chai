@@ -183,12 +183,12 @@ class DB:
             dependencies = self._process_batch(batch, process_depends_on)
             self._insert_batch(DependsOn, dependencies)
 
-    def insert_users(self, user_generator: Iterable[dict[str, str]]):
+    def insert_users(self, user_generator: Iterable[dict[str, str]], source_id: UUID):
         def process_user(item: Dict[str, str]):
             return User(
                 username=item["username"],
                 import_id=item["import_id"],
-                source_id=item["source_id"],
+                source_id=source_id,
             ).to_dict()
 
         batch = []
@@ -201,9 +201,7 @@ class DB:
         if batch:
             self._insert_batch(User, self._process_batch(batch, process_user))
 
-    def insert_user_packages(
-        self, user_package_generator: Iterable[dict[str, str]], source_id: UUID
-    ):
+    def insert_user_packages(self, user_package_generator: Iterable[dict[str, str]]):
         package_cache = {}
         user_cache = {}
 
