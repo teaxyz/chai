@@ -115,7 +115,7 @@ class DB:
                 license_cache.update(self._cache_objects(licenses, "name", "id"))
 
         def process_version(item: Dict[str, str]):
-            package_id = package_cache[item["crate_id"]]
+            package_id = package_cache.get(item["crate_id"])
             if not package_id:
                 self.logger.warn(f"package {item['crate_id']} not found")
                 return None
