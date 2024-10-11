@@ -264,7 +264,7 @@ class DB:
 
         def fetch_versions_and_users(items: List[Dict[str, str]]):
             version_ids = build_query_params(items, version_cache, "version_id")
-            user_ids = build_query_params(items, user_cache, "user_id")
+            user_ids = build_query_params(items, user_cache, "published_by")
 
             if version_ids:
                 versions = self._batch_fetch(Version, "import_id", list(version_ids))
@@ -275,9 +275,19 @@ class DB:
                 user_cache.update(self._cache_objects(users, "import_id", "id"))
 
         def process_user_version(item: Dict[str, str]):
+            user_id = user_cache.get(item["published_by"])
+            if not user_id:
+                self.logger.warn(f"user_id not found for {item['published_by']}")
+                return None
+
+            version_id = version_cache.get(item["version_id"])
+            if not version_id:
+                self.logger.warn(f"version_id not found for {item['version_id']}")
+                return None
+
             return UserVersion(
-                user_id=user_cache[item["user_id"]],
-                version_id=version_cache[item["version_id"]],
+                user_id=user_id,
+                version_id=version_id,
             ).to_dict()
 
         batch = []
