@@ -60,19 +60,15 @@ def fetch(config: Config) -> None:
 
 
 def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
-    db.insert_packages(transformer.packages(), config.package_manager_id, "crates")
+    # db.insert_packages(transformer.packages(), config.package_manager_id, "crates")
+    db.insert_versions(transformer.versions())
 
     # crates provides a gh_login for every single crate publisher
     # so, we use the GitHub source as `source_id`
-    db.insert_users(transformer.users())
-    db.insert_user_packages(transformer.user_packages(), config.user_types.github)
-
-    # crates provides a homepage, repository, and documentation url for every crate
-    db.insert_urls(transformer.urls())
+    #
 
     if not config.test:
         # these are bigger files, so we skip them in tests
-        db.insert_versions(transformer.versions())
         db.insert_user_versions(transformer.user_versions(), config.user_types.github)
         db.insert_package_urls(transformer.package_urls())
         db.insert_dependencies(transformer.dependencies())
@@ -84,7 +80,7 @@ def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
 def main(db: DB) -> None:
     config = initialize(db)
     logger.debug(config)
-    fetch(config)
+    # fetch(config)
 
     transformer = CratesTransformer(config.url_types, config.user_types)
     load(db, transformer, config)

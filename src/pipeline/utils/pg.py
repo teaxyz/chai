@@ -105,37 +105,74 @@ class DB:
         return self._batch(package_object_generator(), Package, DEFAULT_BATCH_SIZE)
 
     def insert_versions(self, version_generator: Iterable[dict[str, str]]):
+        # Preload packages and licenses
+        package_cache = {}
+        license_cache = {}
+
+        def preload_packages_and_licenses(items):
+            crate_ids = set()
+            license_names = set()
+            for item in items:
+                crate_ids.add(item["crate_id"])
+                license_names.add(item["license"])
+
+            with self.session() as session:
+                # Fetch all relevant packages in one query
+                packages = (
+                    session.query(Package)
+                    .filter(Package.import_id.in_(crate_ids))
+                    .all()
+                )
+                for package in packages:
+                    package_cache[package.import_id] = package.id
+
+                # Fetch all relevant licenses in one query
+                licenses = (
+                    session.query(License).filter(License.name.in_(license_names)).all()
+                )
+                for license in licenses:
+                    license_cache[license.name] = license.id
+
         def version_object_generator():
+            versions = []
             for item in version_generator:
                 crate_id = item["crate_id"]
-                version = item["version"]
-                import_id = item["import_id"]
-                size = item["size"]
-                published_at = item["published_at"]
                 license_name = item["license"]
-                downloads = item["downloads"]
-                checksum = item["checksum"]
 
-                # the crate_id is a Package.import_id
-                package = self.select_package_by_import_id(crate_id)
-                if package is None:
+                if crate_id not in package_cache or license_name not in license_cache:
+                    # If we encounter a missing package or license, preload again
+                    preload_packages_and_licenses(version_generator)
+
+                package_id = package_cache.get(crate_id)
+                if package_id is None:
                     self.logger.warn(f"package with import_id {crate_id} not found")
                     continue
-                package_id = package.id
 
-                # similarly, for license_id
-                license_id = self.select_license_by_name(license_name, create=True)
+                license_id = license_cache.get(license_name)
+                if license_id is None:
+                    # If license is still not found, create it
+                    license_id = self.select_license_by_name(license_name, create=True)
+                    license_cache[license_name] = license_id
 
-                yield Version(
-                    package_id=package_id,
-                    version=version,
-                    import_id=import_id,
-                    size=size,
-                    published_at=published_at,
-                    license_id=license_id,
-                    downloads=downloads,
-                    checksum=checksum,
+                versions.append(
+                    Version(
+                        package_id=package_id,
+                        version=item["version"],
+                        import_id=item["import_id"],
+                        size=item["size"],
+                        published_at=item["published_at"],
+                        license_id=license_id,
+                        downloads=item["downloads"],
+                        checksum=item["checksum"],
+                    )
                 )
+
+                if len(versions) >= DEFAULT_BATCH_SIZE:
+                    yield from versions
+                    versions = []
+
+            if versions:
+                yield from versions
 
         self._batch(version_object_generator(), Version, DEFAULT_BATCH_SIZE)
 
