@@ -126,19 +126,20 @@ class DB:
                 crate_id = item["crate_id"]
                 license_name = item["license"]
 
-                if crate_id not in crate_ids:
+                if crate_id not in package_cache:
                     crate_ids.add(crate_id)
-                if license_name not in license_names:
+                if license_name not in license_cache:
                     license_names.add(license_name)
 
-            # fetch all packages in one query
             self.logger.debug(f"querying {len(crate_ids)} packages")
-            packages = self.select_packages_by_import_ids(crate_ids)
+            # fetch all packages in one query, if anything to fetch
+            if crate_ids:
+                packages = self.select_packages_by_import_ids(crate_ids)
 
-            # update the cache
-            for package in packages:
-                package_cache[package.import_id] = package.id
-            self.logger.debug(f"cached {len(package_cache)} packages")
+                # update the cache
+                for package in packages:
+                    package_cache[package.import_id] = package.id
+                self.logger.debug(f"cached {len(package_cache)} packages")
 
             # fetch all licenses in one query
             self.logger.debug(f"querying {len(license_names)} licenses")
@@ -160,9 +161,11 @@ class DB:
                 # when the batch size is reached
                 if len(items_buffer) >= DEFAULT_BATCH_SIZE:
                     query_packages_and_licenses(items_buffer)
+                    self.logger.debug(f"queried packages and licenses")
 
                     # here, we know our cache is populated
                     # so, we can use it to construct our versions
+                    self.logger.debug(f"constructing versions")
                     for buffered_item in items_buffer:
                         crate_id = buffered_item["crate_id"]
                         license_name = buffered_item["license"]
@@ -197,6 +200,7 @@ class DB:
 
                     # at the end of the if, after the batch is processed
                     # yield it so that _batch can handle the commit
+                    self.logger.debug(f"yielding {len(versions)} versions")
                     yield versions
                     versions = []
                     items_buffer = []
@@ -239,7 +243,17 @@ class DB:
                 if versions:
                     yield versions
 
-        self._batch(version_object_generator(), Version, DEFAULT_BATCH_SIZE)
+        with self.session() as session:
+            for batch in version_object_generator():
+                self.logger.debug(f"inserting {len(batch)} versions")
+                self.logger.debug(f"example row: {batch[0].to_dict()}")
+                stmt = (
+                    insert(Version)
+                    .values([item.to_dict() for item in batch])
+                    .on_conflict_do_nothing()
+                )
+                session.execute(stmt)
+            session.commit()
 
     def insert_dependencies(self, dependency_generator: Iterable[dict[str, str]]):
         def dependency_object_generator():
