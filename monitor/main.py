@@ -2,8 +2,7 @@ import time
 from typing import Tuple, Optional, Dict
 import docker
 import json
-from sqlalchemy import event
-from sqlalchemy.orm import Session
+from collections import defaultdict
 
 PIPELINE_CONTAINER = "chai-oss-pipeline-1"
 DATABASE_CONTAINER = "chai-oss-db-1"
@@ -57,6 +56,18 @@ def read_logs(logs: str) -> Tuple[int, int, float]:
     return select_count, insert_count, total_sql_time
 
 
+def capture_stats(container, start_time):
+    stats = get_container_stats(container)
+    if stats is None:
+        return None
+    end_time = time.time()
+    return {
+        "duration": end_time - start_time,
+        "max_cpu_percent": stats["cpu_percent"],
+        "max_memory_usage": stats["memory_usage"],
+    }
+
+
 def monitor_pipeline() -> None:
     client = docker.from_env()
     pipeline_container = None
@@ -71,36 +82,43 @@ def monitor_pipeline() -> None:
         except docker.errors.NotFound:
             time.sleep(1)
 
-    # get the pipeline container stats
-    max_cpu_percent = 0
-    max_memory_usage = 0
+    # Initialize stats tracking
+    model_stats = defaultdict(
+        lambda: {"duration": 0, "max_cpu_percent": 0, "max_memory_usage": 0}
+    )
+    current_model = None
+    model_start_time = None
 
-    while pipeline_container.status == "running":
-        stats = get_container_stats(pipeline_container)
+    for line in pipeline_container.logs(stream=True, follow=True):
+        line = line.decode("utf-8").strip()
 
-        if stats is None:
-            print("pipeline container stats not found...exiting")
+        if "inserted" in line and "objects into" in line:
+            model_name = line.split("objects into")[-1].strip()
+
+            if current_model:
+                stats = capture_stats(pipeline_container, model_start_time)
+                if stats:
+                    model_stats[current_model]["duration"] += stats["duration"]
+                    model_stats[current_model]["max_cpu_percent"] = max(
+                        model_stats[current_model]["max_cpu_percent"],
+                        stats["max_cpu_percent"],
+                    )
+                    model_stats[current_model]["max_memory_usage"] = max(
+                        model_stats[current_model]["max_memory_usage"],
+                        stats["max_memory_usage"],
+                    )
+
+            current_model = model_name
+            model_start_time = time.time()
+
+        if "✅ crates" in line:
             break
-
-        max_cpu_percent = max(max_cpu_percent, stats["cpu_percent"])
-        max_memory_usage = max(max_memory_usage, stats["memory_usage"])
-        time.sleep(1)
 
     end_time = time.time()
     total_runtime = end_time - start_time
 
-    # parse db logs to extract query info
-    # logs = database_container.logs().decode("utf-8")
-    # select_count, insert_count, total_sql_time = read_logs(logs)
-
-    # prep report!
-    report = {
-        "total_runtime": total_runtime,
-        "max_cpu_percent": max_cpu_percent,
-        "max_memory_usage": max_memory_usage,
-        # "select_count": select_count,
-        # "insert_count": insert_count,
-    }
+    # Prepare the report
+    report = {"total_runtime": total_runtime, "model_stats": dict(model_stats)}
 
     print("report:")
     print(json.dumps(report, indent=2))
