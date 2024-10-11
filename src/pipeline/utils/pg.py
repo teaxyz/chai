@@ -116,7 +116,7 @@ class DB:
 
         def process_version(item: Dict[str, str]):
             package_id = package_cache[item["crate_id"]]
-            license_id = license_cache[item["license"]]
+            license_id = license_cache[item["name"]]
 
             return Version(
                 package_id=package_id,
