@@ -137,8 +137,6 @@ docker compose build
 ### start
 
 Requires: build
-Env: PKG_MANAGER=${PKG_MANAGER:-crates}
-Env: CHAI_DATABASE_URL=${CHAI_DATABASE_URL:-"postgresql://postgres:s3cr3t@localhost:5435/chai"}
 
 ```sh
 docker compose up -d
@@ -146,9 +144,16 @@ docker compose up -d
 
 ### test
 
+Env: TEST=true
+Env: DEBUG=true
+
+```sh
+docker compose up
+```
+
+### full-test
+
 Requires: build
-Env: PKG_MANAGER=${PKG_MANAGER:-crates}
-Env: CHAI_DATABASE_URL=${CHAI_DATABASE_URL:-"postgresql://postgres:s3cr3t@localhost:5435/chai"}
 Env: TEST=true
 Env: DEBUG=true
 

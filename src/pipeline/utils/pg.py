@@ -104,75 +104,140 @@ class DB:
 
         return self._batch(package_object_generator(), Package, DEFAULT_BATCH_SIZE)
 
+    def select_packages_by_import_ids(self, iids: Iterable[str]) -> List[Package]:
+        with self.session() as session:
+            return session.query(Package).filter(Package.import_id.in_(iids)).all()
+
+    def select_licenses_by_name(self, names: Iterable[str]) -> List[License]:
+        with self.session() as session:
+            return session.query(License).filter(License.name.in_(names)).all()
+
     def insert_versions(self, version_generator: Iterable[dict[str, str]]):
-        # Preload packages and licenses
         package_cache = {}
         license_cache = {}
 
-        def preload_packages_and_licenses(items):
+        # this function updates our cache of import_ids to packages and
+        # names to licenses
+        def query_packages_and_licenses(items: Iterable[dict[str, str]]):
+            # build the query parameters
             crate_ids = set()
             license_names = set()
             for item in items:
-                crate_ids.add(item["crate_id"])
-                license_names.add(item["license"])
-
-            with self.session() as session:
-                # Fetch all relevant packages in one query
-                packages = (
-                    session.query(Package)
-                    .filter(Package.import_id.in_(crate_ids))
-                    .all()
-                )
-                for package in packages:
-                    package_cache[package.import_id] = package.id
-
-                # Fetch all relevant licenses in one query
-                licenses = (
-                    session.query(License).filter(License.name.in_(license_names)).all()
-                )
-                for license in licenses:
-                    license_cache[license.name] = license.id
-
-        def version_object_generator():
-            versions = []
-            for item in version_generator:
                 crate_id = item["crate_id"]
                 license_name = item["license"]
 
-                if crate_id not in package_cache or license_name not in license_cache:
-                    # If we encounter a missing package or license, preload again
-                    preload_packages_and_licenses(version_generator)
+                if crate_id not in crate_ids:
+                    crate_ids.add(crate_id)
+                if license_name not in license_names:
+                    license_names.add(license_name)
 
-                package_id = package_cache.get(crate_id)
-                if package_id is None:
-                    self.logger.warn(f"package with import_id {crate_id} not found")
-                    continue
+            # fetch all packages in one query
+            self.logger.debug(f"querying {len(crate_ids)} packages")
+            packages = self.select_packages_by_import_ids(crate_ids)
 
-                license_id = license_cache.get(license_name)
-                if license_id is None:
-                    # If license is still not found, create it
-                    license_id = self.select_license_by_name(license_name, create=True)
-                    license_cache[license_name] = license_id
+            # update the cache
+            for package in packages:
+                package_cache[package.import_id] = package.id
+            self.logger.debug(f"cached {len(package_cache)} packages")
 
-                versions.append(
-                    Version(
-                        package_id=package_id,
-                        version=item["version"],
-                        import_id=item["import_id"],
-                        size=item["size"],
-                        published_at=item["published_at"],
-                        license_id=license_id,
-                        downloads=item["downloads"],
-                        checksum=item["checksum"],
-                    )
-                )
+            # fetch all licenses in one query
+            self.logger.debug(f"querying {len(license_names)} licenses")
+            licenses = self.select_licenses_by_name(license_names)
 
-                if len(versions) >= DEFAULT_BATCH_SIZE:
-                    yield from versions
+            # update the cache
+            for license in licenses:
+                license_cache[license.name] = license.id
+            self.logger.debug(f"cached {len(license_cache)} licenses")
+
+        def version_object_generator():
+            versions = []
+            items_buffer = []
+
+            for item in version_generator:
+                items_buffer.append(item)
+
+                # this if statement is where we actually construct the versions list
+                # when the batch size is reached
+                if len(items_buffer) >= DEFAULT_BATCH_SIZE:
+                    query_packages_and_licenses(items_buffer)
+
+                    # here, we know our cache is populated
+                    # so, we can use it to construct our versions
+                    for buffered_item in items_buffer:
+                        crate_id = buffered_item["crate_id"]
+                        license_name = buffered_item["license"]
+
+                        package_id = package_cache.get(crate_id)
+                        if package_id is None:
+                            self.logger.warn(
+                                f"package with import_id {crate_id} not found"
+                            )
+                            continue
+
+                        license_id = license_cache.get(license_name)
+                        if license_id is None:
+                            # if license is still not found, create it
+                            license_id = self.select_license_by_name(
+                                license_name, create=True
+                            )
+                            license_cache[license_name] = license_id
+
+                        versions.append(
+                            Version(
+                                package_id=package_id,
+                                version=buffered_item["version"],
+                                import_id=buffered_item["import_id"],
+                                size=buffered_item["size"],
+                                published_at=buffered_item["published_at"],
+                                license_id=license_id,
+                                downloads=buffered_item["downloads"],
+                                checksum=buffered_item["checksum"],
+                            )
+                        )
+
+                    # at the end of the if, after the batch is processed
+                    # yield it so that _batch can handle the commit
+                    yield versions
                     versions = []
+                    items_buffer = []
 
-            if versions:
-                yield from versions
+            # all the remaining items will need to be processed
+            if items_buffer:
+                query_packages_and_licenses(items_buffer)
+
+                # this loop again! we can separate this out into a function
+                for buffered_item in items_buffer:
+                    crate_id = buffered_item["crate_id"]
+                    license_name = buffered_item["license"]
+
+                    package_id = package_cache.get(crate_id)
+                    if package_id is None:
+                        self.logger.warn(f"package with import_id {crate_id} not found")
+                        continue
+
+                    license_id = license_cache.get(license_name)
+                    if license_id is None:
+                        # If license is still not found, create it
+                        license_id = self.select_license_by_name(
+                            license_name, create=True
+                        )
+                        license_cache[license_name] = license_id
+
+                    versions.append(
+                        Version(
+                            package_id=package_id,
+                            version=buffered_item["version"],
+                            import_id=buffered_item["import_id"],
+                            size=buffered_item["size"],
+                            published_at=buffered_item["published_at"],
+                            license_id=license_id,
+                            downloads=buffered_item["downloads"],
+                            checksum=buffered_item["checksum"],
+                        )
+                    )
+
+                if versions:
+                    yield versions
 
         self._batch(version_object_generator(), Version, DEFAULT_BATCH_SIZE)
 
