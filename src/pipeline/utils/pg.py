@@ -127,6 +127,14 @@ class DB:
                 self.logger.log(f"creating an entry for {item['license']}")
                 license_id = self.select_license_by_name(item["license"], create=True)
 
+            if (
+                package_id is None
+                or item["version"] is None
+                or item["import_id"] is None
+            ):
+                self.logger.warn(f"something weird: {item}")
+                return None
+
             return Version(
                 package_id=package_id,
                 version=item["version"],
