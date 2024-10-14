@@ -1,12 +1,12 @@
 import os
 from typing import Any, Dict, Iterable, List, Type
-from src.pipeline.utils.utils import build_query_params
+from core.utils import build_query_params
 from sqlalchemy import UUID, create_engine
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.decl_api import DeclarativeMeta
-from src.pipeline.models import (
+from core.models import (
     DependsOn,
     License,
     LoadHistory,
@@ -21,7 +21,7 @@ from src.pipeline.models import (
     UserVersion,
     Version,
 )
-from src.pipeline.utils.logger import Logger
+from core.logger import Logger
 
 CHAI_DATABASE_URL = os.getenv("CHAI_DATABASE_URL")
 DEFAULT_BATCH_SIZE = 10000
