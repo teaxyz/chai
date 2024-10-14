@@ -16,8 +16,10 @@ services:
 
   alembic:
     build:
-      context: ./
-      dockerfile: ./alembic/Dockerfile
+      context: ./docker/alembic
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_PROGRESS: plain
     environment:
       - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
       - PGPASSWORD=s3cr3t
@@ -27,60 +29,44 @@ services:
     working_dir: /alembic
     entrypoint: ["./run_migrations.sh"]
 
-  pipeline:
-    build:
-      context: ./
-      dockerfile: ./src/Dockerfile
-      args:
-        BUILDKIT_PROGRESS: plain
-    environment:
-      - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
-      - FREQUENCY=${FREQUENCY:-24}
-      - PYTHONPATH=/
-      - PKG_MANAGER=${PKG_MANAGER:-crates}
-      - TEST=${TEST:-false}
-      - DEBUG=${DEBUG:-true}
-      - FETCH=${FETCH:-true}
-    depends_on:
-      db:
-        condition: service_healthy
-      alembic:
-        condition: service_completed_successfully
-    working_dir: /src
-    entrypoint: ["./run_pipeline.sh"]
+  # crates:
+  #   build:
+  #     context: ./package_managers/crates
+  #     dockerfile: Dockerfile
+  #   environment:
+  #     - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
+  #   volumes:
+  #     - ./core:/app/core
+  #     - ./package_managers/crates:/app/crates
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     alembic:
+  #       condition: service_completed_successfully
 
-  api:
-    build:
-      context: ./api
-      dockerfile: Dockerfile
-    environment:
-      - DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
-      - HOST=0.0.0.0
-      - PORT=8080
-    ports:
-      - "8080:8080"
-    depends_on:
-      db:
-        condition: service_healthy
-      alembic:
-        condition: service_completed_successfully
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/heartbeat"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
+  # homebrew:
+  #   build:
+  #     context: ./package_managers/homebrew
+  #     dockerfile: Dockerfile
+  #   environment:
+  #     - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
+  #   volumes:
+  #     - ./core:/app/core
+  #     - ./package_managers/homebrew:/app/homebrew
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     alembic:
+  #       condition: service_completed_successfully
 
-  monitor:
-    build: monitor
-    environment:
-      - DOCKER_HOST=${DOCKER_HOST:-unix:///var/run/docker.sock}
-    volumes:
-      - ./monitor:/app
-      - /var/run/docker.sock:/var/run/docker.sock
-    depends_on:
-      pipeline:
-        condition: service_started
-    working_dir: /usr/src/monitor
-    entrypoint: ["./run_monitor.sh"]
+  # monitor:
+  #   build:
+  #     context: ./docker/monitor
+  #     dockerfile: Dockerfile
+  #   environment:
+  #     - DOCKER_HOST=${DOCKER_HOST:-unix:///var/run/docker.sock}
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   depends_on:
+  #     - crates
+  #     - homebrew

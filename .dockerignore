@@ -1,6 +1,5 @@
 # directories
 data/
-db/
 .venv/
 
 # other files
