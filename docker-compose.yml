@@ -16,8 +16,8 @@ services:
 
   alembic:
     build:
-      context: ./docker/alembic
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./alembic/Dockerfile
       args:
         BUILDKIT_PROGRESS: plain
     environment:
