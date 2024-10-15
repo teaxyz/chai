@@ -34,6 +34,9 @@ services:
     environment:
       - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
       - PYTHONPATH=/
+      - DEBUG=${DEBUG:-true}
+      - TEST=${TEST:-false}
+      - FETCH=${FETCH:-true}
     depends_on:
       db:
         condition: service_healthy
