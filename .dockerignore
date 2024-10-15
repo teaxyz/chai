@@ -5,3 +5,6 @@ data/
 # other files
 .gitignore
 docker-compose.yml
+.DS_Store
+.git
+README.md

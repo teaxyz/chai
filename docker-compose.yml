@@ -18,8 +18,6 @@ services:
     build:
       context: .
       dockerfile: ./alembic/Dockerfile
-      args:
-        BUILDKIT_PROGRESS: plain
     environment:
       - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
       - PGPASSWORD=s3cr3t
@@ -29,44 +27,42 @@ services:
     working_dir: /alembic
     entrypoint: ["./run_migrations.sh"]
 
-  # crates:
-  #   build:
-  #     context: ./package_managers/crates
-  #     dockerfile: Dockerfile
-  #   environment:
-  #     - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
-  #   volumes:
-  #     - ./core:/app/core
-  #     - ./package_managers/crates:/app/crates
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
-  #     alembic:
-  #       condition: service_completed_successfully
+  crates:
+    build:
+      context: .
+      dockerfile: ./package_managers/crates/Dockerfile
+    environment:
+      - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
+      - PYTHONPATH=/
+    depends_on:
+      db:
+        condition: service_healthy
+      alembic:
+        condition: service_completed_successfully
 
-  # homebrew:
-  #   build:
-  #     context: ./package_managers/homebrew
-  #     dockerfile: Dockerfile
-  #   environment:
-  #     - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
-  #   volumes:
-  #     - ./core:/app/core
-  #     - ./package_managers/homebrew:/app/homebrew
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
-  #     alembic:
-  #       condition: service_completed_successfully
+  homebrew:
+    build:
+      context: ./package_managers/homebrew
+      dockerfile: Dockerfile
+    environment:
+      - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
+    volumes:
+      - ./core:/app/core
+      - ./package_managers/homebrew:/app/homebrew
+    depends_on:
+      db:
+        condition: service_healthy
+      alembic:
+        condition: service_completed_successfully
 
-  # monitor:
-  #   build:
-  #     context: ./docker/monitor
-  #     dockerfile: Dockerfile
-  #   environment:
-  #     - DOCKER_HOST=${DOCKER_HOST:-unix:///var/run/docker.sock}
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock
-  #   depends_on:
-  #     - crates
-  #     - homebrew
+  monitor:
+    build:
+      context: ./docker/monitor
+      dockerfile: Dockerfile
+    environment:
+      - DOCKER_HOST=${DOCKER_HOST:-unix:///var/run/docker.sock}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - crates
+      - homebrew

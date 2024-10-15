@@ -2,11 +2,11 @@ from os import getenv
 
 from dataclasses import dataclass
 
-from package_managers.crates.structs import URLTypes, UserTypes
 from core.fetcher import TarballFetcher
 from core.logger import Logger
 from core.db import DB
-from core.transformer import CratesTransformer
+from package_managers.crates.structs import URLTypes, UserTypes
+from package_managers.crates.transformer import CratesTransformer
 
 logger = Logger("crates_orchestrator")
 

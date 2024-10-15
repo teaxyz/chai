@@ -1,8 +1,9 @@
 import csv
 from typing import Dict, Generator
 
-from core.utils import safe_int
 from package_managers.crates.structs import DependencyType, URLTypes, UserTypes
+
+from core.utils import safe_int
 from core.transformer import Transformer
 
 
