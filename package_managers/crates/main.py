@@ -79,22 +79,23 @@ def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
     logger.log("✅ crates")
 
 
-def main(db: DB) -> None:
-    config = initialize(db)
-    logger.debug(config)
+def main(db: DB, config: Config) -> None:
     if config.fetch:
         fetch(config)
 
     transformer = CratesTransformer(config.url_types, config.user_types)
     load(db, transformer, config)
 
-    coda = """
-        validate by running 
-        `psql "postgresql://postgres:s3cr3t@localhost:5435/chai" \
-            -c "SELECT * FROM load_history;"`
-    """
+    coda = (
+        "validate by running "
+        + '`psql "postgresql://postgres:s3cr3t@localhost:5435/chai" '
+        + '-c "SELECT * FROM load_history;"`'
+    )
     logger.log(coda)
 
 
 if __name__ == "__main__":
-    main()
+    db = DB()
+    config = initialize(db)
+    logger.debug(config)
+    main(db, config)
