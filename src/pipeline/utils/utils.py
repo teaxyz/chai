@@ -7,7 +7,10 @@ def safe_int(val: str) -> int | None:
     return int(val)
 
 
-# TODO: needs explanation or simplification
+# given some items and a cache, this returns a list of attributes that are not in the
+# cache so that we can use them in a query
+# attr has to be an attribute in the item
+# item[attr] is a key in the cache
 def build_query_params(
     items: List[Dict[str, str]], cache: dict, attr: str
 ) -> List[str]:

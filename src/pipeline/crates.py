@@ -1,6 +1,7 @@
 from os import getenv
 
 from dataclasses import dataclass
+import sys
 
 from src.pipeline.utils.crates.structures import URLTypes, UserTypes
 from src.pipeline.utils.fetcher import TarballFetcher
@@ -64,15 +65,17 @@ def fetch(config: Config) -> None:
 
 def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
     db.insert_packages(transformer.packages(), config.package_manager_id, "crates")
+    db.insert_urls(transformer.urls())
+    db.insert_package_urls(transformer.package_urls())
+    sys.exit(0)
     db.insert_versions(transformer.versions())
     db.insert_users(transformer.users(), config.user_types.crates)
     db.insert_user_packages(transformer.user_packages())
-    db.insert_urls(transformer.urls())
 
     if not config.test:
         # these are bigger files, so we skip them in tests
         db.insert_user_versions(transformer.user_versions(), config.user_types.github)
-        # db.insert_package_urls(transformer.package_urls()) FIXME
+
         db.insert_dependencies(transformer.dependencies())
 
     db.insert_load_history(config.package_manager_id)

@@ -12,7 +12,7 @@ from src.pipeline.models import (
     LoadHistory,
     Package,
     PackageManager,
-    # PackageURL,
+    PackageURL,
     Source,
     URLType,
     User,
@@ -316,8 +316,60 @@ class DB:
             self._insert_batch(URL, self._process_batch(batch, process_url))
 
     def insert_package_urls(self, package_url_generator: Iterable[dict[str, str]]):
-        # todo: complex because url has to be selected by source type as well
-        pass
+        url_cache: Dict[tuple[str, str], UUID] = {}
+        # package_cache: Dict[str, UUID] = {}
+
+        def fetch_packages_and_urls(items: List[Dict[str, str]]):
+            package_ids = build_query_params(items, self.package_cache, "import_id")
+
+            if package_ids:
+                packages = self._batch_fetch(Package, "import_id", list(package_ids))
+                self.package_cache.update(
+                    self._cache_objects(packages, "import_id", "id")
+                )
+
+            # for url ids, we can't use batch_fetch, because we need to provide the
+            # url_type_id in addition to the url string itself
+            # so, let's do it the old fashioned way
+            for item in items:
+                url = item["url"]
+                url_type_id = item["url_type_id"]
+                if (url, url_type_id) not in url_cache:
+                    url_cache[(url, url_type_id)] = self.select_url_by_url_and_type(
+                        url, url_type_id
+                    ).id
+
+        def process_package_url(item: Dict[str, str]):
+            package_id = self.package_cache.get(item["import_id"])
+            if not package_id:
+                self.logger.warn(f"package_id not found for {item['import_id']}")
+                return None
+
+            url_id = url_cache.get((item["url"], item["url_type_id"]))
+            if not url_id:
+                self.logger.warn(f"url_id not found for {item['url']}")
+                return None
+
+            return PackageURL(
+                package_id=package_id,
+                url_id=url_id,
+            ).to_dict()
+
+        batch = []
+        for item in package_url_generator:
+            batch.append(item)
+            if len(batch) == DEFAULT_BATCH_SIZE:
+                fetch_packages_and_urls(batch)
+                self._insert_batch(
+                    PackageURL, self._process_batch(batch, process_package_url)
+                )
+                batch = []
+
+        if batch:
+            fetch_packages_and_urls(batch)
+            self._insert_batch(
+                PackageURL, self._process_batch(batch, process_package_url)
+            )
 
     def insert_source(self, name: str) -> UUID:
         with self.session() as session:
