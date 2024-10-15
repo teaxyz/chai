@@ -57,7 +57,7 @@ services:
 
   monitor:
     build:
-      context: ./docker/monitor
+      context: ./monitor
       dockerfile: Dockerfile
     environment:
       - DOCKER_HOST=${DOCKER_HOST:-unix:///var/run/docker.sock}
