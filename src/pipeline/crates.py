@@ -64,19 +64,39 @@ def fetch(config: Config) -> None:
 
 
 def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
+    logger.log("loading crates packages...this should take a minute")
     db.insert_packages(transformer.packages(), config.package_manager_id, "crates")
+    logger.log("✅ inserted packages")
+
+    logger.log("loading crates urls...this should take a minute")
     db.insert_urls(transformer.urls())
+    logger.log("✅ inserted urls")
+
+    logger.log("loading crates package urls...this should take ~3 minutes")
     db.insert_package_urls(transformer.package_urls())
-    sys.exit(0)
+    logger.log("✅ inserted package urls")
+
+    logger.log("loading crates versions...this should take ~5 minutes")
     db.insert_versions(transformer.versions())
+    logger.log("✅ inserted versions")
+
+    logger.log("loading crates users...this should take a minute")
     db.insert_users(transformer.users(), config.user_types.crates)
+    logger.log("✅ inserted users")
+
+    logger.log("loading crates user packages...this should take a few seconds")
     db.insert_user_packages(transformer.user_packages())
+    logger.log("✅ inserted user packages")
 
     if not config.test:
         # these are bigger files, so we skip them in tests
+        logger.log("loading crates user versions...this should take ~5 minutes")
         db.insert_user_versions(transformer.user_versions(), config.user_types.github)
+        logger.log("✅ inserted user versions")
 
+        logger.log("loading crates dependencies...this should take ~1 hour")
         db.insert_dependencies(transformer.dependencies())
+        logger.log("✅ inserted dependencies")
 
     db.insert_load_history(config.package_manager_id)
     logger.log("✅ crates")
