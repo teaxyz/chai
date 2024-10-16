@@ -1,3 +1,4 @@
+import time
 from os import getenv
 
 from dataclasses import dataclass
@@ -5,6 +6,7 @@ from dataclasses import dataclass
 from core.fetcher import TarballFetcher
 from core.logger import Logger
 from core.db import DB
+from core.scheduler import Scheduler
 from package_managers.crates.structs import URLTypes, UserTypes
 from package_managers.crates.transformer import CratesTransformer
 
@@ -79,7 +81,7 @@ def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
     logger.log("✅ crates")
 
 
-def main(db: DB, config: Config) -> None:
+def run_pipeline(db: DB, config: Config) -> None:
     if config.fetch:
         fetch(config)
 
@@ -94,8 +96,24 @@ def main(db: DB, config: Config) -> None:
     logger.log(coda)
 
 
-if __name__ == "__main__":
+def main():
     db = DB()
     config = initialize(db)
     logger.debug(config)
-    main(db, config)
+
+    scheduler = Scheduler("crates")
+    scheduler.start(run_pipeline, db, config)
+
+    # run immediately
+    scheduler.run_now(run_pipeline, db, config)
+
+    # keep the main thread alive so we can terminate the program with Ctrl+C
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        scheduler.stop()
+
+
+if __name__ == "__main__":
+    main()

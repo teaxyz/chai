@@ -37,6 +37,7 @@ services:
       - DEBUG=${DEBUG:-true}
       - TEST=${TEST:-false}
       - FETCH=${FETCH:-true}
+      - FREQUENCY=${FREQUENCY:-24}
     depends_on:
       db:
         condition: service_healthy
