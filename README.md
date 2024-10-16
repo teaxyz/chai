@@ -1,10 +1,8 @@
 # CHAI
 
-inspiration [here](https://github.com/vbelz/Data-pipeline-twitter)
-
-this is an attempt at an open-source data pipeline, from which we can build our app that
-ranks open-source projects. all pieces for this are managed by `docker-compose`. there
-are 3 services to it:
+This is an attempt at an open-source data pipeline for package managers. The goal is to
+have a pipeline that can run on any package manager and provide a normalized data
+source for different use cases.
 
 1. db: postgres to store package specific data
 1. alembic: for running migrations
@@ -23,14 +21,20 @@ are 3 services to it:
 1. Run `docker compose build` to create the latest Docker images.
 2. Run `docker compose up` to launch.
 
-> [!IMPORTANT]
->
-> the `PKG_MANAGER` argument denotes which package manager the pipeline will be run for
-> it is configurable, and defaults to `crates`
+### Arguments
+
+- `PKG_MANAGER`: which package manager the pipeline will be run for. Currently, the
+  supported values are:
+  - `crates`
+- `FREQUENCY`: how frequently **(in hours)** the pipeline will run. Defaults to `24`
+- `FETCH`: whether the pipeline will fetch the data. Defaults to `true`
+- `DEBUG`: whether the pipeline will run in debug mode. Defaults to `true`
+
+These arguments are all configurable in the `docker-compose.yml` file.
 
 ## Hard Reset
 
-if at all you need to do a hard reset, here's the steps
+If at all you need to do a hard reset, here's the steps
 
 1. `rm -rf data`: removes all the data the fetcher is putting
 2. `docker system prune -a -f --volumes`: removes **everything** docker-related
@@ -49,17 +53,19 @@ if at all you need to do a hard reset, here's the steps
 
 ## Usage
 
-our goal is to build a data schema that looks like this:
+Our goal is to build a data schema that looks like this:
 
 ![db/CHAI_ERD.png](db/CHAI_ERD.png)
 
-our specific application extracts the dependency graph understand what are critical
+Our specific application extracts the dependency graph understand what are critical
 pieces of the open-source graph. there are many other potential use cases for this data:
 
 - license compatibility checker
 - developer publications
 - package popularity
 - dependency analysis vulnerability tool (requires translating semver)
+
+<!-- TODO: add these to the examples folder-->
 
 ### license compatibility checker
 
@@ -108,18 +114,12 @@ ORDER BY p.name;
 
 ## FAQs / common issues
 
-1. the database url is `postgresql://postgres:s3cr3t@localhost:5435/chai`, and is used
+1. The database url is `postgresql://postgres:s3cr3t@localhost:5435/chai`, and is used
    as `CHAI_DATABASE_URL` in the environment.
-1. there are two bash scripts use by the alembic and pipeline services, and you'd need
-   to run the following to ensure they can be executed:
-   ```sh
-   chmod +x alembic/run_migrations.sh
-   chmod +x src/run_pipeline.sh
-   ```
 
 ## tasks
 
-these are tasks that can be run using xcfile.dev. if you have pkgx, just run `dev` to
+These are tasks that can be run using xcfile.dev. if you have pkgx, just run `dev` to
 inject into your environment. if you don't...go get it.
 
 ### reset
