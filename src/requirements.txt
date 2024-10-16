@@ -20,6 +20,8 @@ requests==2.32.3
     # via pipeline (pyproject.toml)
 ruff==0.6.5
     # via pipeline (pyproject.toml)
+schedule==1.2.0
+    # via pipeline (pyproject.toml)
 sqlalchemy==2.0.34
     # via
     #   pipeline (pyproject.toml)

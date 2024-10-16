@@ -1,7 +1,6 @@
 from os import getenv
 
 from dataclasses import dataclass
-import sys
 
 from src.pipeline.utils.crates.structures import URLTypes, UserTypes
 from src.pipeline.utils.fetcher import TarballFetcher

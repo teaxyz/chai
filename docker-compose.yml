@@ -28,23 +28,25 @@ services:
     entrypoint: ["./run_migrations.sh"]
 
   pipeline:
-    build: src
+    build:
+      context: ./
+      dockerfile: ./src/Dockerfile
+      args:
+        BUILDKIT_PROGRESS: plain
     environment:
       - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
+      - PYTHONPATH=/
       - PKG_MANAGER=${PKG_MANAGER:-crates}
-      - PYTHONPATH=/app
       - TEST=${TEST:-false}
-      - DEBUG=${DEBUG:-false}
+      - DEBUG=${DEBUG:-true}
       - FETCH=${FETCH:-true}
-    volumes:
-      - .:/app
-    working_dir: /app
     depends_on:
       db:
         condition: service_healthy
       alembic:
         condition: service_completed_successfully
-    entrypoint: ["./src/run_pipeline.sh"]
+    working_dir: /src
+    entrypoint: ["./run_pipeline.sh"]
 
   monitor:
     build: monitor
