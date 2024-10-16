@@ -4,36 +4,45 @@ import subprocess
 import sys
 import os
 
+PKG_MANAGER = os.getenv("PKG_MANAGER", "crates")
+FREQUENCY = int(os.getenv("FREQUENCY", 24))
+
 
 def run_pipeline():
-    print("Running pipeline...")
-    result = subprocess.run(
-        [sys.executable, "/src/pipeline/main.py", "crates"],
-        capture_output=True,
+    # using Popen so we can continuously capture output
+    process = subprocess.Popen(
+        [sys.executable, "/src/pipeline/main.py", PKG_MANAGER],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=1,
+        universal_newlines=True,
         text=True,
     )
-    print(result.stdout)
-    if result.stderr:
-        print("Errors:", result.stderr, file=sys.stderr)
+    # this is hacky, but ensures we capture all output
+    while True:
+        output = process.stdout.readline()
+        if output == "" and process.poll() is not None:
+            break
+        if output:
+            print(output.strip())
+    rc = process.poll()
+    if rc != 0:
+        print(process.stderr.read(), file=sys.stderr)
+        raise Exception(f"Pipeline failed with return code {rc}")
 
 
 def main():
     # make sure we're in the correct directory
     os.chdir("/src")
 
-    # debug some useful info
-    print(f"Current working directory: {os.getcwd()}")
-    print(f"Contents of current directory: {os.listdir('.')}")
-    print(f"Python executable: {sys.executable}")
-    print(f"Python version: {sys.version}")
+    # schedule
+    print(f"scheduling pipeline to run every {FREQUENCY} hours...")
+    schedule.every(FREQUENCY).hours.do(run_pipeline)
 
-    # schedule the job
-    schedule.every(24).hours.do(run_pipeline)
-
-    # run the job once immediately
+    # run now
     run_pipeline()
 
-    # keep the script running
+    # keep running
     while True:
         schedule.run_pending()
         time.sleep(1)

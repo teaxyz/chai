@@ -35,6 +35,7 @@ services:
         BUILDKIT_PROGRESS: plain
     environment:
       - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
+      - FREQUENCY=${FREQUENCY:-2}
       - PYTHONPATH=/
       - PKG_MANAGER=${PKG_MANAGER:-crates}
       - TEST=${TEST:-false}

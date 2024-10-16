@@ -20,8 +20,11 @@ def main():
         db = DB()
         package_manager = sys.argv[1]
 
+        print(f"[main] Running pipeline for {package_manager}...")
+
         # run the pipeline for the specified package manager
         if package_manager == "crates":
+            print("[main] Running crates pipeline...")
             crates_main(db)
         else:
             raise ValueError("invalid package manager")
