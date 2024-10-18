@@ -1,9 +1,10 @@
 import csv
 from typing import Dict, Generator
 
+from core.structs import URLTypes, UserTypes
 from core.transformer import Transformer
 from core.utils import safe_int
-from package_managers.crates.structs import DependencyType, URLTypes, UserTypes
+from package_managers.crates.structs import DependencyType
 
 
 # crates provides homepage and repository urls, so we'll initialize this transformer
