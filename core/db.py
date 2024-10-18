@@ -373,8 +373,13 @@ class DB:
                 PackageURL, self._process_batch(batch, process_package_url)
             )
 
-    def insert_source(self, name: str) -> UUID:
+    def insert_source(self, name: str) -> Source:
         with self.session() as session:
+            existing_source = session.query(Source).filter_by(type=name).first()
+            if existing_source:
+                self.logger.warn(f"Source '{name}' already exists")
+                return existing_source
+
             session.add(Source(type=name))
             session.commit()
             return session.query(Source).filter_by(type=name).first()
