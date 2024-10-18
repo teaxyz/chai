@@ -1,8 +1,8 @@
 """check default server types
 
-Revision ID: a889726d81b5
+Revision ID: 2481138a729a
 Revises: d183dcc4bdc8
-Create Date: 2024-10-18 08:07:06.323214
+Create Date: 2024-10-18 08:15:28.100836
 
 """
 
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "a889726d81b5"
+revision: str = "2481138a729a"
 down_revision: Union[str, None] = "d183dcc4bdc8"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -23,6 +23,13 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.alter_column(
         "dependencies",
+        "id",
+        existing_type=sa.UUID(),
+        server_default=sa.text("uuid_generate_v4()"),
+        existing_nullable=False,
+    )
+    op.alter_column(
+        "dependencies",
         "created_at",
         existing_type=postgresql.TIMESTAMP(),
         server_default=sa.text("now()"),
@@ -58,6 +65,13 @@ def upgrade() -> None:
     )
     op.alter_column(
         "licenses",
+        "id",
+        existing_type=sa.UUID(),
+        server_default=sa.text("uuid_generate_v4()"),
+        existing_nullable=False,
+    )
+    op.alter_column(
+        "licenses",
         "created_at",
         existing_type=postgresql.TIMESTAMP(),
         server_default=sa.text("now()"),
@@ -105,7 +119,13 @@ def upgrade() -> None:
         server_default=sa.text("now()"),
         existing_nullable=False,
     )
-    op.drop_column("package_managers", "updated_at")
+    op.alter_column(
+        "package_managers",
+        "updated_at",
+        existing_type=postgresql.TIMESTAMP(),
+        server_default=sa.text("now()"),
+        existing_nullable=False,
+    )
     op.alter_column(
         "package_urls",
         "id",
@@ -487,11 +507,12 @@ def downgrade() -> None:
         server_default=None,
         existing_nullable=False,
     )
-    op.add_column(
+    op.alter_column(
         "package_managers",
-        sa.Column(
-            "updated_at", postgresql.TIMESTAMP(), autoincrement=False, nullable=False
-        ),
+        "updated_at",
+        existing_type=postgresql.TIMESTAMP(),
+        server_default=None,
+        existing_nullable=False,
     )
     op.alter_column(
         "package_managers",
@@ -543,6 +564,13 @@ def downgrade() -> None:
         existing_nullable=False,
     )
     op.alter_column(
+        "licenses",
+        "id",
+        existing_type=sa.UUID(),
+        server_default=None,
+        existing_nullable=False,
+    )
+    op.alter_column(
         "depends_on_types",
         "updated_at",
         existing_type=postgresql.TIMESTAMP(),
@@ -574,6 +602,13 @@ def downgrade() -> None:
         "dependencies",
         "created_at",
         existing_type=postgresql.TIMESTAMP(),
+        server_default=None,
+        existing_nullable=False,
+    )
+    op.alter_column(
+        "dependencies",
+        "id",
+        existing_type=sa.UUID(),
         server_default=None,
         existing_nullable=False,
     )

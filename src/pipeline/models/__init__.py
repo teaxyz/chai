@@ -82,6 +82,9 @@ class PackageManager(Base):
     created_at = Column(
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
+    updated_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
 
 
 class Version(Base):
@@ -134,7 +137,12 @@ class Version(Base):
 
 class License(Base):
     __tablename__ = "licenses"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=func.uuid_generate_v4(),
+        server_default=func.uuid_generate_v4(),
+    )
     name = Column(String, nullable=False, unique=True, index=True)
     created_at = Column(
         DateTime, nullable=False, default=func.now(), server_default=func.now()
@@ -154,7 +162,12 @@ class DependsOn(Base):
             name="uq_version_dependency_type",
         ),
     )
-    id = Column(UUID(as_uuid=True), primary_key=True, default=func.uuid_generate_v4())
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=func.uuid_generate_v4(),
+        server_default=func.uuid_generate_v4(),
+    )
     version_id = Column(
         UUID(as_uuid=True), ForeignKey("versions.id"), nullable=False, index=True
     )
