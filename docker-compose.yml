@@ -56,7 +56,7 @@ services:
       - SOURCE=https://formulae.brew.sh/api/formula.json
       - JQ_DIR=/package_managers/homebrew/jq
       - DATA_DIR=/data/homebrew
-    # TODO: can I reference DATA_DIR in the volumes key?
+    # TODO: can I reference DATA_DIR in the volumes key? do I need it?
     # https://stackoverflow.com/questions/29377853/how-can-i-use-environment-variables-in-docker-compose
     volumes:
       - ./data/homebrew:/data/homebrew
