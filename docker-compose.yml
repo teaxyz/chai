@@ -55,6 +55,7 @@ services:
       - FREQUENCY=${FREQUENCY:-24}
       - SOURCE=https://formulae.brew.sh/api/formula.json
       - JQ_DIR=/package_managers/homebrew/jq
+      - SED_DIR=/package_managers/homebrew/sed
       - DATA_DIR=/data/homebrew
     # TODO: can I reference DATA_DIR in the volumes key? do I need it?
     # https://stackoverflow.com/questions/29377853/how-can-i-use-environment-variables-in-docker-compose

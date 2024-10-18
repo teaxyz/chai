@@ -1,6 +1,6 @@
 FROM ubuntu:24.10
 RUN apt-get update && \
-    apt-get install -y jq curl && \
+    apt-get install -y jq curl postgresql-client && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 COPY . .
