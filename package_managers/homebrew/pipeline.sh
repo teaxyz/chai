@@ -1,16 +1,20 @@
 #!/bin/bash
 
 set -exu
-NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-mkdir -p "$DATA_DIR"/"$NOW"
 
 # get the ID for Homebrew from our database
 HOMEBREW_ID=$(psql "$CHAI_DATABASE_URL" -f homebrew_id.sql -v "ON_ERROR_STOP=1" -tA)
+
+# homebrew provides `source` and `homepage` url types - let's create them ahead of time
+psql "$CHAI_DATABASE_URL" -f create_url_types.sql
 
 # if you've already pulled the Homebrew data, you can `export FETCH=false` to skip the
 # download, and just work off the latest symlink
 # Note that this only works if the volumes are mounted
 if [ "$FETCH" = true ]; then
+  NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  mkdir -p "$DATA_DIR"/"$NOW"
+
   # extract
   curl -s "$SOURCE" > "$DATA_DIR"/"$NOW"/source.json
 
@@ -34,16 +38,35 @@ if [ "$FETCH" = true ]; then
 fi
 
 # load
-# TODO: put in a sed folder
-# sed -f "$SED_DIR/packages.sed" "$DATA_DIR/latest/packages.csv" > "$DATA_DIR/latest/package_inserts.sql"
-sed '1d;s/"\([^"]*\)","\([^"]*\)","\([^"]*\)",*/INSERT INTO packages (derived_id, import_id, name, package_manager_id) VALUES ('\''\1'\'', '\''\2'\'', '\''\3'\'', '\'''"$HOMEBREW_ID"''\'');/' "$DATA_DIR"/latest/packages.csv > "$DATA_DIR"/latest/package_inserts.sql
+# TODO: loop?
+
+# packages
+# pass HOMEBREW_ID to sed to replace the @@HOMEBREW_ID@@ placeholder
+sed \
+  -f "$SED_DIR/packages.sed" "$DATA_DIR/latest/packages.csv" | \
+  sed "s/@@HOMEBREW_ID@@/$HOMEBREW_ID/" \
+  > "$DATA_DIR/latest/package_inserts.sql"
 psql "$CHAI_DATABASE_URL" -f "$DATA_DIR"/latest/package_inserts.sql
 
-# sed -f "$SED_DIR"/urls.sed "$DATA_DIR"/latest/urls.csv \
-#   > "$DATA_DIR"/latest/url_inserts.sql
-# psql "$CHAI_DATABASE_URL" -f "$DATA_DIR"/latest/url_inserts.sql
+# urls
+sed \
+  -f "$SED_DIR/urls.sed" "$DATA_DIR/latest/urls.csv" \
+  > "$DATA_DIR/latest/url_inserts.sql"
+psql "$CHAI_DATABASE_URL" -f "$DATA_DIR"/latest/url_inserts.sql
 
-# loading package_urls is a bit more complicated, because we need to do it in batches
-# and we need to get the ids from the package and url tables
-# sed -f "$SED_DIR"/package_url.sed "$DATA_DIR"/latest/package_url.csv > "$DATA_DIR"/latest/package_url_inserts.sql
-# psql "$CHAI_DATABASE_URL" -f "$DATA_DIR"/latest/package_url_inserts.sql
+# versions
+# TODO: licenses (license id is annoying)
+# TODO: some random parsing errors happening in versions.csv
+sed \
+  -f "$SED_DIR/versions.sed" "$DATA_DIR/latest/versions.csv" \
+  > "$DATA_DIR/latest/version_inserts.sql"
+psql "$CHAI_DATABASE_URL" -f "$DATA_DIR"/latest/version_inserts.sql
+
+# package_urls
+# TODO: ERROR:  more than one row returned by a subquery used as an expression
+sed \
+  -f "$SED_DIR/package_url.sed" "$DATA_DIR/latest/package_url.csv" \
+  > "$DATA_DIR/latest/package_url_inserts.sql"
+psql "$CHAI_DATABASE_URL" -f "$DATA_DIR"/latest/package_url_inserts.sql
+
+# TODO: dependencies -> dependency_type is annoying
