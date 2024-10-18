@@ -4,8 +4,8 @@ set -exu
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 mkdir -p "$DATA_DIR"/"$NOW"
 
-# extract
 if [ "$FETCH" = true ]; then
+  # extract
   curl -s "$SOURCE" > "$DATA_DIR"/"$NOW"/source.json
 
   # make a symlink called latest, pointing to $NOW
@@ -16,7 +16,7 @@ if [ "$FETCH" = true ]; then
   for x in "$JQ_DIR"/*.jq; do
     filename=$(basename "$x" .jq)
     # first jq line uses the formulas defined in the jq folder to get the fields we need
-    # second jq line transforms the json into csv
+    # second jq line transforms the json into csv so we can use sed to clean it up
     jq -f "$x" "$DATA_DIR"/latest/source.json \
       | jq -r '
           (map(keys) | add | unique) as $cols |
