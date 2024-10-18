@@ -1,23 +1,20 @@
 #!/bin/bash
 
 set -exu
-
-export SOURCE="https://formulae.brew.sh/api/formula.json"
-export NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-export JQ_DIR="package_managers/homebrew/jq"
-mkdir -p data/homebrew/$NOW
+NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+mkdir -p "$DATA_DIR"/"$NOW"
 
 # extract
-curl -s $SOURCE > data/homebrew/$NOW/source.json
+curl -s "$SOURCE" > "$DATA_DIR"/"$NOW"/source.json
 
 # make a symlink called latest, pointing to $NOW
-ln -sfn $NOW data/homebrew/latest
+ln -sfn "$NOW" "$DATA_DIR"/latest
 
 # transform
-for x in $JQ_DIR/*.jq; do
-  echo $x
+echo "$JQ_DIR"
+for x in "$JQ_DIR"/*.jq; do
   filename=$(basename "$x" .jq)
-  pkgx jq -f $x data/homebrew/latest/source.json > data/homebrew/latest/${filename}.json
+  jq -f "$x" "$DATA_DIR"/latest/source.json > "$DATA_DIR"/latest/"${filename}".json
   # | json2csv > data/homebrew/latest/${x%.jq}.csv
 done
 

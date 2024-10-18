@@ -50,10 +50,16 @@ services:
       dockerfile: ./package_managers/homebrew/Dockerfile
     environment:
       - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
-      - DEBUG=${DEBUG:-true}
       - TEST=${TEST:-false}
       - FETCH=${FETCH:-true}
       - FREQUENCY=${FREQUENCY:-24}
+      - SOURCE=https://formulae.brew.sh/api/formula.json
+      - JQ_DIR=/package_managers/homebrew/jq
+      - DATA_DIR=/data/homebrew
+    # TODO: can I reference DATA_DIR in the volumes key?
+    # https://stackoverflow.com/questions/29377853/how-can-i-use-environment-variables-in-docker-compose
+    volumes:
+      - ./data/homebrew:/data/homebrew
     depends_on:
       db:
         condition: service_healthy
