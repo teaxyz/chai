@@ -1,12 +1,15 @@
 import os
 from typing import Any, Dict, Iterable, List, Type
-from core.utils import build_query_params
+
 from sqlalchemy import UUID, create_engine
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.decl_api import DeclarativeMeta
+
+from core.logger import Logger
 from core.models import (
+    URL,
     DependsOn,
     License,
     LoadHistory,
@@ -16,12 +19,11 @@ from core.models import (
     Source,
     URLType,
     User,
-    URL,
     UserPackage,
     UserVersion,
     Version,
 )
-from core.logger import Logger
+from core.utils import build_query_params
 
 CHAI_DATABASE_URL = os.getenv("CHAI_DATABASE_URL")
 DEFAULT_BATCH_SIZE = 10000
