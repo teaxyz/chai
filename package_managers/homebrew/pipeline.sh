@@ -2,8 +2,15 @@
 
 set -exu
 
+# Set PSQL_FLAGS based on DEBUG environment variable
+if [ "${DEBUG:-false}" = false ]; then
+    PSQL_FLAGS="-q"
+else
+    PSQL_FLAGS=""
+fi
+
 # get the ID for Homebrew from our database
-HOMEBREW_ID=$(psql "$CHAI_DATABASE_URL" -f homebrew_id.sql -v "ON_ERROR_STOP=1" -tA)
+HOMEBREW_ID=$(psql $PSQL_FLAGS "$CHAI_DATABASE_URL" -f homebrew_id.sql -v "ON_ERROR_STOP=1" -tA)
 
 # fail if HOMEBREW_ID is empty
 if [ -z "$HOMEBREW_ID" ]; then
@@ -12,7 +19,7 @@ if [ -z "$HOMEBREW_ID" ]; then
 fi
 
 # homebrew provides `source` and `homepage` url types - let's create them ahead of time
-psql "$CHAI_DATABASE_URL" -f create_url_types.sql
+psql $PSQL_FLAGS "$CHAI_DATABASE_URL" -f create_url_types.sql
 
 # if you've already pulled the Homebrew data, you can `export FETCH=false` to skip the
 # download, and just work off the latest symlink
@@ -52,13 +59,13 @@ sed \
   -f "$SED_DIR/packages.sed" "$DATA_DIR/latest/packages.csv" | \
   sed "s/@@HOMEBREW_ID@@/$HOMEBREW_ID/" \
   > "$DATA_DIR/latest/package_inserts.sql"
-psql "$CHAI_DATABASE_URL" -f "$DATA_DIR"/latest/package_inserts.sql
+psql $PSQL_FLAGS "$CHAI_DATABASE_URL" -f "$DATA_DIR"/latest/package_inserts.sql
 
 # urls
 sed \
   -f "$SED_DIR/urls.sed" "$DATA_DIR/latest/urls.csv" \
   > "$DATA_DIR/latest/url_inserts.sql"
-psql "$CHAI_DATABASE_URL" -f "$DATA_DIR"/latest/url_inserts.sql
+psql $PSQL_FLAGS "$CHAI_DATABASE_URL" -f "$DATA_DIR"/latest/url_inserts.sql
 
 # versions
 # TODO: licenses (license id is annoying)
@@ -66,13 +73,13 @@ psql "$CHAI_DATABASE_URL" -f "$DATA_DIR"/latest/url_inserts.sql
 sed \
   -f "$SED_DIR/versions.sed" "$DATA_DIR/latest/versions.csv" \
   > "$DATA_DIR/latest/version_inserts.sql"
-psql "$CHAI_DATABASE_URL" -f "$DATA_DIR"/latest/version_inserts.sql
+psql $PSQL_FLAGS "$CHAI_DATABASE_URL" -f "$DATA_DIR"/latest/version_inserts.sql
 
 # package_urls
 # TODO: ERROR:  more than one row returned by a subquery used as an expression
 sed \
   -f "$SED_DIR/package_url.sed" "$DATA_DIR/latest/package_url.csv" \
   > "$DATA_DIR/latest/package_url_inserts.sql"
-psql "$CHAI_DATABASE_URL" -f "$DATA_DIR"/latest/package_url_inserts.sql
+psql $PSQL_FLAGS "$CHAI_DATABASE_URL" -f "$DATA_DIR"/latest/package_url_inserts.sql
 
 # TODO: dependencies -> dependency_type is annoying
