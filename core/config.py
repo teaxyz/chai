@@ -1,25 +1,14 @@
 from dataclasses import dataclass
-from enum import Enum
 from os import getenv
 
 from core.db import DB
 from core.logger import Logger
-from core.structs import URLTypes, UserTypes
+from core.structs import PackageManager, PackageManagerIDs, Sources, URLTypes, UserTypes
 
 logger = Logger("config")
 
 TEST = getenv("TEST", "false").lower() == "true"
 FETCH = getenv("FETCH", "true").lower() == "true"
-
-
-class PackageManager(Enum):
-    CRATES = "crates"
-    HOMEBREW = "homebrew"
-
-
-class Sources:
-    crates: str = "https://static.crates.io/db-dump.tar.gz"
-    homebrew: str = "https://github.com/Homebrew/homebrew-core/tree/master/Formula"
 
 
 @dataclass
@@ -59,25 +48,48 @@ def load_user_types(db: DB) -> UserTypes:
     )
 
 
+def load_package_manager_ids(db: DB) -> PackageManagerIDs:
+    logger.debug("loading package manager ids, and creating if not exists")
+    crates_package_manager = db.select_package_manager_by_name("crates", create=True)
+    homebrew_package_manager = db.select_package_manager_by_name(
+        "homebrew", create=True
+    )
+    return {
+        PackageManager.CRATES: crates_package_manager.id,
+        PackageManager.HOMEBREW: homebrew_package_manager.id,
+    }
+
+
+def load_sources() -> Sources:
+    return {
+        PackageManager.CRATES: "https://static.crates.io/db-dump.tar.gz",
+        PackageManager.HOMEBREW: (
+            "https://github.com/Homebrew/homebrew-core/tree/master/Formula"
+        ),
+    }
+
+
 def initialize(package_manager: PackageManager, db: DB) -> Config:
     url_types = load_url_types(db)
     user_types = load_user_types(db)
+    package_manager_ids = load_package_manager_ids(db)
+    sources = load_sources()
 
     if package_manager == PackageManager.CRATES:
         return Config(
-            file_location=Sources.crates,
+            file_location=sources[PackageManager.CRATES],
             test=False,
             fetch=True,
-            package_manager_id=PackageManager.CRATES.value,
+            package_manager_id=package_manager_ids[PackageManager.CRATES],
             url_types=url_types,
             user_types=user_types,
         )
     elif package_manager == PackageManager.HOMEBREW:
         return Config(
-            file_location=Sources.homebrew,
+            file_location=sources[PackageManager.HOMEBREW],
             test=False,
             fetch=True,
-            package_manager_id=PackageManager.HOMEBREW.value,
+            package_manager_id=package_manager_ids[PackageManager.HOMEBREW],
             url_types=url_types,
             user_types=user_types,
         )
