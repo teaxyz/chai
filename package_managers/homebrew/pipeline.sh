@@ -5,6 +5,12 @@ set -exu
 # get the ID for Homebrew from our database
 HOMEBREW_ID=$(psql "$CHAI_DATABASE_URL" -f homebrew_id.sql -v "ON_ERROR_STOP=1" -tA)
 
+# fail if HOMEBREW_ID is empty
+if [ -z "$HOMEBREW_ID" ]; then
+    echo "Error: Failed to retrieve Homebrew ID from the database."
+    exit 1
+fi
+
 # homebrew provides `source` and `homepage` url types - let's create them ahead of time
 psql "$CHAI_DATABASE_URL" -f create_url_types.sql
 
