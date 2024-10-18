@@ -7,10 +7,10 @@
 # not available in the full JSON API
 
 # TODO: there are also a problem of versioned formulae
-.[] | 
+[.[] | 
 .name as $name | 
 {
     version: .versions.stable, 
     import_id: .name, 
     license: .license
-}
+}]

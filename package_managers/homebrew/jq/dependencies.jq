@@ -5,7 +5,7 @@
 # uses_from_macos
 # variations
 
-.[] | 
+[.[] | 
 .name as $name |
 (
   (.uses_from_macos // []) | 
@@ -27,4 +27,4 @@
   (.build_dependencies // []) | 
   map({package: $name, dependency_type: "build_dependency", dependency: .})
 )
-| .[]
+| .[]]
