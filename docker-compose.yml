@@ -44,20 +44,21 @@ services:
       alembic:
         condition: service_completed_successfully
 
-  # homebrew:
-  #   build:
-  #     context: ./package_managers/homebrew
-  #     dockerfile: Dockerfile
-  #   environment:
-  #     - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
-  #   volumes:
-  #     - ./core:/app/core
-  #     - ./package_managers/homebrew:/app/homebrew
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
-  #     alembic:
-  #       condition: service_completed_successfully
+  homebrew:
+    build:
+      context: .
+      dockerfile: ./package_managers/homebrew/Dockerfile
+    environment:
+      - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
+      - DEBUG=${DEBUG:-true}
+      - TEST=${TEST:-false}
+      - FETCH=${FETCH:-true}
+      - FREQUENCY=${FREQUENCY:-24}
+    depends_on:
+      db:
+        condition: service_healthy
+      alembic:
+        condition: service_completed_successfully
 
   monitor:
     build:

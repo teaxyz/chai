@@ -1,61 +1,14 @@
 import time
-from os import getenv
 
-from dataclasses import dataclass
-
+from core.config import Config, PackageManager, initialize
+from core.db import DB
 from core.fetcher import TarballFetcher
 from core.logger import Logger
-from core.db import DB
 from core.scheduler import Scheduler
-from package_managers.crates.structs import URLTypes, UserTypes
 from package_managers.crates.transformer import CratesTransformer
 
 logger = Logger("crates_orchestrator")
-
-
-# TODO: global config class
-@dataclass
-class Config:
-    file_location: str
-    test: bool
-    fetch: bool
-    package_manager_id: str
-    url_types: URLTypes
-    user_types: UserTypes
-
-    def __str__(self):
-        return f"Config(file_location={self.file_location}, test={self.test}, \
-            fetch={self.fetch}, package_manager_id={self.package_manager_id}, \
-            url_types={self.url_types}, user_types={self.user_types})"
-
-
-def initialize(db: DB) -> Config:
-    file_location = "https://static.crates.io/db-dump.tar.gz"
-    test = getenv("TEST", "false").lower() == "true"
-    fetch = getenv("FETCH", "true").lower() == "true"
-    package_manager = db.select_package_manager_by_name("crates", create=True)
-    homepage_url = db.select_url_types_homepage(create=True)
-    repository_url = db.select_url_types_repository(create=True)
-    documentation_url = db.select_url_types_documentation(create=True)
-    crates_source = db.select_source_by_name("crates", create=True)
-    github_source = db.select_source_by_name("github", create=True)
-    url_types = URLTypes(
-        homepage=homepage_url.id,
-        repository=repository_url.id,
-        documentation=documentation_url.id,
-    )
-    user_types = UserTypes(crates=crates_source.id, github=github_source.id)
-
-    logger.debug("initialized config")
-
-    return Config(
-        file_location=file_location,
-        test=test,
-        fetch=fetch,
-        package_manager_id=package_manager.id,
-        url_types=url_types,
-        user_types=user_types,
-    )
+crates = PackageManager.CRATES
 
 
 def fetch(config: Config) -> None:
@@ -98,7 +51,7 @@ def run_pipeline(db: DB, config: Config) -> None:
 
 def main():
     db = DB()
-    config = initialize(db)
+    config = initialize(crates, db)
     logger.debug(config)
 
     scheduler = Scheduler("crates")
