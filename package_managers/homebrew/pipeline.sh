@@ -14,8 +14,15 @@ ln -sfn "$NOW" "$DATA_DIR"/latest
 echo "$JQ_DIR"
 for x in "$JQ_DIR"/*.jq; do
   filename=$(basename "$x" .jq)
-  jq -f "$x" "$DATA_DIR"/latest/source.json > "$DATA_DIR"/latest/"${filename}".json
-  # | json2csv > data/homebrew/latest/${x%.jq}.csv
+  # first jq line uses the formulas defined in the jq folder to get the fields we need
+  # second jq line transforms the json into csv
+  jq -f "$x" "$DATA_DIR"/latest/source.json \
+    | jq -r '
+        (map(keys) | add | unique) as $cols |
+        map(. as $row | $cols | map($row[.])) as $rows |
+        $cols, $rows[] | @csv
+    ' \
+    > "$DATA_DIR"/latest/"${filename}".csv
 done
 
 # load
@@ -23,6 +30,7 @@ done
 
 
 # make it all csv
-# jq -r '(map(keys) | add | unique) as $cols | map(. as $row | $cols | map($row[.])) as $rows | $cols, $rows[] | @csv'
+# 
+# > "$DATA_DIR"/latest/"${filename}".json
 
 # psql to load raw csv files
