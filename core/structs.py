@@ -19,9 +19,20 @@ class URLTypes:
     homepage: UUID
     repository: UUID
     documentation: UUID
+    source: UUID
 
 
 @dataclass
 class UserTypes:
     crates: UUID
     github: UUID
+
+
+@dataclass
+class DependencyTypes:
+    build: UUID
+    development: UUID
+    runtime: UUID
+    test: UUID
+    optional: UUID
+    recommended: UUID

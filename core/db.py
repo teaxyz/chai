@@ -11,6 +11,7 @@ from core.logger import Logger
 from core.models import (
     URL,
     DependsOn,
+    DependsOnType,
     License,
     LoadHistory,
     Package,
@@ -426,6 +427,9 @@ class DB:
     def select_url_types_documentation(self, create: bool = False) -> URLType | None:
         return self.select_url_type("documentation", create)
 
+    def select_url_types_source(self, create: bool = False) -> URLType | None:
+        return self.select_url_type("source", create)
+
     def select_package_manager_by_name(
         self, package_manager: str, create: bool = False
     ) -> PackageManager | None:
@@ -521,3 +525,20 @@ class DB:
     def select_licenses_by_name(self, names: Iterable[str]) -> List[License]:
         with self.session() as session:
             return session.query(License).filter(License.name.in_(names)).all()
+
+    def select_dependency_type_by_name(
+        self, name: str, create: bool = False
+    ) -> DependsOnType:
+        with self.session() as session:
+            result = session.query(DependsOnType).filter_by(name=name).first()
+            if result:
+                return result
+            if create:
+                return self.insert_dependency_type(name)
+            return None
+
+    def insert_dependency_type(self, name: str) -> DependsOnType:
+        with self.session() as session:
+            session.add(DependsOnType(name=name))
+            session.commit()
+            return session.query(DependsOnType).filter_by(name=name).first()

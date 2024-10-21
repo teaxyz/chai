@@ -1,13 +1,10 @@
-from os import getenv
-import time
 import sys
+import time
 import traceback
+from os import getenv
 
-DEBUG = getenv("DEBUG", "false").lower() == "true"
-
-# use inspect to print the line of code as well?
-# caller = inspect.currentframe().f_back
-# filename = caller.f_code.co_filename, lineno = caller.f_lineno
+debug = getenv("DEBUG", "false").lower()
+DEBUG = debug == "true" or debug == "1"
 
 
 def as_minutes(seconds: float) -> float:
