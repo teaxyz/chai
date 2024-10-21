@@ -36,6 +36,7 @@ These arguments are all configurable in the `docker-compose.yml` file.
 1. `db`: [PostgreSQL] database for the reduced package data
 2. `alembic`: handles migrations
 3. `pipeline`: fetches and writes data
+4. `api`: a simple REST api for reading from the db
 
 ### Hard Reset
 
