@@ -23,6 +23,8 @@ Use [Docker](https://docker.com)
 
 ### Arguments
 
+Specify these eg. `docker compose -e FOO=bar up`:
+
 - `PKG_MANAGER`: which package manager the pipeline will be run for.
   Currently, the supported values are:
   - `crates`
