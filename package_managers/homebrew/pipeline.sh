@@ -118,7 +118,7 @@ fi
 
 # Load data into database
 log "Loading data into database"
-psql "$CHAI_DATABASE_URL" <<EOSQL
+psql -q "$CHAI_DATABASE_URL" <<EOSQL
 \i $DATA_DIR/latest/packages.sql
 \i $DATA_DIR/latest/urls.sql
 \i $DATA_DIR/latest/versions.sql
