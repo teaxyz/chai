@@ -16,10 +16,7 @@ SELECT
     ) AS optional_depends_on_type_id,
     (
         SELECT id FROM depends_on_types WHERE name = 'test'
-    ) AS test_depends_on_type_id,
-    (
-        SELECT id FROM depends_on_types WHERE name = 'uses_from_macos'
-    ) AS uses_from_macos_depends_on_type_id
+    ) AS test_depends_on_type_id
 FROM
     package_managers AS pm
 INNER JOIN
