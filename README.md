@@ -39,10 +39,11 @@ Stuff happens. Start over:
 
 1. `rm -rf ./data`: removes all the data the fetcher is putting.
 2. `docker system prune -a -f --volumes`: removes **everything**
-   docker-related.
+   docker-related †
 
 > [!WARNING]
-> Step 2 deletes all your docker stuff… be careful.
+> † This deletes all derived Docker data, even from other containers and
+> volumes! You probably don’t want to do this.
 
 <!-- this is handled now that alembic/psycopg2 are in pkgx -->
 <!--
