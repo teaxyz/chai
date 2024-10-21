@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use crate::app_state::AppState;
 use crate::db::create_db_client;
-use crate::handlers::{get_table, heartbeat, list_tables};
+use crate::handlers::{get_table, get_table_row, heartbeat, list_tables};
 use crate::logging::setup_logger;
 
 #[actix_web::main]
@@ -40,6 +40,7 @@ async fn main() -> std::io::Result<()> {
             .service(list_tables)
             .service(heartbeat)
             .service(get_table)
+            .service(get_table_row)
     })
     .bind(&bind_address)?
     .run()

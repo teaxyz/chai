@@ -1,6 +1,7 @@
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde_json::{json, Value};
-use tokio_postgres::types::{Json, Type};
-use tokio_postgres::Row;
+use tokio_postgres::{types::Type, Row};
+use uuid::Uuid;
 
 pub fn get_column_names(rows: &[Row]) -> Vec<String> {
     if let Some(row) = rows.first() {
@@ -27,20 +28,24 @@ pub fn rows_to_json(rows: &[Row]) -> Vec<Value> {
                     Type::BOOL => json!(row.get::<_, bool>(i)),
                     Type::VARCHAR | Type::TEXT | Type::BPCHAR => json!(row.get::<_, String>(i)),
                     Type::TIMESTAMP => {
-                        let ts: chrono::NaiveDateTime = row.get(i);
+                        let ts: NaiveDateTime = row.get(i);
                         json!(ts.to_string())
                     }
                     Type::TIMESTAMPTZ => {
-                        let ts: chrono::DateTime<chrono::Utc> = row.get(i);
+                        let ts: DateTime<Utc> = row.get(i);
                         json!(ts.to_rfc3339())
                     }
                     Type::DATE => {
-                        let date: chrono::NaiveDate = row.get(i);
+                        let date: NaiveDate = row.get(i);
                         json!(date.to_string())
                     }
                     Type::JSON | Type::JSONB => {
-                        let json_value: Json<Value> = row.get(i);
-                        json_value.0
+                        let json_value: serde_json::Value = row.get(i);
+                        json_value
+                    }
+                    Type::UUID => {
+                        let uuid: Uuid = row.get(i);
+                        json!(uuid.to_string())
                     }
                     _ => Value::Null,
                 };

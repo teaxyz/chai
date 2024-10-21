@@ -1,6 +1,8 @@
 use actix_web::{get, web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use tokio_postgres::error::SqlState;
+use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::utils::{get_column_names, rows_to_json};
@@ -85,6 +87,50 @@ pub async fn get_table(
             HttpResponse::InternalServerError().json(json!({
                 "error": "An error occurred while counting rows in the database"
             }))
+        }
+    }
+}
+
+#[get("/{table}/{id}")]
+pub async fn get_table_row(
+    path: web::Path<(String, Uuid)>,
+    data: web::Data<AppState>,
+) -> impl Responder {
+    let (table_name, id) = path.into_inner();
+
+    if !data.tables.contains(&table_name) {
+        return HttpResponse::NotFound().json(json!({
+            "error": format!("Table '{}' not found", table_name)
+        }));
+    }
+
+    let query = format!("SELECT * FROM {} WHERE id = $1", table_name);
+
+    match data.client.query_one(&query, &[&id]).await {
+        Ok(row) => {
+            let json = rows_to_json(&[row]);
+            let value = json.first().unwrap();
+            HttpResponse::Ok().json(value)
+        }
+        Err(e) => {
+            if e.as_db_error()
+                .map_or(false, |e| e.code() == &SqlState::UNDEFINED_TABLE)
+            {
+                HttpResponse::NotFound().json(json!({
+                    "error": format!("Table '{}' not found", table_name)
+                }))
+            } else if e
+                .as_db_error()
+                .map_or(false, |e| e.code() == &SqlState::NO_DATA_FOUND)
+            {
+                HttpResponse::NotFound().json(json!({
+                    "error": format!("No row found with id '{}' in table '{}'", id, table_name)
+                }))
+            } else {
+                HttpResponse::InternalServerError().json(json!({
+                    "error": format!("Database error: {}", e)
+                }))
+            }
         }
     }
 }
