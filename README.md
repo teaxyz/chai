@@ -15,19 +15,15 @@ Use [Docker](https://docker.com)
 > This will run CHAI with for all package managers. As an example crates by
 > itself will take over an hour and consume >5GB storage.
 >
-> Set `PKG_MANAGER` to run only a specific backend:
->
-> ```sh
-> docker compose -e PKG_MANAGER=crates up
-> ```
+> To run only a specific backend, comment out the others in `docker-compose.yml`.
+
+<!-- we'd like to change the above to be more friendly to users trying to run a specific
+pipeline -->
 
 ### Arguments
 
 Specify these eg. `docker compose -e FOO=bar up`:
 
-- `PKG_MANAGER`: which package manager the pipeline will be run for.
-  Currently, the supported values are:
-  - `crates`
 - `FREQUENCY`: how frequently **(in hours)** the pipeline will run
   (defaults to `24`)
 - `FETCH`: whether the pipeline will fetch the data. Defaults to `true`
@@ -72,27 +68,6 @@ cases for this data:
 
 > [!TIP]
 > Help us add the above to the examples folder.
-
-### License Compatibility Checker
-
-> [!WARNING]
-> It's probably better to start with a global list of licenses and then map
-> each version's to the global list… but this isn't part of CHAI v1.
-
-```sql
-SELECT DISTINCT
-   p.name,
-   l.name AS license,
-   dep.name AS dependency,
-   dep_l.name AS dependency_license
-FROM packages p
-JOIN versions v ON p.id = v.package_id
-JOIN dependencies d ON v.id = d.version_id
-JOIN packages dep ON d.dependency_id = dep.id
-JOIN licenses l ON v.license_id = l.id
-JOIN versions dep_v ON dep.id = dep_v.package_id
-JOIN licenses dep_l ON dep_v.license_id = dep_l.id
-```
 
 ### Package Popularity
 
