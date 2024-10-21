@@ -78,7 +78,9 @@ class PackageManager(Base):
         default=func.uuid_generate_v4(),
         server_default=func.uuid_generate_v4(),
     )
-    source_id = Column(UUID(as_uuid=True), ForeignKey("sources.id"), nullable=False)
+    source_id = Column(
+        UUID(as_uuid=True), ForeignKey("sources.id"), nullable=False, unique=True
+    )
     created_at = Column(
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )

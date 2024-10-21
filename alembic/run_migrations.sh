@@ -25,3 +25,6 @@ else
   echo "migrations failed"
   exit 1
 fi
+
+# load values
+psql -U postgres -h db -d chai -f load-values.sql -a
