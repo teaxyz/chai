@@ -1,47 +1,48 @@
 # CHAI
 
-This is an attempt at an open-source data pipeline for package managers. The goal is to
-have a pipeline that can run on any package manager and provide a normalized data
-source for different use cases.
+CHAI is an attempt at an open-source data pipeline for package managers. The
+goal is to have a pipeline that can use the data from any package manager and
+provide a normalized data source for myriads of different use cases.
 
-1. db: postgres to store package specific data
-1. alembic: for running migrations
-1. pipeline: which fetches and writes data
+## Getting Started
 
-## Requirements
-
-- docker
-
-> [!TIP]
->
-> for local development, all the requirements are within the [pkgx yaml](pkgx.yaml) file
-
-## Setup
+We recommend using [Docker](https://docker.com)
 
 1. Run `docker compose build` to create the latest Docker images.
-2. Run `docker compose up` to launch.
+2. Then, run `docker compose up` to launch.
+
+> [!TIP]
+> Docker can be fiddly for local dev. You can also use [`pkgx`] via the `dev`
+> command.
 
 ### Arguments
 
-- `PKG_MANAGER`: which package manager the pipeline will be run for. Currently, the
-  supported values are:
+- `PKG_MANAGER`: which package manager the pipeline will be run for.
+  Currently, the supported values are:
   - `crates`
-- `FREQUENCY`: how frequently **(in hours)** the pipeline will run. Defaults to `24`
+- `FREQUENCY`: how frequently **(in hours)** the pipeline will run
+  (defaults to `24`)
 - `FETCH`: whether the pipeline will fetch the data. Defaults to `true`
 - `DEBUG`: whether the pipeline will run in debug mode. Defaults to `true`
 
 These arguments are all configurable in the `docker-compose.yml` file.
 
-## Hard Reset
+### Docker Services Overview
 
-If at all you need to do a hard reset, here's the steps
+1. `db`: [PostgreSQL] database for the reduced package data
+2. `alembic`: handles migrations
+3. `pipeline`: fetches and writes data
 
-1. `rm -rf data`: removes all the data the fetcher is putting
-2. `docker system prune -a -f --volumes`: removes **everything** docker-related
+### Hard Reset
+
+Stuff happens. Start over:
+
+1. `rm -rf ./data`: removes all the data the fetcher is putting.
+2. `docker system prune -a -f --volumes`: removes **everything**
+   docker-related.
 
 > [!WARNING]
->
-> step 4 deletes all your docker stuff...be careful
+> Step 2 deletes all your docker stuff… be careful.
 
 <!-- this is handled now that alembic/psycopg2 are in pkgx -->
 <!--
@@ -51,28 +52,29 @@ If at all you need to do a hard reset, here's the steps
 - vapor's migrations are written in swift
 -->
 
-## Usage
+## Goals
 
 Our goal is to build a data schema that looks like this:
 
 ![db/CHAI_ERD.png](db/CHAI_ERD.png)
 
-Our specific application extracts the dependency graph understand what are critical
-pieces of the open-source graph. there are many other potential use cases for this data:
+Our specific application extracts the dependency graph understand what are
+critical pieces of the open-source graph. there are many other potential use
+cases for this data:
 
-- license compatibility checker
-- developer publications
-- package popularity
-- dependency analysis vulnerability tool (requires translating semver)
+- License compatibility checker
+- Developer publications
+- Package popularity
+- Dependency analysis vulnerability tool (requires translating semver)
 
-<!-- TODO: add these to the examples folder-->
+> [!TIP]
+> Help us add the above to the examples folder.
 
-### license compatibility checker
+### License Compatibility Checker
 
 > [!WARNING]
->
-> it's probably better to start with a global list of licenses and then map each
-> version's to the global list...but this isn't part of v1
+> It's probably better to start with a global list of licenses and then map
+> each version's to the global list… but this isn't part of CHAI v1.
 
 ```sql
 SELECT DISTINCT
@@ -89,7 +91,7 @@ JOIN versions dep_v ON dep.id = dep_v.package_id
 JOIN licenses dep_l ON dep_v.license_id = dep_l.id
 ```
 
-### package popularity
+### Package Popularity
 
 ```sql
 SELECT p.name, SUM(v.downloads) as total_downloads
@@ -100,7 +102,7 @@ ORDER BY total_downloads DESC
 LIMIT 10;
 ```
 
-### developer publications
+### Developer Publications
 
 ```sql
 SELECT u.username, p.name, COUNT(uv.id) as publications
@@ -112,15 +114,15 @@ GROUP BY u.username, p.name
 ORDER BY p.name;
 ```
 
-## FAQs / common issues
+## FAQs / Common Issues
 
-1. The database url is `postgresql://postgres:s3cr3t@localhost:5435/chai`, and is used
-   as `CHAI_DATABASE_URL` in the environment.
+1. The database url is `postgresql://postgres:s3cr3t@localhost:5435/chai`, and
+   is used as `CHAI_DATABASE_URL` in the environment.
 
-## tasks
+## Tasks
 
-These are tasks that can be run using xcfile.dev. if you have pkgx, just run `dev` to
-inject into your environment. if you don't...go get it.
+These are tasks that can be run using [xcfile.dev]. If you use `pkgx`, typing
+`dev` loads the environment. Alternatively, run them manually.
 
 ### reset
 
@@ -235,3 +237,6 @@ Refreshes table knowledge from the db.
 ```sh
 docker-compose restart api
 ```
+
+[PostgreSQL]: https://www.postgresql.org
+[`pkgx`]: https://pkgx.sh
