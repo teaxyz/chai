@@ -30,8 +30,7 @@ IFS='|' read -r \
     RUNTIME_DEPENDS_ON_TYPE_ID \
     RECOMMENDED_DEPENDS_ON_TYPE_ID \
     OPTIONAL_DEPENDS_ON_TYPE_ID \
-    TEST_DEPENDS_ON_TYPE_ID \
-    USES_FROM_MACOS_DEPENDS_ON_TYPE_ID <<< "$IDS"
+    TEST_DEPENDS_ON_TYPE_ID <<< "$IDS"
 
 # Validate that all required IDs are present and export them
 required_vars=(
@@ -43,7 +42,6 @@ required_vars=(
     RECOMMENDED_DEPENDS_ON_TYPE_ID
     OPTIONAL_DEPENDS_ON_TYPE_ID
     TEST_DEPENDS_ON_TYPE_ID
-    USES_FROM_MACOS_DEPENDS_ON_TYPE_ID
 )
 
 for var in "${required_vars[@]}"; do
@@ -104,7 +102,6 @@ if [ "$FETCH" = true ]; then
                     --arg recommended_deps_type_id "$RECOMMENDED_DEPENDS_ON_TYPE_ID" \
                     --arg optional_deps_type_id "$OPTIONAL_DEPENDS_ON_TYPE_ID" \
                     --arg test_deps_type_id "$TEST_DEPENDS_ON_TYPE_ID" \
-                    --arg uses_from_macos_type_id "$USES_FROM_MACOS_DEPENDS_ON_TYPE_ID" \
                     "$DATA_DIR"/latest/source.json > "$DATA_DIR"/latest/"${filename}".sql
                 ;;
             *)
