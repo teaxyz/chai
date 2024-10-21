@@ -13,7 +13,7 @@
   |
   # and here we say "for each url, generate an insert statement"
   "INSERT INTO package_urls (package_id, url_id) VALUES (
-    (SELECT id FROM packages WHERE name = '" + .package_name + "'),
+    (SELECT id FROM packages WHERE import_id = '" + .package_name + "'),
     (SELECT id FROM urls WHERE url = '" + .url + "' AND url_type_id = '" + .type + "'))
     ON CONFLICT DO NOTHING;"
 ] | join("\n")
