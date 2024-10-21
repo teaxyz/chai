@@ -6,14 +6,16 @@ provide a normalized data source for myriads of different use cases.
 
 ## Getting Started
 
-We recommend using [Docker](https://docker.com)
+Use [Docker](https://docker.com)
 
 1. Run `docker compose build` to create the latest Docker images.
 2. Then, run `docker compose up` to launch.
 
-> [!TIP]
-> Docker can be fiddly for local dev. You can also use [`pkgx`] via the `dev`
-> command.
+> [!NOTE]
+> This will run CHAI with for all package managers. As an example crates by
+> itself will take over an hour and consume >5GB storage.
+>
+> Set `PKG_MANAGER` to run only a specific backend.
 
 ### Arguments
 
