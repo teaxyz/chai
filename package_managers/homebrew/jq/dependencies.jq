@@ -23,8 +23,8 @@
   # and only look at the ones that are strings TODO: some are JSONs?
   select(.depends_on | type == "string") | 
   # generate the sql statements!
-  "INSERT INTO dependencies (version_id, dependency_id, depends_on_type_id) VALUES (
+  "INSERT INTO dependencies (version_id, dependency_id, dependency_type_id) VALUES (
     (SELECT id FROM versions WHERE import_id = '" + .package_name + "'),
-    (SELECT id FROM packages WHERE name = '" + .depends_on + "'),
-    '" + .depends_on_type + "');"
+    (SELECT id FROM packages WHERE import_id = '" + .depends_on + "'),
+    '" + .depends_on_type + "') ON CONFLICT DO NOTHING;"
 ] | join("\n")

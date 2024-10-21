@@ -15,7 +15,9 @@
     version: .versions.stable, 
     import_id: .name
 } | 
-"INSERT INTO versions (version, package_id) VALUES ('" +
-  .version + "', '" +
-  .import_id + "');"
+"INSERT INTO versions (version, import_id, package_id) VALUES (
+  '" + .version + "',
+  '" + .import_id + "', 
+  (SELECT id FROM packages WHERE import_id = '" + .import_id + "')
+  ) ON CONFLICT DO NOTHING;"
 ] | join("\n")

@@ -9,5 +9,5 @@
   # the import_id is the same as the package name (used for joins)
   .name + "', '" +
   # the package manager ID is passed in as a variable
-  $package_manager_id + "');"
+  $package_manager_id + "') ON CONFLICT DO NOTHING;"
 ] | join("\n")

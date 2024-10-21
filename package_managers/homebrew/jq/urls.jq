@@ -14,5 +14,6 @@
 # and here, we can generate our SQL statement!
   "INSERT INTO urls (url, url_type_id) VALUES ('" +
   .url + "', '" +
-  if .name == "source" then $source_url_type_id else $homepage_url_type_id end + "');"
+  if .name == "source" then $source_url_type_id else $homepage_url_type_id end + "')
+    ON CONFLICT DO NOTHING;"
 ] | join("\n")

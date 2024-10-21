@@ -6,6 +6,4 @@ RUN apt-get update && \
 COPY . .
 WORKDIR /package_managers/homebrew
 RUN chmod +x /package_managers/homebrew/pipeline.sh
-# RUN pip install --no-cache-dir -r requirements.txt
 CMD ["/package_managers/homebrew/pipeline.sh"]
-
