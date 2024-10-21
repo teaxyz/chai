@@ -15,7 +15,11 @@ Use [Docker](https://docker.com)
 > This will run CHAI with for all package managers. As an example crates by
 > itself will take over an hour and consume >5GB storage.
 >
-> Set `PKG_MANAGER` to run only a specific backend.
+> Set `PKG_MANAGER` to run only a specific backend:
+>
+> ```sh
+> docker compose -e PKG_MANAGER=crates up
+> ```
 
 ### Arguments
 
