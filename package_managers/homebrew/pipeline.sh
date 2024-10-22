@@ -12,7 +12,7 @@ set -exuo pipefail
 
 # Function to log messages with timestamps
 log() {
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1" | tee -a /var/log/cron.log
 }
 
 log "Starting Homebrew pipeline script"

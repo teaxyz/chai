@@ -58,6 +58,7 @@ services:
       - DATA_DIR=/data/homebrew
     volumes:
       - ./data/homebrew:/data/homebrew
+      - ./logs/homebrew:/var/log
     depends_on:
       db:
         condition: service_healthy
