@@ -22,7 +22,7 @@
   select(.depends_on | type == "string") | 
   # generate the sql statements!
   "INSERT INTO dependencies (version_id, dependency_id, dependency_type_id) VALUES (
-    (SELECT id FROM versions WHERE import_id = '" + .package_name + "'),
+    (SELECT id FROM versions WHERE import_id = '" + .package_name + "' ORDER BY created_at DESC LIMIT 1),
     (SELECT id FROM packages WHERE import_id = '" + .depends_on + "'),
     '" + .depends_on_type + "') ON CONFLICT DO NOTHING;"
 ] | join("\n")
