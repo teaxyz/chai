@@ -23,5 +23,5 @@ ON CONFLICT (type) DO NOTHING;
 INSERT INTO "package_managers" ("source_id")
 SELECT id
 FROM "sources"
-WHERE "type" IN ('crates', 'npm', 'pypi', 'rubygems', 'github', 'homebrew');
+WHERE "type" IN ('crates', 'npm', 'pypi', 'rubygems', 'github', 'homebrew')
 ON CONFLICT (source_id) DO NOTHING;
