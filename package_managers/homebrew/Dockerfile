@@ -5,5 +5,6 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 COPY . .
 WORKDIR /package_managers/homebrew
-RUN chmod +x /package_managers/homebrew/pipeline.sh
+RUN chmod +x /package_managers/homebrew/pipeline.sh \
+    /package_managers/homebrew/schedule.sh
 CMD ["/package_managers/homebrew/schedule.sh"]
