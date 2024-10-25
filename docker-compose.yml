@@ -38,6 +38,8 @@ services:
       - TEST=${TEST:-false}
       - FETCH=${FETCH:-true}
       - FREQUENCY=${FREQUENCY:-24}
+    volumes:
+      - ./data/crates:/data/crates
     depends_on:
       db:
         condition: service_healthy
@@ -50,6 +52,7 @@ services:
       dockerfile: ./package_managers/homebrew/Dockerfile
     environment:
       - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
+      - NO_CACHE_DIR=${NO_CACHE_DIR:-true}
       - TEST=${TEST:-false}
       - FETCH=${FETCH:-true}
       - FREQUENCY=${FREQUENCY:-24}

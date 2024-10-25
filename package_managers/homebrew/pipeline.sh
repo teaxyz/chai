@@ -1,14 +1,15 @@
 #!/bin/bash
 
 # Homebrew Pipeline Script
-# This script fetches, transforms, and loads Homebrew package data into a PostgreSQL database.
+# This script fetches, transforms, and loads Homebrew package data into a 
+# PostgreSQL database.
 
 # Set bash options:
 # -e: Exit immediately if a command exits with a non-zero status.
-# -x: Print commands and their arguments as they are executed.
 # -u: Treat unset variables as an error when substituting.
-# -o pipefail: Return value of a pipeline is the status of the last command to exit with a non-zero status.
-set -uo pipefail
+# -o pipefail: Return value of a pipeline is the status of the last command to exit 
+# with a non-zero status.
+set -euo pipefail
 
 # Function to log messages with timestamps
 log() {
@@ -124,3 +125,8 @@ psql -q "$CHAI_DATABASE_URL" <<EOSQL
 EOSQL
 
 log "Homebrew pipeline completed successfully"
+
+# If --no-cache is on, delete all the intermediate files
+if [ "$NO_CACHE_DIR" = true ]; then
+    rm -rf "$DATA_DIR"
+fi 
