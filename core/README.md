@@ -37,6 +37,7 @@ package manager sources. It supports:
 
 - Downloading tarball files
 - Extracting contents to a specified directory
+- Maintaining a latest symlink so we always know where to look
 
 ### 4. [Logger](logger.py)
 
@@ -78,12 +79,3 @@ To create a new loader for a package manager:
    Transformer, Scheduler) to fetch, transform, and load data.
 
 Example usage can be found in the [crates](../package_managers/crates) loader.
-
-## Contributing
-
-When adding new functionality or modifying existing core components, please ensure that
-changes are compatible with all existing loaders and follow the established patterns
-and conventions.
-
-For more detailed information on each component, refer to the individual files and their
-docstrings.
