@@ -98,7 +98,7 @@ class DependencyTypes:
 
     def __init__(self, db: DB):
         self.build = db.select_dependency_type_by_name("build").id
-        self.dev = db.select_dependency_type_by_name("development").id
+        self.development = db.select_dependency_type_by_name("development").id
         self.runtime = db.select_dependency_type_by_name("runtime").id
         self.test = db.select_dependency_type_by_name("test").id
         self.optional = db.select_dependency_type_by_name("optional").id

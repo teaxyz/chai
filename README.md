@@ -12,21 +12,19 @@ Use [Docker](https://docker.com)
 2. Then, run `docker compose up` to launch.
 
 > [!NOTE]
+>
 > This will run CHAI with for all package managers. As an example crates by
 > itself will take over an hour and consume >5GB storage.
 >
-> To run only a specific backend, comment out the others in `docker-compose.yml`.
-
-<!-- we'd like to change the above to be more friendly to users trying to run a specific
-pipeline -->
-
-> [!NOTE]
 > Currently, we support only two package managers:
 >
 > - crates
 > - Homebrew
 >
-> We are planning on supporting `NPM`, `PyPI`, and `rubygems`
+> You can run a single package manager by running
+> `docker compose run --rm -e ... <package_manager>`
+>
+> We are planning on supporting `NPM`, `PyPI`, and `rubygems` next.
 
 ### Arguments
 
