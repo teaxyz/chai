@@ -32,10 +32,15 @@ pipeline -->
 
 Specify these eg. `docker compose -e FOO=bar up`:
 
-- `FREQUENCY`: how frequently **(in hours)** the pipeline will run
-  (defaults to `24`)
+- `FREQUENCY`: how frequently **(in hours)** the pipeline will run. Defaults to `24`
 - `FETCH`: whether the pipeline will fetch the data. Defaults to `true`
 - `DEBUG`: whether the pipeline will run in debug mode. Defaults to `true`
+- `NO_CACHE_DIR`: whether the pipeline will preserve any downloaded files. Defaults to
+  `false`
+
+> [!NOTE]
+> The flag `NO_CACHE_DIR` does not mean that files will not get downloaded to your local
+> storage, just that we'll delete the files once we're done with them
 
 These arguments are all configurable in the `docker-compose.yml` file.
 
@@ -65,6 +70,8 @@ Stuff happens. Start over:
 Our goal is to build a data schema that looks like this:
 
 ![db/CHAI_ERD.png](db/CHAI_ERD.png)
+
+You can read more about specific data models in the db's [readme](db/README.md)
 
 Our specific application extracts the dependency graph understand what are
 critical pieces of the open-source graph. We also built a simple example that displays
