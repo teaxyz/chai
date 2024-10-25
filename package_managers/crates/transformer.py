@@ -1,7 +1,7 @@
 import csv
 from typing import Dict, Generator
 
-from core.structs import URLTypes, UserTypes
+from core.config import URLTypes, UserTypes
 from core.transformer import Transformer
 from core.utils import safe_int
 from package_managers.crates.structs import DependencyType

@@ -1,10 +1,10 @@
 import sys
 import time
 import traceback
-from os import getenv
 
-debug = getenv("DEBUG", "false").lower()
-DEBUG = debug == "true" or debug == "1"
+from core.utils import env_vars
+
+DEBUG = env_vars("DEBUG", "false")
 
 
 def as_minutes(seconds: float) -> float:

@@ -7,6 +7,7 @@ from typing import Any
 
 from requests import get
 
+from core.config import Config
 from core.logger import Logger
 
 
@@ -58,15 +59,20 @@ class Fetcher:
         self.logger.debug(f"creating symlink {latest_symlink} -> {latest_path}")
         os.symlink(latest_path, latest_symlink)
 
-    def fetch(self):
-        response = get(self.source)
-        try:
-            response.raise_for_status()
-        except Exception as e:
-            self.logger.error(f"error fetching {self.source}: {e}")
-            raise e
+    def fetch(self, config: Config):
+        if config.exec_config.fetch:
+            response = get(self.source)
+            try:
+                response.raise_for_status()
+            except Exception as e:
+                self.logger.error(f"error fetching {self.source}: {e}")
+                raise e
 
-        return response.content
+            return response.content
+
+    def cleanup(self, config: Config):
+        if config.exec_config.no_cache:
+            os.removedirs(self.output)
 
 
 class TarballFetcher(Fetcher):

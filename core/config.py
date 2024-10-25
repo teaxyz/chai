@@ -1,127 +1,126 @@
-from dataclasses import dataclass
-from os import getenv
+from enum import Enum
+
+from sqlalchemy import UUID
 
 from core.db import DB
 from core.logger import Logger
-from core.structs import (
-    DependencyTypes,
-    PackageManager,
-    PackageManagerIDs,
-    Sources,
-    URLTypes,
-    UserTypes,
-)
+from core.utils import env_vars
 
 logger = Logger("config")
 
-TEST = getenv("TEST", "false").lower() == "true"
-FETCH = getenv("FETCH", "true").lower() == "true"
+
+class PackageManager(Enum):
+    CRATES = "crates"
+    HOMEBREW = "homebrew"
 
 
-@dataclass
-class Config:
-    file_location: str
+TEST = env_vars("TEST", "false")
+FETCH = env_vars("FETCH", "true")
+NO_CACHE_DIR = env_vars("NO_CACHE_DIR", "true")
+PM_STRINGS = {
+    PackageManager.CRATES: "crates",
+    PackageManager.HOMEBREW: "homebrew",
+}
+SOURCES = {
+    PackageManager.CRATES: "https://static.crates.io/db-dump.tar.gz",
+    PackageManager.HOMEBREW: "https://github.com/Homebrew/homebrew-core/tree/master/Formula",  # noqa
+}
+
+# The three configuration values URLTypes, DependencyTypes, and UserTypes will query the
+# DB to get the respective IDs. If the values don't exist in the database, they will
+# raise an AttributeError (None has no attribute id) at the start
+
+
+class ExecConf:
     test: bool
     fetch: bool
-    package_manager_id: str
+    no_cache: bool
+
+    def __init__(self) -> None:
+        self.test = TEST
+        self.fetch = FETCH
+        self.no_cache = NO_CACHE_DIR
+
+    def __str__(self):
+        return f"ExecConf(test={self.test},fetch={self.fetch},no_cache={self.no_cache}"
+
+
+class PMConf:
+    pm_id: str
+    source: str
+
+    def __init__(self, pm: PackageManager, db: DB):
+        self.pm_id = db.select_package_manager_by_name(PM_STRINGS[pm]).id
+        self.source = SOURCES[pm]
+
+    def __str__(self):
+        return f"PMConf(pm_id={self.pm_id},source={self.source})"
+
+
+class URLTypes:
+    homepage: UUID
+    repository: UUID
+    documentation: UUID
+    source: UUID
+
+    def __init__(self, db: DB):
+        self.load_url_types(db)
+
+    def load_url_types(self, db: DB) -> None:
+        self.homepage = db.select_url_types_homepage().id
+        self.repository = db.select_url_types_repository().id
+        self.documentation = db.select_url_types_documentation().id
+        self.source = db.select_url_types_source().id
+
+    def __str__(self) -> str:
+        return f"URLs(homepage={self.homepage},repo={self.repository},docs={self.documentation},src={self.source})"  # noqa
+
+
+class UserTypes:
+    crates: UUID
+    github: UUID
+
+    def __init__(self, db: DB):
+        self.crates = db.select_source_by_name("crates").id
+        self.github = db.select_source_by_name("github").id
+
+    def __str__(self) -> str:
+        return f"UserTypes(crates={self.crates},github={self.github})"
+
+
+class DependencyTypes:
+    build: UUID
+    development: UUID
+    runtime: UUID
+    test: UUID
+    optional: UUID
+    recommended: UUID
+
+    def __init__(self, db: DB):
+        self.build = db.select_dependency_type_by_name("build").id
+        self.dev = db.select_dependency_type_by_name("development").id
+        self.runtime = db.select_dependency_type_by_name("runtime").id
+        self.test = db.select_dependency_type_by_name("test").id
+        self.optional = db.select_dependency_type_by_name("optional").id
+        self.recommended = db.select_dependency_type_by_name("recommended").id
+
+    def __str__(self) -> str:
+        return f"DependencyTypes(build={self.build},development={self.development},runtime={self.runtime},test={self.test},optional={self.optional},recommended={self.recommended})"  # noqa
+
+
+class Config:
+    exec_config: ExecConf
+    pm_config: PMConf
     url_types: URLTypes
     user_types: UserTypes
     dependency_types: DependencyTypes
 
+    def __init__(self, pm: PackageManager, db: DB) -> None:
+        self.exec_config = ExecConf()
+        self.pm_config = PMConf(pm, db)
+        self.url_types = URLTypes(db)
+        self.user_types = UserTypes(db)
+        self.dependency_types = DependencyTypes(db)
+
     def __str__(self):
-        return f"Config(file_location={self.file_location}, test={self.test}, \
-            fetch={self.fetch}, package_manager_id={self.package_manager_id}, \
-            url_types={self.url_types}, user_types={self.user_types}, \
-            dependency_types={self.dependency_types})"
-
-
-def load_url_types(db: DB) -> URLTypes:
-    logger.debug("loading url types, and creating if not exists")
-    homepage_url = db.select_url_types_homepage(create=True)
-    repository_url = db.select_url_types_repository(create=True)
-    documentation_url = db.select_url_types_documentation(create=True)
-    source_url = db.select_url_types_source(create=True)
-    return URLTypes(
-        homepage=homepage_url.id,
-        repository=repository_url.id,
-        documentation=documentation_url.id,
-        source=source_url.id,
-    )
-
-
-def load_user_types(db: DB) -> UserTypes:
-    logger.debug("loading user types, and creating if not exists")
-    crates_source = db.select_source_by_name("crates", create=True)
-    github_source = db.select_source_by_name("github", create=True)
-    return UserTypes(
-        crates=crates_source.id,
-        github=github_source.id,
-    )
-
-
-def load_package_manager_ids(db: DB) -> PackageManagerIDs:
-    logger.debug("loading package manager ids, and creating if not exists")
-    crates_package_manager = db.select_package_manager_by_name("crates", create=True)
-    homebrew_package_manager = db.select_package_manager_by_name(
-        "homebrew", create=True
-    )
-    return {
-        PackageManager.CRATES: crates_package_manager.id,
-        PackageManager.HOMEBREW: homebrew_package_manager.id,
-    }
-
-
-def load_dependency_types(db: DB) -> DependencyTypes:
-    logger.debug("loading dependency types, and creating if not exists")
-    build_dep_type = db.select_dependency_type_by_name("build", create=True)
-    dev_dep_type = db.select_dependency_type_by_name("development", create=True)
-    runtime_dep_type = db.select_dependency_type_by_name("runtime", create=True)
-    test_dep_type = db.select_dependency_type_by_name("test", create=True)
-    optional_dep_type = db.select_dependency_type_by_name("optional", create=True)
-    recommended_dep_type = db.select_dependency_type_by_name("recommended", create=True)
-    return DependencyTypes(
-        build=build_dep_type.id,
-        development=dev_dep_type.id,
-        runtime=runtime_dep_type.id,
-        test=test_dep_type.id,
-        optional=optional_dep_type.id,
-        recommended=recommended_dep_type.id,
-    )
-
-
-def load_sources() -> Sources:
-    return {
-        PackageManager.CRATES: "https://static.crates.io/db-dump.tar.gz",
-        PackageManager.HOMEBREW: (
-            "https://github.com/Homebrew/homebrew-core/tree/master/Formula"
-        ),
-    }
-
-
-def initialize(package_manager: PackageManager, db: DB) -> Config:
-    url_types = load_url_types(db)
-    user_types = load_user_types(db)
-    package_manager_ids = load_package_manager_ids(db)
-    dependency_types = load_dependency_types(db)
-    sources = load_sources()
-
-    if package_manager == PackageManager.CRATES:
-        return Config(
-            file_location=sources[PackageManager.CRATES],
-            test=False,
-            fetch=True,
-            package_manager_id=package_manager_ids[PackageManager.CRATES],
-            url_types=url_types,
-            user_types=user_types,
-            dependency_types=dependency_types,
-        )
-    elif package_manager == PackageManager.HOMEBREW:
-        return Config(
-            file_location=sources[PackageManager.HOMEBREW],
-            test=False,
-            fetch=True,
-            package_manager_id=package_manager_ids[PackageManager.HOMEBREW],
-            url_types=url_types,
-            user_types=user_types,
-            dependency_types=dependency_types,
-        )
+        return f"Config(exec_config={self.exec_config}, pm_config={self.pm_config}, url_types={self.url_types}, user_types={self.user_types}, dependency_types={self.dependency_types})"  # noqa

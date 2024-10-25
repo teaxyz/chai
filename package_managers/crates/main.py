@@ -1,6 +1,6 @@
 import time
 
-from core.config import Config, PackageManager, initialize
+from core.config import PM_STRINGS, Config, PackageManager
 from core.db import DB
 from core.fetcher import TarballFetcher
 from core.logger import Logger
@@ -8,18 +8,22 @@ from core.scheduler import Scheduler
 from package_managers.crates.transformer import CratesTransformer
 
 logger = Logger("crates_orchestrator")
-crates = PackageManager.CRATES
 
 
-def fetch(config: Config) -> None:
-    fetcher = TarballFetcher("crates", config.file_location)
+def fetch(config: Config) -> TarballFetcher:
+    fetcher = TarballFetcher("crates", config.pm_config.source)
     files = fetcher.fetch()
     fetcher.write(files)
+    return fetcher
 
 
 def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
-    db.insert_packages(transformer.packages(), config.package_manager_id, "crates")
-    db.insert_users(transformer.users(), config.user_types.crates)
+    db.insert_packages(
+        transformer.packages(),
+        config.pm_config.pm_id,
+        PM_STRINGS[PackageManager.CRATES],
+    )
+    db.insert_users(transformer.users(), config.user_types.github)
     db.insert_user_packages(transformer.user_packages())
 
     if not config.test:
@@ -34,11 +38,10 @@ def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
 
 
 def run_pipeline(db: DB, config: Config) -> None:
-    if config.fetch:
-        fetch(config)
-
+    fetcher = fetch(config)
     transformer = CratesTransformer(config.url_types, config.user_types)
     load(db, transformer, config)
+    fetcher.cleanup(config)
 
     coda = (
         "validate by running "
@@ -50,7 +53,7 @@ def run_pipeline(db: DB, config: Config) -> None:
 
 def main():
     db = DB()
-    config = initialize(crates, db)
+    config = Config(PackageManager.CRATES, db)
     logger.debug(config)
 
     scheduler = Scheduler("crates")
