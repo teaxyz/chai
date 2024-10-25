@@ -3,6 +3,7 @@ import tarfile
 from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
+from shutil import rmtree
 from typing import Any
 
 from requests import get
@@ -19,11 +20,13 @@ class Data:
 
 
 class Fetcher:
-    def __init__(self, name: str, source: str):
+    def __init__(self, name: str, config: Config):
         self.name = name
-        self.source = source
+        self.source = config.pm_config.source
         self.output = f"data/{name}"
         self.logger = Logger(f"{name}_fetcher")
+        self.no_cache = config.exec_config.no_cache
+        self.test = config.exec_config.test
 
     def write(self, files: list[Data]):
         """generic write function for some collection of files"""
@@ -59,8 +62,8 @@ class Fetcher:
         self.logger.debug(f"creating symlink {latest_symlink} -> {latest_path}")
         os.symlink(latest_path, latest_symlink)
 
-    def fetch(self, config: Config):
-        if config.exec_config.fetch:
+    def fetch(self):
+        if self.fetch:
             response = get(self.source)
             try:
                 response.raise_for_status()
@@ -70,14 +73,15 @@ class Fetcher:
 
             return response.content
 
-    def cleanup(self, config: Config):
-        if config.exec_config.no_cache:
-            os.removedirs(self.output)
+    def cleanup(self):
+        if self.no_cache:
+            rmtree(self.output, ignore_errors=True)
+            os.makedirs(self.output, exist_ok=True)
 
 
 class TarballFetcher(Fetcher):
-    def __init__(self, name: str, source: str):
-        super().__init__(name, source)
+    def __init__(self, name: str, config: Config):
+        super().__init__(name, config)
 
     def fetch(self) -> list[Data]:
         content = super().fetch()

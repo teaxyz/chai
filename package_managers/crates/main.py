@@ -11,7 +11,7 @@ logger = Logger("crates_orchestrator")
 
 
 def fetch(config: Config) -> TarballFetcher:
-    fetcher = TarballFetcher("crates", config.pm_config.source)
+    fetcher = TarballFetcher("crates", config)
     files = fetcher.fetch()
     fetcher.write(files)
     return fetcher
@@ -26,14 +26,14 @@ def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
     db.insert_users(transformer.users(), config.user_types.github)
     db.insert_user_packages(transformer.user_packages())
 
-    if not config.test:
+    if not config.exec_config.test:
         db.insert_urls(transformer.urls())
         db.insert_package_urls(transformer.package_urls())
         db.insert_versions(transformer.versions())
         db.insert_user_versions(transformer.user_versions(), config.user_types.github)
         db.insert_dependencies(transformer.dependencies())
 
-    db.insert_load_history(config.package_manager_id)
+    db.insert_load_history(config.pm_config.pm_id)
     logger.log("✅ crates")
 
 
@@ -41,7 +41,7 @@ def run_pipeline(db: DB, config: Config) -> None:
     fetcher = fetch(config)
     transformer = CratesTransformer(config.url_types, config.user_types)
     load(db, transformer, config)
-    fetcher.cleanup(config)
+    fetcher.cleanup()
 
     coda = (
         "validate by running "
