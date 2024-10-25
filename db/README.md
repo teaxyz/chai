@@ -55,11 +55,10 @@ Key fields:
 
 ### URLs
 
-The URL model represents all URLs associated with packages in open-source.
-
-> [!NOTE]
-> This model does not establish the URLs associated with a package, that is captured
-> elsewhere.
+The URL model is populated with all the URLs that are provided by the package manager
+source data - this includes documentation, repository, source, issues, and other url
+types as well. Each URL is associated with a URL type. The relationships between a URL
+and a Package are captured in the PackageURL model.
 
 Key fields:
 

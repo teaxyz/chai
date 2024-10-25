@@ -1,6 +1,6 @@
 import time
 
-from core.config import PM_STRINGS, Config, PackageManager
+from core.config import Config, PackageManager
 from core.db import DB
 from core.fetcher import TarballFetcher
 from core.logger import Logger
@@ -21,7 +21,7 @@ def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
     db.insert_packages(
         transformer.packages(),
         config.pm_config.pm_id,
-        PM_STRINGS[PackageManager.CRATES],
+        PackageManager.CRATES.value,
     )
     db.insert_users(transformer.users(), config.user_types.github)
     db.insert_user_packages(transformer.user_packages())

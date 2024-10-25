@@ -17,10 +17,6 @@ class PackageManager(Enum):
 TEST = env_vars("TEST", "false")
 FETCH = env_vars("FETCH", "true")
 NO_CACHE_DIR = env_vars("NO_CACHE_DIR", "true")
-PM_STRINGS = {
-    PackageManager.CRATES: "crates",
-    PackageManager.HOMEBREW: "homebrew",
-}
 SOURCES = {
     PackageManager.CRATES: "https://static.crates.io/db-dump.tar.gz",
     PackageManager.HOMEBREW: "https://github.com/Homebrew/homebrew-core/tree/master/Formula",  # noqa
@@ -50,7 +46,7 @@ class PMConf:
     source: str
 
     def __init__(self, pm: PackageManager, db: DB):
-        self.pm_id = db.select_package_manager_by_name(PM_STRINGS[pm]).id
+        self.pm_id = db.select_package_manager_by_name(pm.value).id
         self.source = SOURCES[pm]
 
     def __str__(self):
@@ -124,3 +120,7 @@ class Config:
 
     def __str__(self):
         return f"Config(exec_config={self.exec_config}, pm_config={self.pm_config}, url_types={self.url_types}, user_types={self.user_types}, dependency_types={self.dependency_types})"  # noqa
+
+
+if __name__ == "__main__":
+    print(PackageManager.CRATES.value)

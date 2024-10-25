@@ -37,7 +37,7 @@ package manager sources. It supports:
 
 - Downloading tarball files
 - Extracting contents to a specified directory
-- Maintaining a latest symlink so we always know where to look
+- Maintaining a "latest" symlink so we always know where to look
 
 ### 4. [Logger](logger.py)
 
