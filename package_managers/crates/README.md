@@ -7,7 +7,7 @@ It's also written in `python` as a first draft, and uses a lot of the
 
 ## Getting Started
 
-To just run the crates service, you can use the following command:
+To just run the crates service, you can use the following commands:
 
 ```bash
 docker compose build crates
@@ -86,3 +86,4 @@ crates:
 - The cache logic in the database client is super complicated, and needs some better
   explanation...it does work though.
 - Licenses are non-standardized.
+- Warnings on missing users are because `gh_login` in the source data is non-unique.
