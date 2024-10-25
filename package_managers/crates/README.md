@@ -32,7 +32,7 @@ The crates loader goes through the following steps when executed:
    - Package URLs
    - Versions
    - Dependencies
-5. Cleanup: After successful loading, temporary files are cleaned up if the `NO_CACHE_DIR` flag is set.
+5. Cleanup: After successful loading, temporary files are cleaned up if the `NO_CACHE` flag is set.
 
 The main execution logic is in the `run_pipeline` function in [main.py](main.py).
 
@@ -59,7 +59,7 @@ The crates loader supports several configuration flags:
 - `TEST`: Runs the loader in test mode when set to true, skipping certain data insertions.
 - `FETCH`: Determines whether to fetch new data from the source when set to true.
 - `FREQUENCY`: Sets how often (in hours) the pipeline should run.
-- `NO_CACHE_DIR`: When set to true, deletes temporary files after processing.
+- `NO_CACHE`: When set to true, deletes temporary files after processing.
 
 These flags can be set in the `docker-compose.yml` file:
 
@@ -75,7 +75,7 @@ crates:
     - TEST=${TEST:-false}
     - FETCH=${FETCH:-true}
     - FREQUENCY=${FREQUENCY:-24}
-    - NO_CACHE_DIR=${NO_CACHE_DIR:-false}
+    - NO_CACHE=${NO_CACHE:-false}
 ```
 
 ## Notes

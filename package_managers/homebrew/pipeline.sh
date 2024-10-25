@@ -127,6 +127,6 @@ EOSQL
 log "Homebrew pipeline completed successfully"
 
 # If --no-cache is on, delete all the intermediate files
-if [ "X$NO_CACHE_DIR" = "Xtrue" ]; then
+if [ "X$NO_CACHE" = "Xtrue" ]; then
     rm -rf "${DATA_DIR:?}"/*
 fi 

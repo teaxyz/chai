@@ -14,7 +14,7 @@ Config always runs first, and is the entrypoint for all loaders. It includes;
 - Execution flags:
   - `FETCH` determines whether we request the data from source
   - `TEST` enables a test mode, to test specific portions of the pipeline
-  - `NO_CACHE_DIR` to determine whether we save the intermediate pipeline files
+  - `NO_CACHE` to determine whether we save the intermediate pipeline files
 - Package Manager flags
   - `pm_id` gets the package manager id from the db, that we'd run the pipeline for
   - `source` is the data source for that package manager. `SOURCES` defines the map.

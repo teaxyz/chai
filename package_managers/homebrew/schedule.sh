@@ -23,9 +23,9 @@ touch /var/log/cron.log
 # Set up the cron job
 if [ "$TEST" = "true" ]; then
     # In test mode, set the schedule for every two minutes so we can test the scheduling
-    echo "*/2 * * * * /usr/bin/env CHAI_DATABASE_URL=$CHAI_DATABASE_URL SOURCE=$SOURCE CODE_DIR=$CODE_DIR DATA_DIR=$DATA_DIR FETCH=$FETCH /package_managers/homebrew/pipeline.sh >> /var/log/cron.log 2>&1" > /etc/cron.d/homebrew-cron
+    echo "*/2 * * * * /usr/bin/env CHAI_DATABASE_URL=$CHAI_DATABASE_URL SOURCE=$SOURCE CODE_DIR=$CODE_DIR DATA_DIR=$DATA_DIR FETCH=$FETCH NO_CACHE=$NO_CACHE /package_managers/homebrew/pipeline.sh >> /var/log/cron.log 2>&1" > /etc/cron.d/homebrew-cron
 else
-    echo "0 */$FREQUENCY * * * /usr/bin/env CHAI_DATABASE_URL=$CHAI_DATABASE_URL SOURCE=$SOURCE CODE_DIR=$CODE_DIR DATA_DIR=$DATA_DIR FETCH=$FETCH /package_managers/homebrew/pipeline.sh >> /var/log/cron.log 2>&1" > /etc/cron.d/homebrew-cron
+    echo "0 */$FREQUENCY * * * /usr/bin/env CHAI_DATABASE_URL=$CHAI_DATABASE_URL SOURCE=$SOURCE CODE_DIR=$CODE_DIR DATA_DIR=$DATA_DIR FETCH=$FETCH NO_CACHE=$NO_CACHE /package_managers/homebrew/pipeline.sh >> /var/log/cron.log 2>&1" > /etc/cron.d/homebrew-cron
 fi
 
 # Give execution rights on the cron job

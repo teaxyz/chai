@@ -16,7 +16,7 @@ class PackageManager(Enum):
 
 TEST = env_vars("TEST", "false")
 FETCH = env_vars("FETCH", "true")
-NO_CACHE_DIR = env_vars("NO_CACHE_DIR", "true")
+NO_CACHE = env_vars("NO_CACHE", "true")
 SOURCES = {
     PackageManager.CRATES: "https://static.crates.io/db-dump.tar.gz",
     PackageManager.HOMEBREW: "https://github.com/Homebrew/homebrew-core/tree/master/Formula",  # noqa
@@ -35,7 +35,7 @@ class ExecConf:
     def __init__(self) -> None:
         self.test = TEST
         self.fetch = FETCH
-        self.no_cache = NO_CACHE_DIR
+        self.no_cache = NO_CACHE
 
     def __str__(self):
         return f"ExecConf(test={self.test},fetch={self.fetch},no_cache={self.no_cache}"

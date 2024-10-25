@@ -33,10 +33,10 @@ Specify these eg. `docker compose -e FOO=bar up`:
 - `FREQUENCY`: Sets how often (in hours) the pipeline should run.
 - `TEST`: Runs the loader in test mode when set to true, skipping certain data insertions.
 - `FETCH`: Determines whether to fetch new data from the source when set to true.
-- `NO_CACHE_DIR`: When set to true, deletes temporary files after processing.
+- `NO_CACHE`: When set to true, deletes temporary files after processing.
 
 > [!NOTE]
-> The flag `NO_CACHE_DIR` does not mean that files will not get downloaded to your local
+> The flag `NO_CACHE` does not mean that files will not get downloaded to your local
 > storage, just that we'll delete the files once we're done with them
 
 These arguments are all configurable in the `docker-compose.yml` file.

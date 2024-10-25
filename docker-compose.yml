@@ -33,7 +33,7 @@ services:
       dockerfile: ./package_managers/crates/Dockerfile
     environment:
       - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
-      - NO_CACHE_DIR=${NO_CACHE_DIR:-false}
+      - NO_CACHE=${NO_CACHE:-false}
       - PYTHONPATH=/
       - DEBUG=${DEBUG:-false}
       - TEST=${TEST:-false}
@@ -53,7 +53,7 @@ services:
       dockerfile: ./package_managers/homebrew/Dockerfile
     environment:
       - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
-      - NO_CACHE_DIR=${NO_CACHE_DIR:-false}
+      - NO_CACHE=${NO_CACHE:-false}
       - TEST=${TEST:-false}
       - FETCH=${FETCH:-true}
       - FREQUENCY=${FREQUENCY:-24}
