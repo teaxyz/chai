@@ -22,7 +22,7 @@ Use [Docker](https://docker.com)
 > - Homebrew
 >
 > You can run a single package manager by running
-> `docker compose run --rm -e ... <package_manager>`
+> `docker compose up -e ... <package_manager>`
 >
 > We are planning on supporting `NPM`, `PyPI`, and `rubygems` next.
 
@@ -87,7 +87,8 @@ There are many other potential use cases for this data:
 ## FAQs / Common Issues
 
 1. The database url is `postgresql://postgres:s3cr3t@localhost:5435/chai`, and
-   is used as `CHAI_DATABASE_URL` in the environment.
+   is used as `CHAI_DATABASE_URL` in the environment. `psql CHAI_DATABASE_URL`
+   will connect you to the database.
 
 ## Tasks
 
@@ -206,6 +207,12 @@ Refreshes table knowledge from the db.
 
 ```sh
 docker-compose restart api
+```
+
+### remove-orphans
+
+```sh
+docker compose down --remove-orphans
 ```
 
 [PostgreSQL]: https://www.postgresql.org
