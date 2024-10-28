@@ -13,7 +13,7 @@ Use [Docker](https://docker.com)
 
 > [!NOTE]
 >
-> This will run CHAI with for all package managers. As an example crates by
+> This will run CHAI for all package managers. As an example crates by
 > itself will take over an hour and consume >5GB storage.
 >
 > Currently, we support only two package managers:
