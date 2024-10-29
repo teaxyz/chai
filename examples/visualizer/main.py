@@ -1,6 +1,7 @@
 import argparse
 from collections import deque
 from os import getenv
+from typing import Generator
 
 import PIL
 import psycopg2
@@ -10,16 +11,30 @@ from tabulate import tabulate
 
 CHAI_DATABASE_URL = getenv("CHAI_DATABASE_URL")
 
+graph_attr = {
+    "arrowsize": 0.5,
+    "beautify": True,
+    "labelfontsize": 5,
+    "size": "10,10",
+}
+
 
 class Package:
     id: str
     name: str
+    index: int
 
-    def __hash__(self) -> int:
-        return hash(self.id)
+    def __init__(self, id: str, name: str):
+        self.index = None
+        self.id = id
+        self.name = name
 
-    def __eq__(self, other: "Package") -> bool:
-        return self.id == other.id
+    def __str__(self) -> str:
+        return f"Package({self.name} @ {self.index})"
+
+
+def node_label(node: Package, empty: bool = True) -> str:
+    return {"label": node.name} if not empty else {"label": ""}
 
 
 class DB:
@@ -40,6 +55,13 @@ class DB:
             JOIN dependencies d ON v.id = d.version_id \
             WHERE p.id = $1"
         )
+        self.cursor.execute(
+            "PREPARE select_deps_v2 AS \
+            SELECT d.dependency_id FROM packages p \
+            JOIN versions v ON p.id = v.package_id \
+            JOIN dependencies d ON v.id = d.version_id \
+            WHERE p.name = $1"
+        )
 
     def connect(self) -> None:
         self.conn = psycopg2.connect(CHAI_DATABASE_URL)
@@ -58,45 +80,51 @@ class DB:
         for row in self.cursor.fetchall():
             yield row[0]
 
+    def select_deps_v2(self, name: str) -> Generator[str, None, None]:
+        self.cursor.execute("EXECUTE select_deps_v2 (%s)", (name,))
+        for row in self.cursor.fetchall():
+            yield row[0]
+
 
 def build_dependency_graph(db: DB, root_package: str):
     """Simple BFS algorithm implementation"""
     graph = rx.PyDiGraph()
     queue = deque()
     visited = set()
+    node_index_map: dict[str, int] = {}
 
     queue.append(root_package)
 
     while queue:
-        package = queue.popleft()
+        pkg_name = queue.popleft()
 
-        if package in visited:
+        if pkg_name in visited:
             continue
-        visited.add(package)
-
-        # Add the package to the graph
-        # TODO: not sure if this is optimal?
-        if package not in graph.nodes():
-            package_index = graph.add_node(package)
-        else:
-            package_index = graph.nodes().index(package)
+        visited.add(pkg_name)
 
         # Get dependencies from the database
-        package_id = db.select_id(package)  # always going to be new, i.e. not visited
-        dependencies = db.select_deps(package_id)
+        pkg_id = db.select_id(pkg_name)  # always going to be new, i.e. not visited
+        dependencies = db.select_deps(pkg_id)
+
+        # Add the package to the graph
+        if pkg_id not in node_index_map:
+            pkg_index = graph.add_node(pkg_name)
+            node_index_map[pkg_id] = pkg_index
+        else:
+            pkg_index = node_index_map[pkg_id]
 
         for dep_id in dependencies:
-            # TODO: if I know the dependency, I can skip the query
-            dep_name = db.select_name(dep_id)
-
-            # Add the dependency node if not already in the graph
-            if dep_name not in graph.nodes():
+            # if I know the dependency, I can skip the query
+            if dep_id not in node_index_map:
+                dep_name = db.select_name(dep_id)
                 dep_index = graph.add_node(dep_name)
+                node_index_map[dep_id] = dep_index
             else:
-                dep_index = graph.nodes().index(dep_name)
+                dep_index = node_index_map[dep_id]
+                dep_name = graph[dep_index]
 
             # Add an edge from the package to its dependency
-            graph.add_edge(package_index, dep_index, None)
+            graph.add_edge(pkg_index, dep_index, None)
 
             # Enqueue the dependency for processing
             if dep_name not in visited:
@@ -123,18 +151,16 @@ def display(graph: rx.PyDiGraph):
     print(tabulate(data, headers=headers))
 
 
-def draw(graph: rx.PyDiGraph, labels: dict[int, str]) -> PIL.Image:
-    # mpl_draw(graph, labels=str, with_labels=True)
-    return graphviz_draw(graph, graph_attr={"label": "Dependency Graph"})
+def draw(graph: rx.PyDiGraph) -> PIL.Image:
+    return graphviz_draw(graph, node_attr_fn=node_label, method="sfdp")
 
 
 def main(db: DB, package: str):
     G = build_dependency_graph(db, package)
-    node_map = {i: G.nodes()[i] for i in G.node_indexes()}
 
-    # display(G)
-    image = draw(G, node_map)
-    image.show()
+    display(G)
+    # image = draw(G, node_map)
+    # # image.show()
     # image.save("graph.png")
 
 
