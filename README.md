@@ -2,7 +2,7 @@
 
 CHAI is an attempt at an open-source data pipeline for package managers. The
 goal is to have a pipeline that can use the data from any package manager and
-provide a normalized data source for myriads of different use cases.
+provide a normalized data source for myriads of different use cases..
 
 ## Getting Started
 
