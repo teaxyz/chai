@@ -1,7 +1,10 @@
 import argparse
-from collections import deque
+import cProfile
+import pstats
+from collections import defaultdict, deque
 from os import getenv
-from typing import Generator
+from pstats import SortKey
+import uuid
 
 import PIL
 import psycopg2
@@ -17,6 +20,22 @@ graph_attr = {
     "labelfontsize": 5,
     "size": "10,10",
 }
+
+
+class Graph(rx.PyDiGraph):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.node_index_map: dict[str, int] = {}
+
+    def safely_add_node(self, node: str) -> int:
+        if node not in self.node_index_map:
+            index = super().add_node(node)
+            self.node_index_map[node] = index
+            return index
+        return self.node_index_map[node]
+
+    def safely_add_nodes(self, nodes: list[str]) -> list[int]:
+        return [self.safely_add_node(node) for node in nodes]
 
 
 class DB:
@@ -39,10 +58,10 @@ class DB:
         )
         self.cursor.execute(
             "PREPARE select_deps_v2 AS \
-            SELECT d.dependency_id FROM packages p \
+            SELECT DISTINCT p.id, d.dependency_id FROM packages p \
             JOIN versions v ON p.id = v.package_id \
             JOIN dependencies d ON v.id = d.version_id \
-            WHERE p.name = $1"
+            WHERE p.id = ANY($1)"
         )
 
     def connect(self) -> None:
@@ -62,13 +81,44 @@ class DB:
         for row in self.cursor.fetchall():
             yield row[0]
 
-    def select_deps_v2(self, name: str) -> Generator[str, None, None]:
-        self.cursor.execute("EXECUTE select_deps_v2 (%s)", (name,))
-        for row in self.cursor.fetchall():
-            yield row[0]
+    def select_deps_v2(self, ids: list[int]) -> dict[str, list[str]]:
+        self.cursor.execute("EXECUTE select_deps_v2 (%s::uuid[])", (ids,))
+        # NOTE: this might be intense for larger package managers
+        flat = self.cursor.fetchall()
+
+        # now, return this as a map for package id to list of dependencies
+        result = defaultdict(list)
+        for pkg_id, dep_id in flat:
+            result[pkg_id].append(dep_id)
+        return result
 
 
-def build_dependency_graph(db: DB, root_package: str):
+def larger_query(db: DB, root_package: str) -> Graph:
+    graph = Graph()
+    visited = set()
+    leafs = set()
+
+    # above sets will use the id of the package
+    root_id = db.select_id(root_package)
+    leafs.add(root_id)
+
+    while leafs - visited:
+        query = list(leafs - visited)
+        dependencies = db.select_deps_v2(query)
+
+        for pkg_id in query:
+            i = graph.safely_add_node(pkg_id)
+            js = graph.safely_add_nodes(dependencies[pkg_id])
+            edges = [(i, j, None) for j in js]
+            graph.add_edges_from(edges)
+            leafs.update(dependencies[pkg_id])
+
+        visited.update(query)
+
+    return graph
+
+
+def cache_deps(db: DB, root_package: str) -> rx.PyDiGraph:
     """Simple BFS algorithm implementation"""
     graph = rx.PyDiGraph()
     queue = deque()
@@ -115,7 +165,7 @@ def build_dependency_graph(db: DB, root_package: str):
     return graph
 
 
-def old_build_dependency_graph(db: DB, root_package: str):
+def basic_bfs(db: DB, root_package: str) -> rx.PyDiGraph:
     """Simple BFS algorithm implementation"""
     graph = rx.PyDiGraph()
     queue = deque()
@@ -185,17 +235,22 @@ def draw(graph: rx.PyDiGraph) -> PIL.Image:
     )
 
 
-def main(db: DB, package: str):
-    G = build_dependency_graph(db, package)
-    display(G)
-    # image = draw(G, node_map)
+def latest(db: DB, package: str):
+    G = larger_query(db, package)
+    # display(G)
+    image = draw(G)
     # image.show()
-    # image.save("graph.png")
+    image.save("graph.png")
 
 
-def old_main(db: DB, package: str):
-    G = old_build_dependency_graph(db, package)
-    display(G)
+def version_2(db: DB, package: str):
+    G = cache_deps(db, package)
+    # display(G)
+
+
+def version_1(db: DB, package: str):
+    G = basic_bfs(db, package)
+    # display(G)
 
 
 if __name__ == "__main__":
@@ -204,6 +259,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("package", help="The package to visualize")
     args = parser.parse_args()
-
     package = args.package
-    main(db, package)
+
+    # Add profiling
+    profiler = cProfile.Profile()
+    profiler.enable()
+
+    latest(db, package)
+
+    profiler.disable()
+    stats = pstats.Stats(profiler).sort_stats(SortKey.TIME)
+    stats.print_stats()

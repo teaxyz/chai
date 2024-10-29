@@ -4,7 +4,7 @@ from collections import defaultdict
 from functools import wraps
 from typing import Callable
 
-from main import DB, main, old_main
+from main import DB, latest, version_1
 
 
 class Result:
@@ -72,7 +72,7 @@ def run_monitored(func: Callable, package: str) -> Result:
 
 def compare_implementations(package: str, runs: int = 3) -> dict[str, list[Result]]:
     """Compare old and new implementations"""
-    implementations = [main, old_main]
+    implementations = [latest]
     results: dict[str, list[Result]] = defaultdict(list)
 
     for i in range(runs):
