@@ -19,24 +19,6 @@ graph_attr = {
 }
 
 
-class Package:
-    id: str
-    name: str
-    index: int
-
-    def __init__(self, id: str, name: str):
-        self.index = None
-        self.id = id
-        self.name = name
-
-    def __str__(self) -> str:
-        return f"Package({self.name} @ {self.index})"
-
-
-def node_label(node: Package, empty: bool = True) -> str:
-    return {"label": node.name} if not empty else {"label": ""}
-
-
 class DB:
     """Prepares the sql statements and connects to the database"""
 
@@ -133,6 +115,52 @@ def build_dependency_graph(db: DB, root_package: str):
     return graph
 
 
+def old_build_dependency_graph(db: DB, root_package: str):
+    """Simple BFS algorithm implementation"""
+    graph = rx.PyDiGraph()
+    queue = deque()
+    visited = set()
+
+    queue.append(root_package)
+
+    while queue:
+        package = queue.popleft()
+
+        if package in visited:
+            continue
+        visited.add(package)
+
+        # Add the package to the graph
+        # TODO: not sure if this is optimal?
+        if package not in graph.nodes():
+            package_index = graph.add_node(package)
+        else:
+            package_index = graph.nodes().index(package)
+
+        # Get dependencies from the database
+        package_id = db.select_id(package)  # always going to be new, i.e. not visited
+        dependencies = db.select_deps(package_id)
+
+        for dep_id in dependencies:
+            # TODO: if I know the dependency, I can skip the query
+            dep_name = db.select_name(dep_id)
+
+            # Add the dependency node if not already in the graph
+            if dep_name not in graph.nodes():
+                dep_index = graph.add_node(dep_name)
+            else:
+                dep_index = graph.nodes().index(dep_name)
+
+            # Add an edge from the package to its dependency
+            graph.add_edge(package_index, dep_index, None)
+
+            # Enqueue the dependency for processing
+            if dep_name not in visited:
+                queue.append(dep_name)
+
+    return graph
+
+
 def display(graph: rx.PyDiGraph):
     try:
         sorted_nodes = rx.topological_sort(graph)
@@ -152,16 +180,22 @@ def display(graph: rx.PyDiGraph):
 
 
 def draw(graph: rx.PyDiGraph) -> PIL.Image:
-    return graphviz_draw(graph, node_attr_fn=node_label, method="sfdp")
+    return graphviz_draw(
+        graph, node_attr_fn=lambda node: {"label": node}, method="sfdp"
+    )
 
 
 def main(db: DB, package: str):
     G = build_dependency_graph(db, package)
-
     display(G)
     # image = draw(G, node_map)
-    # # image.show()
+    # image.show()
     # image.save("graph.png")
+
+
+def old_main(db: DB, package: str):
+    G = old_build_dependency_graph(db, package)
+    display(G)
 
 
 if __name__ == "__main__":
