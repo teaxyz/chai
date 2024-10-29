@@ -4,22 +4,13 @@ import pstats
 from collections import defaultdict, deque
 from os import getenv
 from pstats import SortKey
-import uuid
 
-import PIL
 import psycopg2
 import rustworkx as rx
 from rustworkx.visualization import graphviz_draw
 from tabulate import tabulate
 
 CHAI_DATABASE_URL = getenv("CHAI_DATABASE_URL")
-
-graph_attr = {
-    "arrowsize": 0.5,
-    "beautify": True,
-    "labelfontsize": 5,
-    "size": "10,10",
-}
 
 
 class Graph(rx.PyDiGraph):
@@ -229,18 +220,57 @@ def display(graph: rx.PyDiGraph):
     print(tabulate(data, headers=headers))
 
 
-def draw(graph: rx.PyDiGraph) -> PIL.Image:
-    return graphviz_draw(
-        graph, node_attr_fn=lambda node: {"label": node}, method="sfdp"
+def draw(graph: rx.PyDiGraph):
+    def color_edge(edge):
+        out_dict = {
+            # "color": f'"{edge_colors[edge]}"', <<<--- could attach to edge data!
+            "color": "lightgrey",
+            "fillcolor": "lightgrey",
+            "penwidth": str(0.01),
+            "arrowsize": str(0.05),
+            "arrowhead": "tee",
+        }
+        return out_dict
+
+    def color_node(node):
+        out_dict = {
+            # "label": str(node),
+            "label": "",
+            "color": "lightblue",
+            # "pos": f'"{pos[node][0]}, {pos[node][1]}"',
+            # "fontname": '"DejaVu Sans"',
+            # "pin": "True",
+            "shape": "circle",
+            "style": "filled",
+            "fillcolor": "lightblue",
+            "width": "0.1",
+            "height": "0.1",
+            "fixedsize": "True",
+        }
+        return out_dict
+
+    graph_attr = {
+        "beautify": "True",
+        "resolution": "300",
+        "ratio": "fill",
+    }
+
+    graphviz_draw(
+        graph,
+        node_attr_fn=color_node,
+        edge_attr_fn=color_edge,
+        graph_attr=graph_attr,
+        method="sfdp",
+        filename=f"{package}.svg",
     )
 
 
 def latest(db: DB, package: str):
     G = larger_query(db, package)
+    print("Generated graph")
     # display(G)
-    image = draw(G)
-    # image.show()
-    image.save("graph.png")
+    draw(G)
+    print("✅ Saved image")
 
 
 def version_2(db: DB, package: str):
