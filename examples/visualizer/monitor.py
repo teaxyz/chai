@@ -4,7 +4,7 @@ from collections import defaultdict
 from functools import wraps
 from typing import Callable
 
-from main import DB, latest, version_1
+from main import DB, latest
 
 
 class Result:
@@ -121,7 +121,13 @@ def compare_results(results: dict[str, list[Result]], runs: int) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("package", help="The package to visualize")
+    parser.add_argument("--package", help="The package to visualize")
+    parser.add_argument(
+        "--profile",
+        help="Whether to profile the code",
+        action="store_true",
+        default=False,
+    )
     parser.add_argument("--runs", type=int, default=3, help="Number of runs to average")
     args = parser.parse_args()
 

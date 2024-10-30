@@ -1,9 +1,10 @@
 import argparse
 import cProfile
 import pstats
-from collections import defaultdict, deque
+from collections import defaultdict
 from os import getenv
 from pstats import SortKey
+import sys
 
 import psycopg2
 import rustworkx as rx
@@ -42,13 +43,6 @@ class DB:
         )
         self.cursor.execute(
             "PREPARE select_deps AS \
-            SELECT DISTINCT d.dependency_id FROM packages p \
-            JOIN versions v ON p.id = v.package_id \
-            JOIN dependencies d ON v.id = d.version_id \
-            WHERE p.id = $1"
-        )
-        self.cursor.execute(
-            "PREPARE select_deps_v2 AS \
             SELECT DISTINCT p.id, d.dependency_id FROM packages p \
             JOIN versions v ON p.id = v.package_id \
             JOIN dependencies d ON v.id = d.version_id \
@@ -63,17 +57,8 @@ class DB:
         self.cursor.execute("EXECUTE select_id (%s)", (package,))
         return self.cursor.fetchone()[0]
 
-    def select_name(self, id: int) -> str:
-        self.cursor.execute("EXECUTE select_name (%s)", (id,))
-        return self.cursor.fetchone()[0]
-
-    def select_deps(self, id: int):
-        self.cursor.execute("EXECUTE select_deps (%s)", (id,))
-        for row in self.cursor.fetchall():
-            yield row[0]
-
-    def select_deps_v2(self, ids: list[int]) -> dict[str, list[str]]:
-        self.cursor.execute("EXECUTE select_deps_v2 (%s::uuid[])", (ids,))
+    def select_deps(self, ids: list[str]) -> dict[str, list[str]]:
+        self.cursor.execute("EXECUTE select_deps (%s::uuid[])", (ids,))
         # NOTE: this might be intense for larger package managers
         flat = self.cursor.fetchall()
 
@@ -92,10 +77,11 @@ def larger_query(db: DB, root_package: str) -> Graph:
     # above sets will use the id of the package
     root_id = db.select_id(root_package)
     leafs.add(root_id)
+    depth = 0
 
     while leafs - visited:
         query = list(leafs - visited)
-        dependencies = db.select_deps_v2(query)
+        dependencies = db.select_deps(query)
 
         for pkg_id in query:
             i = graph.safely_add_node(pkg_id)
@@ -105,99 +91,7 @@ def larger_query(db: DB, root_package: str) -> Graph:
             leafs.update(dependencies[pkg_id])
 
         visited.update(query)
-
-    return graph
-
-
-def cache_deps(db: DB, root_package: str) -> rx.PyDiGraph:
-    """Simple BFS algorithm implementation"""
-    graph = rx.PyDiGraph()
-    queue = deque()
-    visited = set()
-    node_index_map: dict[str, int] = {}
-
-    queue.append(root_package)
-
-    while queue:
-        pkg_name = queue.popleft()
-
-        if pkg_name in visited:
-            continue
-        visited.add(pkg_name)
-
-        # Get dependencies from the database
-        pkg_id = db.select_id(pkg_name)  # always going to be new, i.e. not visited
-        dependencies = db.select_deps(pkg_id)
-
-        # Add the package to the graph
-        if pkg_id not in node_index_map:
-            pkg_index = graph.add_node(pkg_name)
-            node_index_map[pkg_id] = pkg_index
-        else:
-            pkg_index = node_index_map[pkg_id]
-
-        for dep_id in dependencies:
-            # if I know the dependency, I can skip the query
-            if dep_id not in node_index_map:
-                dep_name = db.select_name(dep_id)
-                dep_index = graph.add_node(dep_name)
-                node_index_map[dep_id] = dep_index
-            else:
-                dep_index = node_index_map[dep_id]
-                dep_name = graph[dep_index]
-
-            # Add an edge from the package to its dependency
-            graph.add_edge(pkg_index, dep_index, None)
-
-            # Enqueue the dependency for processing
-            if dep_name not in visited:
-                queue.append(dep_name)
-
-    return graph
-
-
-def basic_bfs(db: DB, root_package: str) -> rx.PyDiGraph:
-    """Simple BFS algorithm implementation"""
-    graph = rx.PyDiGraph()
-    queue = deque()
-    visited = set()
-
-    queue.append(root_package)
-
-    while queue:
-        package = queue.popleft()
-
-        if package in visited:
-            continue
-        visited.add(package)
-
-        # Add the package to the graph
-        # TODO: not sure if this is optimal?
-        if package not in graph.nodes():
-            package_index = graph.add_node(package)
-        else:
-            package_index = graph.nodes().index(package)
-
-        # Get dependencies from the database
-        package_id = db.select_id(package)  # always going to be new, i.e. not visited
-        dependencies = db.select_deps(package_id)
-
-        for dep_id in dependencies:
-            # TODO: if I know the dependency, I can skip the query
-            dep_name = db.select_name(dep_id)
-
-            # Add the dependency node if not already in the graph
-            if dep_name not in graph.nodes():
-                dep_index = graph.add_node(dep_name)
-            else:
-                dep_index = graph.nodes().index(dep_name)
-
-            # Add an edge from the package to its dependency
-            graph.add_edge(package_index, dep_index, None)
-
-            # Enqueue the dependency for processing
-            if dep_name not in visited:
-                queue.append(dep_name)
+        depth += 1
 
     return graph
 
@@ -220,39 +114,35 @@ def display(graph: rx.PyDiGraph):
     print(tabulate(data, headers=headers))
 
 
-def draw(graph: rx.PyDiGraph):
+def draw(graph: rx.PyDiGraph, package: str):
     def color_edge(edge):
         out_dict = {
             # "color": f'"{edge_colors[edge]}"', <<<--- could attach to edge data!
             "color": "lightgrey",
             "fillcolor": "lightgrey",
-            "penwidth": str(0.01),
-            "arrowsize": str(0.05),
+            "penwidth": "0.05",
+            "arrowsize": "0.05",
             "arrowhead": "tee",
+            # "style": "invisible",
         }
         return out_dict
 
     def color_node(node):
         out_dict = {
-            # "label": str(node),
             "label": "",
             "color": "lightblue",
-            # "pos": f'"{pos[node][0]}, {pos[node][1]}"',
-            # "fontname": '"DejaVu Sans"',
-            # "pin": "True",
             "shape": "circle",
             "style": "filled",
             "fillcolor": "lightblue",
-            "width": "0.1",
-            "height": "0.1",
+            "width": "0.05",
+            "height": "0.05",
             "fixedsize": "True",
         }
         return out_dict
 
     graph_attr = {
         "beautify": "True",
-        "resolution": "300",
-        "ratio": "fill",
+        "splines": "none",
     }
 
     graphviz_draw(
@@ -262,6 +152,7 @@ def draw(graph: rx.PyDiGraph):
         graph_attr=graph_attr,
         method="sfdp",
         filename=f"{package}.svg",
+        image_type="svg",
     )
 
 
@@ -269,34 +160,32 @@ def latest(db: DB, package: str):
     G = larger_query(db, package)
     print("Generated graph")
     # display(G)
-    draw(G)
+    draw(G, package)
     print("✅ Saved image")
-
-
-def version_2(db: DB, package: str):
-    G = cache_deps(db, package)
-    # display(G)
-
-
-def version_1(db: DB, package: str):
-    G = basic_bfs(db, package)
-    # display(G)
 
 
 if __name__ == "__main__":
     db = DB()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("package", help="The package to visualize")
+    parser.add_argument("--package", help="The package to visualize")
+    parser.add_argument(
+        "--profile",
+        help="Whether to profile the code",
+        action="store_true",
+        default=False,
+    )
     args = parser.parse_args()
     package = args.package
+    profile = args.profile
 
-    # Add profiling
-    profiler = cProfile.Profile()
-    profiler.enable()
+    if profile:
+        profiler = cProfile.Profile()
+        profiler.enable()
 
     latest(db, package)
 
-    profiler.disable()
-    stats = pstats.Stats(profiler).sort_stats(SortKey.TIME)
-    stats.print_stats()
+    if profile:
+        profiler.disable()
+        stats = pstats.Stats(profiler).sort_stats(SortKey.TIME)
+        stats.print_stats()
