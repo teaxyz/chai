@@ -167,3 +167,4 @@ db/data
 
 # examples
 examples/sbom-meta/sbom-meta
+*.svg

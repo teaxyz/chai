@@ -1,10 +1,8 @@
 import argparse
 import cProfile
 import pstats
-from collections import defaultdict
 from os import getenv
 from pstats import SortKey
-import sys
 
 import psycopg2
 import rustworkx as rx
@@ -14,20 +12,48 @@ from tabulate import tabulate
 CHAI_DATABASE_URL = getenv("CHAI_DATABASE_URL")
 
 
+class Package:
+    id: str
+    name: str
+    pagerank: float
+
+    def __init__(self, id: str):
+        self.id = id
+        self.name = ""
+        self.pagerank = 0
+        self.depth = 9999
+
+    def __str__(self):
+        return self.name
+
+
 class Graph(rx.PyDiGraph):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.node_index_map: dict[str, int] = {}
+        self.node_index_map: dict[Package, int] = {}
+        self._package_cache: dict[str, Package] = {}
 
-    def safely_add_node(self, node: str) -> int:
-        if node not in self.node_index_map:
-            index = super().add_node(node)
-            self.node_index_map[node] = index
+    def _get_or_create_package(self, pkg_id: str) -> Package:
+        if pkg_id not in self._package_cache:
+            pkg = Package(pkg_id)
+            self._package_cache[pkg_id] = pkg
+        return self._package_cache[pkg_id]
+
+    def safely_add_node(self, pkg_id: str) -> int:
+        pkg = self._get_or_create_package(pkg_id)
+        if pkg not in self.node_index_map:
+            index = super().add_node(pkg)
+            self.node_index_map[pkg] = index
             return index
-        return self.node_index_map[node]
+        return self.node_index_map[pkg]
 
     def safely_add_nodes(self, nodes: list[str]) -> list[int]:
         return [self.safely_add_node(node) for node in nodes]
+
+    def pagerank(self) -> None:
+        pageranks = rx.pagerank(self)
+        for index in self.node_indexes():
+            self[index].pagerank = pageranks[index]
 
 
 class DB:
@@ -43,7 +69,7 @@ class DB:
         )
         self.cursor.execute(
             "PREPARE select_deps AS \
-            SELECT DISTINCT p.id, d.dependency_id FROM packages p \
+            SELECT DISTINCT p.id, p.name, d.dependency_id FROM packages p \
             JOIN versions v ON p.id = v.package_id \
             JOIN dependencies d ON v.id = d.version_id \
             WHERE p.id = ANY($1)"
@@ -57,15 +83,19 @@ class DB:
         self.cursor.execute("EXECUTE select_id (%s)", (package,))
         return self.cursor.fetchone()[0]
 
-    def select_deps(self, ids: list[str]) -> dict[str, list[str]]:
+    def select_deps(self, ids: list[str]) -> dict[str, dict[str, str | set[str]]]:
         self.cursor.execute("EXECUTE select_deps (%s::uuid[])", (ids,))
         # NOTE: this might be intense for larger package managers
         flat = self.cursor.fetchall()
+        # now, return this as a map capturing the package name and its dependencies
+        result = {}
+        for pkg_id, pkg_name, dep_id in flat:
+            # add the package if it doesn't already exist in result
+            if pkg_id not in result:
+                result[pkg_id] = {"name": pkg_name, "dependencies": set()}
+            # add the dependency to the dependencies set
+            result[pkg_id]["dependencies"].add(dep_id)
 
-        # now, return this as a map for package id to list of dependencies
-        result = defaultdict(list)
-        for pkg_id, dep_id in flat:
-            result[pkg_id].append(dep_id)
         return result
 
 
@@ -82,67 +112,101 @@ def larger_query(db: DB, root_package: str) -> Graph:
     while leafs - visited:
         query = list(leafs - visited)
         dependencies = db.select_deps(query)
+        no_deps = set()
 
         for pkg_id in query:
             i = graph.safely_add_node(pkg_id)
-            js = graph.safely_add_nodes(dependencies[pkg_id])
-            edges = [(i, j, None) for j in js]
-            graph.add_edges_from(edges)
-            leafs.update(dependencies[pkg_id])
+            graph[i].depth = min(depth, graph[i].depth)
+            if pkg_id in dependencies:
+                graph[i].name = dependencies[pkg_id]["name"]
+                js = graph.safely_add_nodes(dependencies[pkg_id]["dependencies"])
+                edges = [(i, j, None) for j in js]
+                graph.add_edges_from(edges)
+                leafs.update(dependencies[pkg_id]["dependencies"])
+            else:
+                no_deps.add(pkg_id)
 
         visited.update(query)
         depth += 1
 
+    print(f"{len(no_deps)} don't have dependencies")  # TODO: add their names
     return graph
 
 
 def display(graph: rx.PyDiGraph):
-    try:
-        sorted_nodes = rx.topological_sort(graph)
-    except rx.DAGHasCycle as e:
-        print(e)
-        sorted_nodes = graph.node_indexes()
-
-    headers = ["Package", "Dependencies", "Dependents"]
+    sorted_nodes = sorted(graph.node_indexes(), key=lambda x: graph[x].depth)
+    headers = ["Package", "First Depth", "Dependencies", "Dependents", "Pagerank"]
     data = []
 
     for node in sorted_nodes:
         data.append(
-            [graph.nodes()[node], graph.out_degree(node), graph.in_degree(node)]
+            [
+                graph[node],
+                graph[node].depth,
+                f"{graph.out_degree(node):,}",
+                f"{graph.in_degree(node):,}",
+                f"{graph[node].pagerank:.8f}",
+            ]
         )
 
     print(tabulate(data, headers=headers))
 
 
 def draw(graph: rx.PyDiGraph, package: str):
+    total_nodes = graph.num_nodes()
+    total_edges = graph.num_edges()
+    depth_color_map = {
+        0: "red",
+        1: "lightblue",
+        2: "lightgreen",
+        3: "orange",
+        4: "purple",
+    }
+
     def color_edge(edge):
         out_dict = {
-            # "color": f'"{edge_colors[edge]}"', <<<--- could attach to edge data!
             "color": "lightgrey",
             "fillcolor": "lightgrey",
             "penwidth": "0.05",
             "arrowsize": "0.05",
             "arrowhead": "tee",
-            # "style": "invisible",
         }
         return out_dict
 
-    def color_node(node):
+    def color_node(node: Package):
+        scale = 20
+
+        def label_nodes(node: Package):
+            if node.pagerank > 0.01:
+                return f"{node.name}"
+            return ""
+
+        def size_center_node(node: Package):
+            if node.depth == 0:
+                return "1"
+            return str(node.pagerank * scale)
+
         out_dict = {
-            "label": "",
-            "color": "lightblue",
+            "label": label_nodes(node),
+            "fontsize": "5",
+            "color": depth_color_map.get(node.depth, "lightgrey"),
             "shape": "circle",
             "style": "filled",
-            "fillcolor": "lightblue",
-            "width": "0.05",
-            "height": "0.05",
             "fixedsize": "True",
+            "width": size_center_node(node),
+            "height": size_center_node(node),
         }
         return out_dict
 
+    label = f"<{package} <br/>nodes: {str(total_nodes)} <br/>edges: {str(total_edges)}>"
     graph_attr = {
         "beautify": "True",
         "splines": "none",
+        "overlap": "0.01",
+        "label": label,
+        "labelloc": "t",
+        "labeljust": "l",
+        "fontname": "Menlo",
     }
 
     graphviz_draw(
@@ -150,7 +214,7 @@ def draw(graph: rx.PyDiGraph, package: str):
         node_attr_fn=color_node,
         edge_attr_fn=color_edge,
         graph_attr=graph_attr,
-        method="sfdp",
+        method="twopi",  # NOTE: sfdp works as well
         filename=f"{package}.svg",
         image_type="svg",
     )
@@ -158,8 +222,8 @@ def draw(graph: rx.PyDiGraph, package: str):
 
 def latest(db: DB, package: str):
     G = larger_query(db, package)
-    print("Generated graph")
-    # display(G)
+    G.pagerank()
+    display(G)
     draw(G, package)
     print("✅ Saved image")
 
