@@ -63,6 +63,9 @@ class Graph(rx.PyDiGraph):
     def nameless_nodes(self) -> list[str]:
         return [self[i].id for i in self.node_indexes() if self[i].name == ""]
 
+    def max_depth(self) -> int:
+        return max([self[i].depth for i in self.node_indexes()])
+
 
 class DB:
     """Prepares the sql statements and connects to the database"""
@@ -161,10 +164,8 @@ def larger_query(db: DB, root_package: str, max_depth: int) -> Graph:
     return graph
 
 
-def display(graph: rx.PyDiGraph):
-    sorted_nodes = sorted(
-        graph.node_indexes(), key=lambda x: graph[x].depth if graph[x].depth else 9999
-    )
+def display(graph: Graph):
+    sorted_nodes = sorted(graph.node_indexes(), key=lambda x: graph[x].depth)
     headers = ["Package", "First Depth", "Dependencies", "Dependents", "Pagerank"]
     data = []
 
@@ -179,24 +180,22 @@ def display(graph: rx.PyDiGraph):
             ]
         )
 
-    print(
-        tabulate(
-            data, headers=headers, floatfmt=".8f", intfmt=",", disable_numparse=True
-        )
-    )
+    print(tabulate(data, headers=headers, floatfmt=".8f", intfmt=","))
 
 
-def draw(graph: rx.PyDiGraph, package: str):
+def draw(graph: Graph, package: str):
+    max_depth = graph.max_depth()
     total_nodes = graph.num_nodes()
     total_edges = graph.num_edges()
     depth_color_map = {
-        0: "red",
-        1: "lightblue",
-        2: "lightgreen",
-        3: "orange",
-        4: "purple",
+        1: "red",
+        2: "lightblue",
+        3: "lightgreen",
+        4: "orange",
+        5: "purple",
     }
 
+    # Unused because I don't visualize edges
     def color_edge(edge):
         out_dict = {
             "color": "lightgrey",
@@ -216,13 +215,14 @@ def draw(graph: rx.PyDiGraph, package: str):
             return ""
 
         def size_center_node(node: Package):
-            if node.depth == 0:
+            if node.depth == 1:
                 return "1"
             return str(node.pagerank * scale)
 
         out_dict = {
             "label": label_nodes(node),
             "fontsize": "5",
+            "fontname": "Menlo",
             "color": depth_color_map.get(node.depth, "lightgrey"),
             "shape": "circle",
             "style": "filled",
@@ -232,7 +232,7 @@ def draw(graph: rx.PyDiGraph, package: str):
         }
         return out_dict
 
-    label = f"<{package} (big red dot) <br/>nodes: {str(total_nodes)} <br/>edges: {str(total_edges)}>"  # noqa: E501
+    label = f"<{package} (big red dot) <br/>depth: {max_depth} <br/>nodes: {str(total_nodes)} <br/>edges: {str(total_edges)}>"  # noqa: E501
     graph_attr = {
         "beautify": "True",
         "splines": "none",
