@@ -55,6 +55,9 @@ class Graph(rx.PyDiGraph):
         for index in self.node_indexes():
             self[index].pagerank = pageranks[index]
 
+    def nameless_nodes(self) -> list[str]:
+        return [self[i].id for i in self.node_indexes() if self[i].name == ""]
+
 
 class DB:
     """Prepares the sql statements and connects to the database"""
@@ -65,7 +68,7 @@ class DB:
             "PREPARE select_id AS SELECT id FROM packages WHERE name = $1"
         )
         self.cursor.execute(
-            "PREPARE select_name AS SELECT name FROM packages WHERE id = $1"
+            "PREPARE select_name AS SELECT id, name FROM packages WHERE id = ANY($1)"
         )
         self.cursor.execute(
             "PREPARE select_deps AS \
@@ -84,8 +87,9 @@ class DB:
         return self.cursor.fetchone()[0]
 
     def select_deps(self, ids: list[str]) -> dict[str, dict[str, str | set[str]]]:
-        self.cursor.execute("EXECUTE select_deps (%s::uuid[])", (ids,))
         # NOTE: this might be intense for larger package managers
+        # NOTE: I have to cast the list to a uuid[] for psycopg2 to correctly handle it
+        self.cursor.execute("EXECUTE select_deps (%s::uuid[])", (ids,))
         flat = self.cursor.fetchall()
         # now, return this as a map capturing the package name and its dependencies
         result = {}
@@ -97,6 +101,10 @@ class DB:
             result[pkg_id]["dependencies"].add(dep_id)
 
         return result
+
+    def select_name(self, ids: list[str]) -> list[tuple[str, str]]:
+        self.cursor.execute("EXECUTE select_name (%s::uuid[])", (ids,))
+        return self.cursor.fetchall()
 
 
 def larger_query(db: DB, root_package: str) -> Graph:
@@ -129,7 +137,14 @@ def larger_query(db: DB, root_package: str) -> Graph:
         visited.update(query)
         depth += 1
 
-    print(f"{len(no_deps)} don't have dependencies")  # TODO: add their names
+    # add the names for the packages that don't have dependencies
+    nameless_nodes = graph.nameless_nodes()
+    print(f"{len(nameless_nodes)} nameless nodes")
+    names = db.select_name(nameless_nodes)
+    for pkg_id, pkg_name in names:
+        i = graph.safely_add_node(pkg_id)
+        graph[i].name = pkg_name
+
     return graph
 
 
@@ -198,7 +213,7 @@ def draw(graph: rx.PyDiGraph, package: str):
         }
         return out_dict
 
-    label = f"<{package} <br/>nodes: {str(total_nodes)} <br/>edges: {str(total_edges)}>"
+    label = f"<{package} (big red dot) <br/>nodes: {str(total_nodes)} <br/>edges: {str(total_edges)}>"  # noqa: E501
     graph_attr = {
         "beautify": "True",
         "splines": "none",
