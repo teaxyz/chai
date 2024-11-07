@@ -183,17 +183,22 @@ def display(graph: Graph):
     print(tabulate(data, headers=headers, floatfmt=".8f", intfmt=","))
 
 
-def draw(graph: Graph, package: str):
+def draw(graph: Graph, package: str, img_type: str = "svg"):
+    ALLOWABLE_FILE_TYPES = ["svg", "png"]
+    if img_type not in ALLOWABLE_FILE_TYPES:
+        raise ValueError(f"file type must be one of {ALLOWABLE_FILE_TYPES}")
+
     max_depth = graph.max_depth()
     total_nodes = graph.num_nodes()
     total_edges = graph.num_edges()
-    depth_color_map = {
-        1: "red",
-        2: "lightblue",
-        3: "lightgreen",
-        4: "orange",
-        5: "purple",
-    }
+
+    def depth_to_grayscale(depth: int) -> str:
+        """Convert depth to a grayscale color."""
+        if depth == 1:
+            return "red"
+        print(f"grey{depth + 10 + (depth - 1) // 9}")
+        # return f"grey{depth + 10 + divmod(depth, 10)[0]}"
+        return f"grey{depth + 10 + (depth - 1) // 9}"
 
     # Unused because I don't visualize edges
     def color_edge(edge):
@@ -222,8 +227,9 @@ def draw(graph: Graph, package: str):
         out_dict = {
             "label": label_nodes(node),
             "fontsize": "5",
+            "fontcolor": "grey",
             "fontname": "Menlo",
-            "color": depth_color_map.get(node.depth, "lightgrey"),
+            "color": depth_to_grayscale(node.depth),
             "shape": "circle",
             "style": "filled",
             "fixedsize": "True",
@@ -236,7 +242,7 @@ def draw(graph: Graph, package: str):
     graph_attr = {
         "beautify": "True",
         "splines": "none",
-        "overlap": "0.01",
+        "overlap": "0",
         "label": label,
         "labelloc": "t",
         "labeljust": "l",
@@ -249,16 +255,16 @@ def draw(graph: Graph, package: str):
         edge_attr_fn=color_edge,
         graph_attr=graph_attr,
         method="twopi",  # NOTE: sfdp works as well
-        filename=f"{package}.svg",
-        image_type="svg",
+        filename=f"{package}.{img_type}",
+        image_type=img_type,
     )
 
 
-def latest(db: DB, package: str, depth: int):
+def latest(db: DB, package: str, depth: int, img_type: str):
     G = larger_query(db, package, depth)
     G.pagerank()
     display(G)
-    draw(G, package)
+    draw(G, package, img_type)
     print("✅ Saved image")
 
 
@@ -275,16 +281,23 @@ if __name__ == "__main__":
     parser.add_argument(
         "--profile", help="Performance!", action="store_true", default=False
     )
+    parser.add_argument(
+        "--image-type",
+        help="The file type to save the image as",
+        type=str,
+        default="svg",
+    )
     args = parser.parse_args()
     package = args.package
     depth = args.depth
     profile = args.profile
+    img_type = args.image_type
 
     if profile:
         profiler = cProfile.Profile()
         profiler.enable()
 
-    latest(db, package, depth)
+    latest(db, package, depth, img_type)
 
     if profile:
         profiler.disable()
