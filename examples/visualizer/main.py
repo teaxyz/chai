@@ -16,12 +16,13 @@ class Package:
     id: str
     name: str
     pagerank: float
+    depth: int | None
 
     def __init__(self, id: str):
         self.id = id
         self.name = ""
         self.pagerank = 0
-        self.depth = 9999
+        self.depth = None
 
     def __str__(self):
         return self.name
@@ -33,13 +34,17 @@ class Graph(rx.PyDiGraph):
         self.node_index_map: dict[Package, int] = {}
         self._package_cache: dict[str, Package] = {}
 
+    # The data model has IDs, but rustworkx uses indexes
+    # Good news - it can index by object. So, we're just keeping track of that
     def _get_or_create_package(self, pkg_id: str) -> Package:
+        """A cache to avoid creating the same package multiple times"""
         if pkg_id not in self._package_cache:
             pkg = Package(pkg_id)
             self._package_cache[pkg_id] = pkg
         return self._package_cache[pkg_id]
 
     def safely_add_node(self, pkg_id: str) -> int:
+        """Adds a node to the graph if it doesn't already exist"""
         pkg = self._get_or_create_package(pkg_id)
         if pkg not in self.node_index_map:
             index = super().add_node(pkg)
@@ -107,7 +112,7 @@ class DB:
         return self.cursor.fetchall()
 
 
-def larger_query(db: DB, root_package: str) -> Graph:
+def larger_query(db: DB, root_package: str, max_depth: int) -> Graph:
     graph = Graph()
     visited = set()
     leafs = set()
@@ -120,26 +125,34 @@ def larger_query(db: DB, root_package: str) -> Graph:
     while leafs - visited:
         query = list(leafs - visited)
         dependencies = db.select_deps(query)
-        no_deps = set()
+
+        # Increment the depth, and get out if too much
+        depth += 1
+        if depth > max_depth:
+            # Set the depth for the remaining leafs
+            for pkg_id in query:
+                i = graph.safely_add_node(pkg_id)
+                graph[i].depth = depth
+            break
 
         for pkg_id in query:
             i = graph.safely_add_node(pkg_id)
-            graph[i].depth = min(depth, graph[i].depth)
+
+            # Have we encountered this node before? If not, set the depth
+            if graph[i].depth is None:
+                graph[i].depth = depth
+
             if pkg_id in dependencies:
                 graph[i].name = dependencies[pkg_id]["name"]
                 js = graph.safely_add_nodes(dependencies[pkg_id]["dependencies"])
                 edges = [(i, j, None) for j in js]
                 graph.add_edges_from(edges)
                 leafs.update(dependencies[pkg_id]["dependencies"])
-            else:
-                no_deps.add(pkg_id)
 
         visited.update(query)
-        depth += 1
 
-    # add the names for the packages that don't have dependencies
+    # Add the names for the packages that don't have dependencies
     nameless_nodes = graph.nameless_nodes()
-    print(f"{len(nameless_nodes)} nameless nodes")
     names = db.select_name(nameless_nodes)
     for pkg_id, pkg_name in names:
         i = graph.safely_add_node(pkg_id)
@@ -149,7 +162,9 @@ def larger_query(db: DB, root_package: str) -> Graph:
 
 
 def display(graph: rx.PyDiGraph):
-    sorted_nodes = sorted(graph.node_indexes(), key=lambda x: graph[x].depth)
+    sorted_nodes = sorted(
+        graph.node_indexes(), key=lambda x: graph[x].depth if graph[x].depth else 9999
+    )
     headers = ["Package", "First Depth", "Dependencies", "Dependents", "Pagerank"]
     data = []
 
@@ -158,13 +173,17 @@ def display(graph: rx.PyDiGraph):
             [
                 graph[node],
                 graph[node].depth,
-                f"{graph.out_degree(node):,}",
-                f"{graph.in_degree(node):,}",
-                f"{graph[node].pagerank:.8f}",
+                graph.out_degree(node),
+                graph.in_degree(node),
+                graph[node].pagerank,
             ]
         )
 
-    print(tabulate(data, headers=headers))
+    print(
+        tabulate(
+            data, headers=headers, floatfmt=".8f", intfmt=",", disable_numparse=True
+        )
+    )
 
 
 def draw(graph: rx.PyDiGraph, package: str):
@@ -235,8 +254,8 @@ def draw(graph: rx.PyDiGraph, package: str):
     )
 
 
-def latest(db: DB, package: str):
-    G = larger_query(db, package)
+def latest(db: DB, package: str, depth: int):
+    G = larger_query(db, package, depth)
     G.pagerank()
     display(G)
     draw(G, package)
@@ -247,22 +266,25 @@ if __name__ == "__main__":
     db = DB()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--package", help="The package to visualize")
     parser.add_argument(
-        "--profile",
-        help="Whether to profile the code",
-        action="store_true",
-        default=False,
+        "--package", help="The package to visualize", type=str, required=True
+    )
+    parser.add_argument(
+        "--depth", help="Maximum depth to go to", type=int, default=9999
+    )
+    parser.add_argument(
+        "--profile", help="Performance!", action="store_true", default=False
     )
     args = parser.parse_args()
     package = args.package
+    depth = args.depth
     profile = args.profile
 
     if profile:
         profiler = cProfile.Profile()
         profiler.enable()
 
-    latest(db, package)
+    latest(db, package, depth)
 
     if profile:
         profiler.disable()
