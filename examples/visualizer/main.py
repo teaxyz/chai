@@ -270,9 +270,7 @@ if __name__ == "__main__":
     db = DB()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--package", help="The package to visualize", type=str, required=True
-    )
+    parser.add_argument("package", help="The package to visualize", type=str)
     parser.add_argument(
         "--depth", help="Maximum depth to go to", type=int, default=9999
     )

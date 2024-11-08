@@ -24,17 +24,23 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+3. Ensure `CHAI_DATABASE_URL` is available as an environment variable. The default
+   value from our docker config is below:
+
+```sh
+export CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@localhost:5432/chai
+```
+
 ## Usage
 
 1. Start the [Chai DB](https://github.com/teaxyz/chai-oss) with `docker compose up`.
 1. Run the visualizer:
    ```sh
-   python main.py --package <package>
+   python main.py <package>
    ```
 
 ### Arguments
 
-- `--package`: The package to visualize. **Required**.
 - `--depth`: Maximum depth to go to. Default is `9999`, meaning all possible depths
 - `--profile`: Enable performance profiling. Default is `False`.
 
