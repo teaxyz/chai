@@ -1,7 +1,7 @@
 # Core Tools for CHAI Python Loaders
 
 This directory contains a set of core tools and utilities to facilitate loading the CHAI
-database with packaage manager data, using python helpers. These tools provide a common
+database with package manager data, using python helpers. These tools provide a common
 foundation for fetching, transforming, and loading data from various package managers
 into the database.
 

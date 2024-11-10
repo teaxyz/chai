@@ -47,7 +47,7 @@ After initialization and loading initial data, the script runs Alembic migration
 
 ## Contributing
 
-To contirbute to the database schema:
+To contribute to the database schema:
 
 1. Make a change in the [models](../core/models/__init__.py) file
 2. Generate a new migration script: `alembic revision --autogenerate "Description"`
