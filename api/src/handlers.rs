@@ -59,19 +59,17 @@ pub async fn get_table(
         }));
     }
 
-    let page = query.page.unwrap_or(1).max(1);
-    let limit = query.limit.unwrap_or(200).clamp(1, 1000);
-    let offset = (page - 1) * limit;
+    let page = query.page.unwrap_or(1);
+    let limit = query.limit.unwrap_or(200);
 
     let count_query = format!("SELECT COUNT(*) FROM {}", table);
-    let data_query = format!("SELECT * FROM {} LIMIT $1 OFFSET $2", table);
-
     match data.pool.get().await {
         Ok(client) => match client.query_one(&count_query, &[]).await {
             Ok(count_row) => {
                 let total_count: i64 = count_row.get(0);
-                let total_pages = (total_count as f64 / limit as f64).ceil() as i64;
+                let (offset, limit, total_pages) = paginate(page, limit, total_count);
 
+                let data_query = format!("SELECT * FROM {} LIMIT $1 OFFSET $2", table);
                 match client.query(&data_query, &[&limit, &offset]).await {
                     Ok(rows) => {
                         let columns = get_column_names(&rows);

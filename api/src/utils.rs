@@ -55,3 +55,11 @@ pub fn rows_to_json(rows: &[Row]) -> Vec<Value> {
         })
         .collect()
 }
+
+pub fn paginate(page: i64, limit: i64, total_count: i64) -> (i64, i64, i64) {
+    let page = page.max(1);
+    let limit = limit.clamp(1, 1000);
+    let offset = (page - 1) * limit;
+    let total_pages = (total_count as f64 / limit as f64).ceil() as i64;
+    (offset, limit, total_pages)
+}
