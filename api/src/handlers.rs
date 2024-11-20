@@ -5,12 +5,12 @@ use tokio_postgres::error::SqlState;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::utils::{get_column_names, rows_to_json};
+use crate::utils::{get_column_names, rows_to_json, Pagination};
 
 #[derive(Deserialize)]
-struct PaginationParams {
-    page: Option<i64>,
-    limit: Option<i64>,
+pub struct PaginationParams {
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -59,29 +59,27 @@ pub async fn get_table(
         }));
     }
 
-    let page = query.page.unwrap_or(1).max(1);
-    let limit = query.limit.unwrap_or(200).clamp(1, 1000);
-    let offset = (page - 1) * limit;
-
     let count_query = format!("SELECT COUNT(*) FROM {}", table);
-    let data_query = format!("SELECT * FROM {} LIMIT $1 OFFSET $2", table);
-
     match data.pool.get().await {
         Ok(client) => match client.query_one(&count_query, &[]).await {
             Ok(count_row) => {
                 let total_count: i64 = count_row.get(0);
-                let total_pages = (total_count as f64 / limit as f64).ceil() as i64;
+                let pagination = Pagination::new(query, total_count);
 
-                match client.query(&data_query, &[&limit, &offset]).await {
+                let data_query = format!("SELECT * FROM {} LIMIT $1 OFFSET $2", table);
+                match client
+                    .query(&data_query, &[&pagination.limit, &pagination.offset])
+                    .await
+                {
                     Ok(rows) => {
                         let columns = get_column_names(&rows);
                         let data = rows_to_json(&rows);
                         let response = PaginatedResponse {
                             table,
                             total_count,
-                            page,
-                            limit,
-                            total_pages,
+                            page: pagination.page,
+                            limit: pagination.limit,
+                            total_pages: pagination.total_pages,
                             columns,
                             data,
                         };
