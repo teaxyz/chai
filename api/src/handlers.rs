@@ -5,12 +5,12 @@ use tokio_postgres::error::SqlState;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::utils::{get_column_names, rows_to_json};
+use crate::utils::{get_column_names, rows_to_json, Pagination};
 
 #[derive(Deserialize)]
-struct PaginationParams {
-    page: Option<i64>,
-    limit: Option<i64>,
+pub struct PaginationParams {
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -59,27 +59,27 @@ pub async fn get_table(
         }));
     }
 
-    let page = query.page.unwrap_or(1);
-    let limit = query.limit.unwrap_or(200);
-
     let count_query = format!("SELECT COUNT(*) FROM {}", table);
     match data.pool.get().await {
         Ok(client) => match client.query_one(&count_query, &[]).await {
             Ok(count_row) => {
                 let total_count: i64 = count_row.get(0);
-                let (offset, limit, total_pages) = paginate(page, limit, total_count);
+                let pagination = Pagination::new(query, total_count);
 
                 let data_query = format!("SELECT * FROM {} LIMIT $1 OFFSET $2", table);
-                match client.query(&data_query, &[&limit, &offset]).await {
+                match client
+                    .query(&data_query, &[&pagination.limit, &pagination.offset])
+                    .await
+                {
                     Ok(rows) => {
                         let columns = get_column_names(&rows);
                         let data = rows_to_json(&rows);
                         let response = PaginatedResponse {
                             table,
                             total_count,
-                            page,
-                            limit,
-                            total_pages,
+                            page: pagination.page,
+                            limit: pagination.limit,
+                            total_pages: pagination.total_pages,
                             columns,
                             data,
                         };
