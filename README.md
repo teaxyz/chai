@@ -39,8 +39,9 @@ Specify these eg. `docker compose -e FOO=bar up`:
 - `NO_CACHE`: When set to true, deletes temporary files after processing.
 
 > [!NOTE]
-> The flag `NO_CACHE` does not mean that files will not get downloaded to your local
-> storage, just that we'll delete the files once we're done with them
+> The flag NO_CACHE does not mean that files will not get downloaded to your local
+> storage (specifically, the ./data directory). It only means that we'll 
+> delete these temporary files from ./data once we're done processing them.
 
 These arguments are all configurable in the `docker-compose.yml` file.
 
