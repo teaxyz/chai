@@ -53,6 +53,64 @@ pub async fn get_table(
     data: web::Data<AppState>,
 ) -> impl Responder {
     let table = path.into_inner();
+
+    // Check if the table exists
+    if !data.tables.contains(&table) {
+        return HttpResponse::NotFound().json(json!({
+            "error": format!("Table '{}' not found", table)
+        }));
+    }
+
+    // Pagination logic remains unchanged
+    let page = query.page.unwrap_or(1).max(1);
+    let limit = query.limit.unwrap_or(200).clamp(1, 1000);
+    let offset = (page - 1) * limit;
+
+    let count_query = format!("SELECT COUNT(*) FROM {}", table);
+    let data_query = format!("SELECT * FROM {} LIMIT $1 OFFSET $2", table);
+
+    match data.pool.get().await {
+        Ok(client) => match client.query_one(&count_query, &[]).await {
+            Ok(count_row) => {
+                let total_count: i64 = count_row.get(0);
+                let total_pages = (total_count as f64 / limit as f64).ceil() as i64;
+
+                match client.query(&data_query, &[&limit, &offset]).await {
+                    Ok(rows) => {
+                        let columns = get_column_names(&rows);
+                        let data = rows_to_json(&rows);
+                        let response = PaginatedResponse {
+                            table,
+                            total_count,
+                            page,
+                            limit,
+                            total_pages,
+                            columns,
+                            data,
+                        };
+                        HttpResponse::Ok().json(response)
+                    }
+                    Err(e) => {
+                        log::error!("Database query error: {}", e);
+                        HttpResponse::InternalServerError().json(json!({
+                            "error": "An error occurred while querying the database"
+                        }))
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!("Database count query error: {}", e);
+                HttpResponse::InternalServerError().json(json!({
+                    "error": "An error occurred while counting rows in the database"
+                }))
+            }
+        },
+        Err(e) => {
+            log::error!("Failed to get database connection: {}", e);
+            HttpResponse::InternalServerError().body("Failed to get database connection")
+        }
+    }
+}
     if !data.tables.contains(&table) {
         return HttpResponse::NotFound().json(json!({
             "error": format!("Table '{}' not found", table)
@@ -113,6 +171,50 @@ pub async fn get_table_row(
     data: web::Data<AppState>,
 ) -> impl Responder {
     let (table_name, id) = path.into_inner();
+
+    // Check if the table exists
+    if !data.tables.contains(&table_name) {
+        return HttpResponse::NotFound().json(json!({
+            "error": format!("Table '{}' not found", table_name)
+        }));
+    }
+
+    let query = format!("SELECT * FROM {} WHERE id = $1", table_name);
+
+    match data.pool.get().await {
+        Ok(client) => match client.query_one(&query, &[&id]).await {
+            Ok(row) => {
+                let json = rows_to_json(&[row]);
+                let value = json.first().unwrap();
+                HttpResponse::Ok().json(value)
+            }
+            Err(e) => {
+                if e.as_db_error()
+                    .map_or(false, |e| e.code() == &SqlState::UNDEFINED_TABLE)
+                {
+                    HttpResponse::NotFound().json(json!({
+                        "error": format!("Table '{}' not found", table_name)
+                    }))
+                } else if e
+                    .as_db_error()
+                    .map_or(false, |e| e.code() == &SqlState::NO_DATA_FOUND)
+                {
+                    HttpResponse::NotFound().json(json!({
+                        "error": format!("No row found with id '{}' in table '{}'", id, table_name)
+                    }))
+                } else {
+                    HttpResponse::InternalServerError().json(json!({
+                        "error": format!("Database error: {}", e)
+                    }))
+                }
+            }
+        },
+        Err(e) => {
+            log::error!("Failed to get database connection: {}", e);
+            HttpResponse::InternalServerError().body("Failed to get database connection")
+        }
+    }
+}
 
     if !data.tables.contains(&table_name) {
         return HttpResponse::NotFound().json(json!({
