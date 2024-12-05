@@ -83,8 +83,8 @@ pub async fn get_table(
 ) -> impl Responder {
     let table = path.into_inner();
     if let Some(response) = check_table_exists(&table, &data.tables) {
-    return response;
-}
+        return response;
+    }
 
     let count_query = format!("SELECT COUNT(*) FROM {}", table);
     match data.pool.get().await {
@@ -142,8 +142,8 @@ pub async fn get_table_row(
     let (table_name, id) = path.into_inner();
 
     if let Some(response) = check_table_exists(&table_name, &data.tables) {
-    return response;
-}
+        return response;
+    }
 
     let query = format!("SELECT * FROM {} WHERE id = $1", table_name);
 
