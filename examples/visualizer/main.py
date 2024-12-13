@@ -87,8 +87,14 @@ class DB:
         )
 
     def connect(self) -> None:
-        self.conn = psycopg2.connect(CHAI_DATABASE_URL)
-        self.cursor = self.conn.cursor()
+        if not CHAI_DATABASE_URL:
+            raise RuntimeError("Environment variable CHAI_DATABASE_URL is not set.")
+            
+        try:
+            self.conn = psycopg2.connect(CHAI_DATABASE_URL)
+            self.cursor = self.conn.cursor()
+        except psycopg2.OperationalError as e:
+            raise RuntimeError(f"Failed to connect to the database: {e}")
 
     def select_id(self, package: str) -> int:
         self.cursor.execute("EXECUTE select_id (%s)", (package,))
