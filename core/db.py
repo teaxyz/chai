@@ -166,7 +166,7 @@ class DB:
 
         license_id = self.license_cache.get(item["license"])
         if not license_id:
-            self.logger.log(f"creating an entry for {item['license']}")
+            self.logger.warn(f"License {item['license']} not found, creating entry.")
             license_id = self.select_license_by_name(item["license"], create=True)
             self.license_cache[item["license"]] = license_id
 
@@ -201,11 +201,22 @@ class DB:
             self._insert_batch(DependsOn, dependencies)
 
     def _process_depends_on(self, item: Dict[str, str]):
-        return DependsOn(
-            version_id=self.version_cache[item["version_id"]],
-            dependency_id=self.package_cache[item["crate_id"]],
-            semver_range=item["semver_range"],
-        ).to_dict()
+        dependency_id = self.package_cache.get(item["crate_id"])
+        version_id = self.version_cache.get(item["version_id"])
+
+    if not dependency_id:
+        self.logger.warn(f"Dependency package {item['crate_id']} not found, skipping.")
+        return None
+
+    if not version_id:
+        self.logger.warn(f"Version {item['version_id']} not found, skipping dependency.")
+        return None
+
+    return DependsOn(
+        version_id=version_id,
+        dependency_id=dependency_id,
+        semver_range=item.get("semver_range"),  # Add semver_range
+    ).to_dict()
 
     def insert_users(self, user_generator: Iterable[dict[str, str]], source_id: UUID):
         def process_user(item: Dict[str, str]):
