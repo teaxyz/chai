@@ -166,7 +166,7 @@ class DB:
 
         license_id = self.license_cache.get(item["license"])
         if not license_id:
-            self.logger.warn(f"License {item['license']} not found, creating entry.")
+            self.logger.log(f"License {item['license']} not found, creating entry.")
             license_id = self.select_license_by_name(item["license"], create=True)
             self.license_cache[item["license"]] = license_id
 
@@ -205,11 +205,11 @@ class DB:
         version_id = self.version_cache.get(item["version_id"])
 
     if not dependency_id:
-        self.logger.warn(f"Dependency package {item['crate_id']} not found, skipping.")
+        self.logger.log(f"Dependency package {item['crate_id']} not found, skipping.")
         return None
 
     if not version_id:
-        self.logger.warn(f"Version {item['version_id']} not found, skipping dependency.")
+        self.logger.log(f"Version {item['version_id']} not found, skipping dependency.")
         return None
 
     return DependsOn(
