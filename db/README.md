@@ -160,7 +160,7 @@ one point where we can modify any information about 'crates'.
 ### License
 
 Represents software licenses associated with package versions. Great place to start
-contirbutions!
+contributions!
 
 ### LoadHistory
 
