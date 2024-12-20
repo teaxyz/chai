@@ -86,8 +86,8 @@ Predefined types (from load-values.sql):
 
 Categorizes different types of dependencies between packages.
 Predefined types (from load-values.sql):
-build
 
+- `build`
 - `development`
 - `runtime`
 - `test`

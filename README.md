@@ -8,8 +8,11 @@ provide a normalized data source for myriads of different use cases.
 
 Use [Docker](https://docker.com)
 
-1. Run `docker compose build` to create the latest Docker images.
-2. Then, run `docker compose up` to launch.
+1. Install Docker
+2. Clone the chai repository (https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository)
+3. Using a terminal, navigate to the cloned repository directory
+4. Run `docker compose build` to create the latest Docker images
+5. Then, run `docker compose up` to launch.
 
 > [!NOTE]
 >
@@ -37,7 +40,8 @@ Specify these eg. `docker compose -e FOO=bar up`:
 
 > [!NOTE]
 > The flag `NO_CACHE` does not mean that files will not get downloaded to your local
-> storage, just that we'll delete the files once we're done with them
+> storage (specifically, the ./data directory). It only means that we'll 
+> delete these temporary files from ./data once we're done processing them.
 
 These arguments are all configurable in the `docker-compose.yml` file.
 

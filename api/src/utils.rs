@@ -1,7 +1,10 @@
+use actix_web::web::Query;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde_json::{json, Value};
 use tokio_postgres::{types::Type, Row};
 use uuid::Uuid;
+
+use crate::handlers::PaginationParams;
 
 pub fn get_column_names(rows: &[Row]) -> Vec<String> {
     if let Some(row) = rows.first() {
@@ -54,4 +57,28 @@ pub fn rows_to_json(rows: &[Row]) -> Vec<Value> {
             Value::Object(map)
         })
         .collect()
+}
+
+pub struct Pagination {
+    pub page: i64,
+    pub limit: i64,
+    pub offset: i64,
+    pub total_pages: i64,
+}
+
+impl Pagination {
+    pub fn new(query: Query<PaginationParams>, total_count: i64) -> Self {
+        let limit = query.limit.unwrap_or(200).clamp(1, 1000);
+        let total_pages = (total_count as f64 / limit as f64).ceil() as i64;
+
+        let page = query.page.unwrap_or(1).clamp(1, total_pages);
+
+        let offset = (page - 1) * limit;
+        Self {
+            page,
+            limit,
+            offset,
+            total_pages,
+        }
+    }
 }
