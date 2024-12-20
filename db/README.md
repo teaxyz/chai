@@ -1,8 +1,8 @@
 # CHAI Data Model
 
-The CHAI data model is designed to respresnt the package manager data in a unified and
+The CHAI data model is designed to respresent the package manager data in a unified and
 consistent form. The model's goal is _standardization_ - of the various complexities,
-and idiosyncracies of each individual package manager. We want to provide a standard way
+and idiosyncrasies of each individual package manager. We want to provide a standard way
 for analysis, querying, and whatever your use case might be.
 
 ## Definitions
