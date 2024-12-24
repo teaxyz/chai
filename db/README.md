@@ -69,7 +69,7 @@ Key fields:
 
 These models define categorizations and types used across the system. All these values
 are loaded from the alembic service, specifically in the
-[load-values.sql](../alembic/versions/load-values.sql) script.
+[load-values.sql](../alembic/load-values.sql) script.
 
 ### URLType
 
