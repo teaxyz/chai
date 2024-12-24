@@ -43,7 +43,7 @@ package manager sources. It supports:
 
 A custom logging utility that provides consistent logging across all loaders.
 
-### 5. [Models](models/**init**.py)
+### 5. [Models](models/__init__.py)
 
 SQLAlchemy models representing the database schema, including:
 
@@ -74,7 +74,7 @@ To create a new loader for a package manager:
    the raw data from the package manager's source.
 1. Implement a custom Transformer class that inherits from the base Transformer, that
    figures out how to map the raw data provided by the package managers into the data
-   model described in the [models](models/**init**.py) module.
+   model described in the [models](models/__init__.py) module.
 1. Create a main script that utilizes the core components (Config, DB, Fetcher,
    Transformer, Scheduler) to fetch, transform, and load data.
 
