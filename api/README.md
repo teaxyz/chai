@@ -88,7 +88,7 @@ Returns paginated data from the specified table.
 
 **Query Parameters**
 - `page` (optional): Page number (default: 1)
-- `limit` (optional): Number of items per page (default: 10)
+- `limit` (optional): Number of items per page (default: 200)
 
 **Response**
 ```json
