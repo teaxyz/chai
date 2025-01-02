@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.10"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements.txt
+      - name: Run tests
+        run: |
+          pytest tests/unit/test_crates_transformer.py -v -m transformer --cov=core --cov-report=xml --cov-report=term-missing
+          pytest tests/unit/test_db_models.py -v -m db --cov=core --cov-append --cov-report=xml --cov-report=term-missing
+          pytest tests/system -v -m system --cov=core --cov-append --cov-report=xml --cov-report=term-missing
