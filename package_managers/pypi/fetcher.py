@@ -1,10 +1,12 @@
 import json
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
 from html.parser import HTMLParser
 from typing import Generator, List, Optional
+import multiprocessing
 
 import requests
 
@@ -34,8 +36,53 @@ class PyPIFetcher(Fetcher):
         super().__init__(name, config)
         self.session = requests.Session()
         self.base_url = "https://pypi.org"
-        self.rate_limit_delay = 1  # seconds between requests
+        self.rate_limit_delay = 0.1  # seconds between requests
+        self.batch_size = 100  # packages per batch
+        self.max_workers = multiprocessing.cpu_count() * 4  # Number of threads for parallel downloads
+        self.data_dir = "/data/pypi"
+        self.process_file = os.path.join(self.data_dir, "progress.json")
+        self.packages_file = os.path.join(self.data_dir, "packages.txt")
         
+    def _save_process(self, batch_num: int, downloaded: int, fetched: int, total: int):
+        """Save current process to progress.json"""
+        process = {
+            "batch_num": batch_num,
+            "downloaded": downloaded,  # successful downloads
+            "fetched": fetched,      # total attempted downloads
+            "total": total,
+            "timestamp": datetime.now().isoformat()
+        }
+        with open(self.process_file, 'w') as f:
+            json.dump(process, f, indent=2)
+    
+    def _load_process(self) -> tuple[int, int, int, int]:
+        """Load process from progress.json if exists"""
+        try:
+            with open(self.process_file, 'r') as f:
+                process = json.load(f)
+                return (
+                    process["batch_num"],
+                    process.get("downloaded", 0),
+                    process.get("fetched", 0),
+                    process["total"]
+                )
+        except (FileNotFoundError, json.JSONDecodeError):
+            return 0, 0, 0, 0
+    
+    def _save_package_list(self, packages: List[str]):
+        """Save package list to packages.txt"""
+        with open(self.packages_file, 'w') as f:
+            for package in packages:
+                f.write(f"{package}\n")
+    
+    def _load_package_list(self) -> List[str]:
+        """Load package list from packages.txt if exists"""
+        try:
+            with open(self.packages_file, 'r') as f:
+                return [line.strip() for line in f if line.strip()]
+        except FileNotFoundError:
+            return []
+
     def _get_package_list(self) -> List[str]:
         """Fetch list of all packages from PyPI simple index."""
         url = f"{self.base_url}/simple/"
@@ -45,7 +92,7 @@ class PyPIFetcher(Fetcher):
         parser = SimpleIndexParser()
         parser.feed(response.text)
         return parser.packages
-
+    
     def _get_package_data(self, package_name: str) -> Optional[dict]:
         """Fetch JSON data for a specific package."""
         # Remove any /simple/ prefix if present
@@ -61,57 +108,101 @@ class PyPIFetcher(Fetcher):
         except requests.RequestException as e:
             self.logger.error(f"Error fetching {package_name}: {e}")
             return None
-        except json.JSONDecodeError as e:
-            self.logger.error(f"Error parsing JSON for {package_name}: {e}")
-            return None
+    
+    def _download_batch(self, packages: List[str]) -> List[dict]:
+        """Download a batch of packages in parallel."""
+        results = []
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            future_to_package = {
+                executor.submit(self._get_package_data, package): package 
+                for package in packages
+            }
+            for future in as_completed(future_to_package):
+                package = future_to_package[future]
+                try:
+                    data = future.result()
+                    if data:
+                        results.append(data)
+                except Exception as e:
+                    self.logger.error(f"Error downloading {package}: {e}")
+        return results
 
     def fetch(self) -> Generator[Data, None, None]:
         """
         Fetch package data from PyPI:
-        1. Get list of all packages from simple index
-        2. Fetch JSON data for each package
-        3. Yield data in batches as they're fetched
+        1. Check if we need to resume or start fresh
+        2. Get/load list of all packages
+        3. Split packages into batches
+        4. Download each batch in parallel
+        5. Save raw data to /data/pypi/[batch_num].json in container
+        6. Track progress in progress.json
         """
-        packages = self._get_package_list()
-        self.logger.log(f"Found {len(packages)} packages")
+        # Create data directory if needed
+        os.makedirs(self.data_dir, exist_ok=True)
         
-        # For testing, limit to a small number of packages
-        if self.test:
-            packages = packages[:20]
-            self.logger.log("Test mode: limiting to 20 packages")
-
-        batch_size = 10
-        current_batch = []
-        batch_num = 1
-
-        for i, package_name in enumerate(packages, 1):
-            # Fetch package data
-            package_data = self._get_package_data(package_name)
-            if package_data:
-                current_batch.append(package_data)
-
-            # Process batch if it reaches batch_size or is the last package
-            if len(current_batch) >= batch_size or i == len(packages):
-                if current_batch:  # Only process if we have data
-                    self.logger.debug(f"Creating batch {batch_num} with {len(current_batch)} packages")
-                    batch_content = json.dumps(current_batch).encode('utf-8')
-                    
-                    # Create Data object for transformer
-                    data = Data(
-                        file_path="",  # Root directory
-                        file_name=f"packages_batch_{batch_num}.json",
-                        content=batch_content
-                    )
-                    yield data
-                    
-                    # Reset for next batch
-                    current_batch = []
-                    batch_num += 1
-
-            # Rate limiting
+        # Check if we need to resume
+        current_batch, downloaded, fetched, total = self._load_process()
+        
+        # Get package list
+        if current_batch == 0 or fetched == total:  # Check fetched instead of downloaded
+            # Fresh start or completed before
+            self.logger.log("Starting fresh download")
+            packages = self._get_package_list()
+            self._save_package_list(packages)
+            downloaded = 0
+            fetched = 0
+        else:
+            # Resume from previous run
+            self.logger.log(f"Resuming from batch {current_batch} ({downloaded}/{fetched}/{total} packages)")
+            packages = self._load_package_list()
+            if not packages:
+                self.logger.log("No saved package list found, starting fresh")
+                packages = self._get_package_list()
+                self._save_package_list(packages)
+                downloaded = 0
+                fetched = 0
+        
+        total_packages = len(packages)
+        self.logger.log(f"Found {total_packages} packages")
+        
+        # Skip already downloaded batches
+        start_idx = current_batch * self.batch_size
+        packages = packages[start_idx:]
+        
+        # Process remaining packages in batches
+        for i in range(0, len(packages), self.batch_size):
+            batch = packages[i:i + self.batch_size]
+            batch_num = (start_idx + i)//self.batch_size + 1
+            total_batches = (total_packages + self.batch_size - 1)//self.batch_size
+            self.logger.log(f"Downloading batch {batch_num}/{total_batches}")
+            
+            # Download batch in parallel
+            results = self._download_batch(batch)
+            
+            # Update counters
+            fetched = start_idx + i + len(batch)  # Count all attempted packages
+            downloaded += len(results) if results else 0  # Count only successful downloads
+            
+            if results:
+                # Save batch to JSON file
+                file_name = f"{batch_num}.json"
+                file_path = os.path.join(self.data_dir, file_name)
+                
+                with open(file_path, 'w') as f:
+                    json.dump(results, f)
+                
+                # Update progress
+                self._save_process(batch_num, downloaded, fetched, total_packages)
+                
+                # Yield Data object for tracking
+                yield Data(
+                    file_path=self.data_dir,
+                    file_name=file_name,
+                    content=json.dumps(results).encode('utf-8')
+                )
+            else:
+                # Still save progress even if no results
+                self._save_process(batch_num, downloaded, fetched, total_packages)
+            
+            # Rate limiting between batches
             time.sleep(self.rate_limit_delay)
-
-            if i % 10 == 0 or i == len(packages):
-                self.logger.log(f"Processed {i}/{len(packages)} packages")
-
-        self.logger.log(f"Created {batch_num - 1} data batches")
