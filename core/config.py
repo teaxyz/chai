@@ -33,9 +33,9 @@ class ExecConf:
     no_cache: bool
 
     def __init__(self) -> None:
-        self.test = TEST.lower() == "true"
-        self.fetch = FETCH.lower() == "true"
-        self.no_cache = NO_CACHE.lower() == "true"
+        self.test = TEST
+        self.fetch = FETCH
+        self.no_cache = NO_CACHE
 
     def __str__(self):
         return f"ExecConf(test={self.test},fetch={self.fetch},no_cache={self.no_cache})"
