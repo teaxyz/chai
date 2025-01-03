@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from html.parser import HTMLParser
-from typing import List, Optional
+from typing import Generator, List, Optional
 
 import requests
 
@@ -35,8 +35,6 @@ class PyPIFetcher(Fetcher):
         self.session = requests.Session()
         self.base_url = "https://pypi.org"
         self.rate_limit_delay = 1  # seconds between requests
-        # Override output path to use absolute path
-        self.output = "/data/pypi"
         
     def _get_package_list(self) -> List[str]:
         """Fetch list of all packages from PyPI simple index."""
@@ -67,42 +65,24 @@ class PyPIFetcher(Fetcher):
             self.logger.error(f"Error parsing JSON for {package_name}: {e}")
             return None
 
-    def fetch(self) -> List[Data]:
+    def fetch(self) -> Generator[Data, None, None]:
         """
         Fetch package data from PyPI:
         1. Get list of all packages from simple index
         2. Fetch JSON data for each package
-        3. Save data in batches
+        3. Yield data in batches as they're fetched
         """
         packages = self._get_package_list()
         self.logger.log(f"Found {len(packages)} packages")
         
         # For testing, limit to a small number of packages
         if self.test:
-            packages = packages[:100]
-            self.logger.log("Test mode: limiting to 100 packages")
+            packages = packages[:20]
+            self.logger.log("Test mode: limiting to 20 packages")
 
-        # Prepare the output directories
-        now = datetime.now().strftime("%Y-%m-%d")
-        dated_dir = os.path.join(self.output, now)
-        
-        # Create dated directory
-        os.makedirs(dated_dir, exist_ok=True)
-
-        # Remove latest symlink if it exists
-        latest_symlink = os.path.join(self.output, "latest")
-        if os.path.exists(latest_symlink):
-            if os.path.islink(latest_symlink):
-                os.remove(latest_symlink)
-            else:
-                # If it's a directory, remove it recursively
-                import shutil
-                shutil.rmtree(latest_symlink)
-
-        batch_size = 20
+        batch_size = 10
         current_batch = []
         batch_num = 1
-        files = []
 
         for i, package_name in enumerate(packages, 1):
             # Fetch package data
@@ -110,26 +90,19 @@ class PyPIFetcher(Fetcher):
             if package_data:
                 current_batch.append(package_data)
 
-            # Save batch if it reaches batch_size or is the last package
+            # Process batch if it reaches batch_size or is the last package
             if len(current_batch) >= batch_size or i == len(packages):
-                if current_batch:  # Only save if we have data
+                if current_batch:  # Only process if we have data
+                    self.logger.debug(f"Creating batch {batch_num} with {len(current_batch)} packages")
                     batch_content = json.dumps(current_batch).encode('utf-8')
-                    
-                    # Save to dated directory
-                    batch_name = f"packages_batch_{batch_num}.json"
-                    dated_file = os.path.join(dated_dir, batch_name)
-                    with open(dated_file, 'wb') as f:
-                        f.write(batch_content)
                     
                     # Create Data object for transformer
                     data = Data(
                         file_path="",  # Root directory
-                        file_name=batch_name,
+                        file_name=f"packages_batch_{batch_num}.json",
                         content=batch_content
                     )
-                    files.append(data)
-                    
-                    self.logger.log(f"Saved batch {batch_num} ({len(current_batch)} packages)")
+                    yield data
                     
                     # Reset for next batch
                     current_batch = []
@@ -141,4 +114,4 @@ class PyPIFetcher(Fetcher):
             if i % 10 == 0 or i == len(packages):
                 self.logger.log(f"Processed {i}/{len(packages)} packages")
 
-        return files
+        self.logger.log(f"Created {batch_num - 1} data batches")
