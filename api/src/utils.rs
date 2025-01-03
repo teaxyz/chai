@@ -32,41 +32,39 @@ pub fn rows_to_json(rows: &[Row]) -> Vec<Value> {
             for (i, &column_type) in column_types.iter().enumerate() {
                 let column_name = column_names[i];
 
-                let value: Value = match row.try_get::<Option<_>, _>(i) {
-                    Ok(None) => Value::Null, 
-                    Ok(Some(val)) => match *column_type {
-                        Type::INT2 => json!(val as i16),
-                        Type::INT4 => json!(val as i32),
-                        Type::INT8 => json!(val as i64),
-                        Type::FLOAT4 => json!(val as f32),
-                        Type::FLOAT8 => json!(val as f64),
-                        Type::BOOL => json!(val as bool),
-                        Type::VARCHAR | Type::TEXT | Type::BPCHAR => json!(val as String),
+                let column_info = row.columns()[i].type_();
+                let value: Value = if column_info.is_null() {
+                    Value::Null
+                } else {
+                    match *column_type {
+                        Type::INT2 => json!(row.get::<_, i16>(i)),
+                        Type::INT4 => json!(row.get::<_, i32>(i)),
+                        Type::INT8 => json!(row.get::<_, i64>(i)),
+                        Type::FLOAT4 => json!(row.get::<_, f32>(i)),
+                        Type::FLOAT8 => json!(row.get::<_, f64>(i)),
+                        Type::BOOL => json!(row.get::<_, bool>(i)),
+                        Type::VARCHAR | Type::TEXT | Type::BPCHAR => json!(row.get::<_, String>(i)),
                         Type::TIMESTAMP => {
-                            let ts: NaiveDateTime = val;
+                            let ts: NaiveDateTime = row.get(i);
                             json!(ts.to_string())
                         }
                         Type::TIMESTAMPTZ => {
-                            let ts: DateTime<Utc> = val;
+                            let ts: DateTime<Utc> = row.get(i);
                             json!(ts.to_rfc3339())
                         }
                         Type::DATE => {
-                            let date: NaiveDate = val;
+                            let date: NaiveDate = row.get(i);
                             json!(date.to_string())
                         }
-                        Type::JSON | Type::JSONB => json!(val as Value),
+                        Type::JSON | Type::JSONB => row.get::<_, Value>(i),
                         Type::UUID => {
-                            let uuid: Uuid = val;
+                            let uuid: Uuid = row.get(i);
                             json!(uuid.to_string())
                         }
                         _ => {
                             log::warn!("Unhandled column type: {:?}", column_type);
                             Value::Null
                         }
-                    },
-                    Err(_) => {
-                        log::error!("Failed to get value for column: {}", column_name);
-                        Value::Null
                     }
                 };
                 map.insert(column_name.to_string(), value);
