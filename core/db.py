@@ -128,7 +128,7 @@ class DB:
     ):
         if update_packages:
             self._update_cache(
-                self.package_cache, Package, "import_id", "id", items, "crate_id"
+                self.package_cache, Package, "import_id", "id", items, "import_id"
             )
         if update_users:
             self._update_cache(
@@ -136,7 +136,7 @@ class DB:
             )
         if update_versions:
             self._update_cache(
-                self.version_cache, Version, "import_id", "id", items, "version_id"
+                self.version_cache, Version, "import_id", "id", items, "import_id"
             )
         if update_licenses:
             self._update_cache(
@@ -159,9 +159,9 @@ class DB:
             self._insert_batch(Version, versions)
 
     def _process_version(self, item: Dict[str, str]):
-        package_id = self.package_cache.get(item["crate_id"])
+        package_id = self.package_cache.get(item["import_id"])
         if not package_id:
-            self.logger.warn(f"package {item['crate_id']} not found")
+            self.logger.warn(f"package {item['import_id']} not found")
             return None
 
         license_id = self.license_cache.get(item["license"])
@@ -203,7 +203,7 @@ class DB:
     def _process_depends_on(self, item: Dict[str, str]):
         return DependsOn(
             version_id=self.version_cache[item["version_id"]],
-            dependency_id=self.package_cache[item["crate_id"]],
+            dependency_id=self.package_cache[item["import_id"]],
             semver_range=item["semver_range"],
         ).to_dict()
 
@@ -245,13 +245,13 @@ class DB:
             self.logger.warn(f"user {item['owner_id']} not found")
             return None
 
-        if item["crate_id"] not in self.package_cache:
-            self.logger.warn(f"package {item['crate_id']} not found")
+        if item["import_id"] not in self.package_cache:
+            self.logger.warn(f"package {item['import_id']} not found")
             return None
 
         return UserPackage(
             user_id=self.user_cache[item["owner_id"]],
-            package_id=self.package_cache[item["crate_id"]],
+            package_id=self.package_cache[item["import_id"]],
         ).to_dict()
 
     def insert_user_versions(
