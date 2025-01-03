@@ -12,7 +12,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import Mapped, declarative_base, relationship
 
 naming_convention = {
     "ix": "ix_%(column_0_label)s",
@@ -117,8 +117,8 @@ class Version(Base):
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
 
-    # package: Mapped["Package"] = relationship()
-    # license: Mapped["License"] = relationship()
+    package: Mapped["Package"] = relationship()
+    license: Mapped["License"] = relationship()
 
     def to_dict(self):
         return {
@@ -183,6 +183,10 @@ class DependsOn(Base):
     updated_at = Column(
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
+
+    version: Mapped["Version"] = relationship()
+    dependency: Mapped["Package"] = relationship()
+    dependency_type: Mapped["DependsOnType"] = relationship()
 
     def to_dict(self):
         return {
