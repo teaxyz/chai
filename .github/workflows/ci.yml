@@ -3,8 +3,18 @@ name: CI
 on:
   push:
     branches: ["main"]
+    paths:
+      - "**/*.py"
+      - "tests/**"
+      - "core/**"
+      - "package_managers/**"
   pull_request:
     branches: ["main"]
+    paths:
+      - "**/*.py"
+      - "tests/**"
+      - "core/**"
+      - "package_managers/**"
 
 permissions:
   contents: read
