@@ -143,9 +143,13 @@ class PyPIFetcher(Fetcher):
         # Check if we need to resume
         current_batch, downloaded, fetched, total = self._load_process()
         
+        # If everything is fetched, don't do anything
+        if fetched == total and total > 0:
+            self.logger.log(f"All packages already fetched ({downloaded}/{fetched}/{total})")
+            return
+        
         # Get package list
-        if current_batch == 0 or fetched == total:  # Check fetched instead of downloaded
-            # Fresh start or completed before
+        if current_batch == 0:  # Only get new list if fresh start
             self.logger.log("Starting fresh download")
             packages = self._get_package_list()
             self._save_package_list(packages)
