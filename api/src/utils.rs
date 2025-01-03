@@ -29,102 +29,41 @@ pub fn rows_to_json(rows: &[Row]) -> Vec<Value> {
     rows.iter()
         .map(|row| {
             let mut map = serde_json::Map::new();
-            for (i, column_type) in column_types.iter().enumerate() {
+            for (i, &column_type) in column_types.iter().enumerate() {
                 let column_name = column_names[i];
-                let value: Value = match **column_type {
-                    Type::INT2 => {
-                        if row.is_null(i) {
-                            Value::Null
-                        } else {
-                            json!(row.get::<_, i16>(i))
-                        }
-                    }
-                    Type::INT4 => {
-                        if row.is_null(i) {
-                            Value::Null
-                        } else {
-                            json!(row.get::<_, i32>(i))
-                        }
-                    }
-                    Type::INT8 => {
-                        if row.is_null(i) {
-                            Value::Null
-                        } else {
-                            json!(row.get::<_, i64>(i))
-                        }
-                    }
-                    Type::FLOAT4 => {
-                        if row.is_null(i) {
-                            Value::Null
-                        } else {
-                            json!(row.get::<_, f32>(i))
-                        }
-                    }
-                    Type::FLOAT8 => {
-                        if row.is_null(i) {
-                            Value::Null
-                        } else {
-                            json!(row.get::<_, f64>(i))
-                        }
-                    }
-                    Type::BOOL => {
-                        if row.is_null(i) {
-                            Value::Null
-                        } else {
-                            json!(row.get::<_, bool>(i))
-                        }
-                    }
-                    Type::VARCHAR | Type::TEXT | Type::BPCHAR => {
-                        if row.is_null(i) {
-                            Value::Null
-                        } else {
-                            json!(row.get::<_, String>(i))
-                        }
-                    }
-                    Type::TIMESTAMP => {
-                        if row.is_null(i) {
-                            Value::Null
-                        } else {
+                let value: Value = if row.is_null(i) {
+                    Value::Null
+                } else {
+                    match *column_type {
+                        Type::INT2 => json!(row.get::<_, i16>(i)),
+                        Type::INT4 => json!(row.get::<_, i32>(i)),
+                        Type::INT8 => json!(row.get::<_, i64>(i)),
+                        Type::FLOAT4 => json!(row.get::<_, f32>(i)),
+                        Type::FLOAT8 => json!(row.get::<_, f64>(i)),
+                        Type::BOOL => json!(row.get::<_, bool>(i)),
+                        Type::VARCHAR | Type::TEXT | Type::BPCHAR => json!(row.get::<_, String>(i)),
+                        Type::TIMESTAMP => {
                             let ts: NaiveDateTime = row.get(i);
                             json!(ts.to_string())
                         }
-                    }
-                    Type::TIMESTAMPTZ => {
-                        if row.is_null(i) {
-                            Value::Null
-                        } else {
+                        Type::TIMESTAMPTZ => {
                             let ts: DateTime<Utc> = row.get(i);
                             json!(ts.to_rfc3339())
                         }
-                    }
-                    Type::DATE => {
-                        if row.is_null(i) {
-                            Value::Null
-                        } else {
+                        Type::DATE => {
                             let date: NaiveDate = row.get(i);
                             json!(date.to_string())
                         }
-                    }
-                    Type::JSON | Type::JSONB => {
-                        if row.is_null(i) {
-                            Value::Null
-                        } else {
-                            let json_value: serde_json::Value = row.get(i);
-                            json_value
-                        }
-                    }
-                    Type::UUID => {
-                        if row.is_null(i) {
-                            Value::Null
-                        } else {
+                        Type::JSON | Type::JSONB => row.get::<_, Value>(i),
+                        Type::UUID => {
                             let uuid: Uuid = row.get(i);
                             json!(uuid.to_string())
                         }
-                    }
-                    // Add more type handlers as needed
-                    _ => {
-                        log::warn!("Unhandled column type: {:?}", column_type);
-                        Value::Null
+                        // Log unhandled types for future improvements
+                        _ => {
+                            log::warn!("Unhandled column type: {:?}", column_type);
+                            Value::Null
+                        }
                     }
                 };
                 map.insert(column_name.to_string(), value);
