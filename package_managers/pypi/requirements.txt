@@ -1,0 +1,7 @@
+alembic>=1.13.2
+psycopg2-binary>=2.9.9
+requests>=2.32.3
+schedule>=1.2.1
+sqlalchemy>=2.0.23
+pyyaml>=6.0.2
+beautifulsoup4>=4.12.2  # For parsing HTML from PyPI's simple index
