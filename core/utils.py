@@ -21,6 +21,6 @@ def build_query_params(
 
 # env vars could be true or 1, or anything else -- here's a centralized location to
 # handle that
-def env_vars(env_var: str, default: str):
+def env_vars(env_var: str, default: str) -> bool:
     var = getenv(env_var, default).lower()
     return var == "true" or var == "1"
