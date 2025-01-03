@@ -25,15 +25,47 @@ def fetch(config: Config) -> Generator[Data, None, None]:
 
 
 def run_pipeline(db: DB, config: Config) -> None:
+    """Run the PyPI pipeline."""
     logger.log("\n🚀 Starting PyPI pipeline...")
     logger.log(f"Mode: {'TEST' if config.exec_config.test else 'PRODUCTION'}")
-    logger.log(f"Fetch new data: {config.exec_config.fetch}")
-    logger.log(f"Cache enabled: {not config.exec_config.no_cache}")
     
-    # Just download and save data for now
-    logger.log("\n🔄 Starting download pipeline...")
-    for data in fetch(config):
-        logger.log(f"Saved batch to {data.file_name}")
+    # Create transformer
+    transformer = PyPITransformer(
+        url_types=config.url_types,
+        user_types=config.user_types,
+        pm_config=config.pm_config,
+        db=db
+    )
+    
+    # Step 1: Insert packages and related data
+    logger.log("\n📦 Inserting packages...")
+    db.insert_packages(
+        transformer.packages(),
+        config.pm_config.pm_id,
+        PackageManager.PYPI.value,
+    )
+    
+    # Step 2: Insert licenses
+    # This is handled during package insertion as we create licenses on demand
+    
+    # Step 3: Skip user-related operations as we can't get GitHub info from PyPI
+    
+    # Step 4: Insert URLs and package URLs
+    logger.log("\n🔗 Inserting URLs...")
+    db.insert_urls(transformer.urls())
+    db.insert_package_urls(transformer.package_urls())
+    
+    # Step 5: Insert versions
+    logger.log("\n📝 Inserting versions...")
+    db.insert_versions(transformer.versions())
+    
+    # Step 6: Insert dependencies (after all packages are in)
+    logger.log("\n🔄 Inserting dependencies...")
+    db.insert_dependencies(transformer.dependencies())
+    
+    # Record load history
+    db.insert_load_history(config.pm_config.pm_id)
+    logger.log("✅ PyPI data loading completed successfully")
 
 
 def main():
