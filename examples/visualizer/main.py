@@ -202,7 +202,7 @@ def draw(graph: Graph, package: str, img_type: str = "svg"):
         """Convert depth to a grayscale color."""
         if depth == 1:
             return "red"
-        return f"grey{depth + 10 + (depth - 1) // 9}"
+        return f"gray{depth + 10 + (depth - 1) // 9}"
 
     # Unused because I don't visualize edges
     def color_edge(edge):
@@ -231,7 +231,7 @@ def draw(graph: Graph, package: str, img_type: str = "svg"):
         out_dict = {
             "label": label_nodes(node),
             "fontsize": "5",
-            "fontcolor": "grey",
+            "fontcolor": "gray",
             "fontname": "Menlo",
             "color": depth_to_grayscale(node.depth),
             "shape": "circle",
