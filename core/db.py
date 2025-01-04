@@ -159,10 +159,17 @@ class DB:
             self._insert_batch(Version, versions)
 
     def _process_version(self, item: Dict[str, str]):
-        package_id = self.package_cache.get(item["import_id"])
-        if not package_id:
-            self.logger.warn(f"package {item['import_id']} not found")
-            return None
+        # FIXME: this is a hack, the import_id of a version shouldn't be the same as the package's import_id
+        # but the original logic here tries to use the package's import_id as the version's import_id
+        # this is a temporary fix (for the implementation of pypi)
+        # to fix this completely, we need to update the logic of the crates transformer too
+        if item["package_id"]:
+            package_id = item["package_id"]
+        else:
+            package_id = self.package_cache.get(item["import_id"])
+            if not package_id:
+                self.logger.warn(f"package {item['import_id']} not found")
+                return None
 
         license_id = self.license_cache.get(item["license"])
         if not license_id:
