@@ -189,12 +189,17 @@ class DependsOn(Base):
     dependency_type: Mapped["DependsOnType"] = relationship()
 
     def to_dict(self):
-        return {
+        result = {
             "version_id": self.version_id,
             "dependency_id": self.dependency_id,
-            # "dependency_type_id": self.dependency_type_id,
             "semver_range": self.semver_range,
         }
+
+        # if dependency_type_id is provided, include it
+        if hasattr(self, 'dependency_type_id') and self.dependency_type_id is not None:
+            result["dependency_type_id"] = self.dependency_type_id
+        
+        return result
 
 
 class DependsOnType(Base):
