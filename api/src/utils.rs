@@ -17,6 +17,15 @@ pub fn get_column_names(rows: &[Row]) -> Vec<String> {
     }
 }
 
+macro_rules! get_json_option {
+    ($row:expr, $idx:expr, $type:ty) => {
+        {
+            let v: Option<$type> = $row.try_get($idx).unwrap_or(None);
+            json!(v)
+        }
+    };
+}
+
 pub fn rows_to_json(rows: &[Row]) -> Vec<Value> {
     if rows.is_empty() {
         return vec![];
@@ -32,39 +41,37 @@ pub fn rows_to_json(rows: &[Row]) -> Vec<Value> {
             for (i, &column_type) in column_types.iter().enumerate() {
                 let column_name = column_names[i];
 
-                let column_info = row.columns()[i].type_();
-                let value: Value = if column_info.is_null() {
-                    Value::Null
-                } else {
-                    match *column_type {
-                        Type::INT2 => json!(row.get::<_, i16>(i)),
-                        Type::INT4 => json!(row.get::<_, i32>(i)),
-                        Type::INT8 => json!(row.get::<_, i64>(i)),
-                        Type::FLOAT4 => json!(row.get::<_, f32>(i)),
-                        Type::FLOAT8 => json!(row.get::<_, f64>(i)),
-                        Type::BOOL => json!(row.get::<_, bool>(i)),
-                        Type::VARCHAR | Type::TEXT | Type::BPCHAR => json!(row.get::<_, String>(i)),
-                        Type::TIMESTAMP => {
-                            let ts: NaiveDateTime = row.get(i);
-                            json!(ts.to_string())
-                        }
-                        Type::TIMESTAMPTZ => {
-                            let ts: DateTime<Utc> = row.get(i);
-                            json!(ts.to_rfc3339())
-                        }
-                        Type::DATE => {
-                            let date: NaiveDate = row.get(i);
-                            json!(date.to_string())
-                        }
-                        Type::JSON | Type::JSONB => row.get::<_, Value>(i),
-                        Type::UUID => {
-                            let uuid: Uuid = row.get(i);
-                            json!(uuid.to_string())
-                        }
-                        _ => {
-                            log::warn!("Unhandled column type: {:?}", column_type);
-                            Value::Null
-                        }
+                let value: Value = match *column_type {
+                    Type::INT2 => get_json_option!(row, i, i16),
+                    Type::INT4 => get_json_option!(row, i, i32),
+                    Type::INT8 => get_json_option!(row, i, i64),
+                    Type::FLOAT4 => get_json_option!(row, i, f32),
+                    Type::FLOAT8 => get_json_option!(row, i, f64),
+                    Type::BOOL => get_json_option!(row, i, bool),
+                    Type::VARCHAR | Type::TEXT | Type::BPCHAR => get_json_option!(row, i, String),
+                    Type::TIMESTAMP => {
+                        let v: Option<NaiveDateTime> = row.try_get(i).unwrap_or(None);
+                        v.map(|ts| json!(ts.to_string())).unwrap_or(Value::Null)
+                    }
+                    Type::TIMESTAMPTZ => {
+                        let v: Option<DateTime<Utc>> = row.try_get(i).unwrap_or(None);
+                        v.map(|ts| json!(ts.to_rfc3339())).unwrap_or(Value::Null)
+                    }
+                    Type::DATE => {
+                        let v: Option<NaiveDate> = row.try_get(i).unwrap_or(None);
+                        v.map(|date| json!(date.to_string())).unwrap_or(Value::Null)
+                    }
+                    Type::JSON | Type::JSONB => {
+                        let v: Option<Value> = row.try_get(i).unwrap_or(None);
+                        v.unwrap_or(Value::Null)
+                    }
+                    Type::UUID => {
+                        let v: Option<Uuid> = row.try_get(i).unwrap_or(None);
+                        v.map(|uuid| json!(uuid.to_string())).unwrap_or(Value::Null)
+                    }
+                    _ => {
+                        log::warn!("Unhandled column type: {:?}", column_type);
+                        Value::Null
                     }
                 };
                 map.insert(column_name.to_string(), value);
