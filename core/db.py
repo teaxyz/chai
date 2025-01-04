@@ -208,11 +208,30 @@ class DB:
             self._insert_batch(DependsOn, dependencies)
 
     def _process_depends_on(self, item: Dict[str, str]):
-        return DependsOn(
-            version_id=self.version_cache[item["version_id"]],
-            dependency_id=self.package_cache[item["import_id"]],
-            semver_range=item["semver_range"],
-        ).to_dict()
+        version_id = self.version_cache.get(item["version_id"])
+
+        # in case the version cannot be found from the cache
+        if not version_id:
+            # we need to fetch from the database
+            version = self.select_version_by_import_id(item["version_id"])
+            if not version:
+                self.logger.warn(f"version {item['version_id']} not found")
+                return None
+            version_id = version.id
+            self.version_cache[item["version_id"]] = version_id
+
+        # Create base dependency object
+        depends_on = {
+            "version_id": self.version_cache[item["version_id"]],
+            "dependency_id": self.package_cache[item["import_id"]],
+            "semver_range": item["semver_range"]
+        }
+
+        # Add dependency_type_id if provided
+        if "dependency_type_id" in item:
+            depends_on["dependency_type_id"] = item["dependency_type_id"]
+
+        return DependsOn(**depends_on).to_dict()
 
     def insert_users(self, user_generator: Iterable[dict[str, str]], source_id: UUID):
         def process_user(item: Dict[str, str]):
