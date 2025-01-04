@@ -294,8 +294,7 @@ class PyPITransformer(Transformer):
                     continue
                     
                 name = info.get("name")
-                version = info.get("version")
-                if not name or not version:
+                if not name:
                     continue
                 
                 pypi_id = f"pypi/{name}"
@@ -303,18 +302,23 @@ class PyPITransformer(Transformer):
                 # Process dependencies
                 requires_dist = info.get("requires_dist", [])
                 if requires_dist is None:
-                    requires_dist = []
-                    
+                    continue
+
+                version = info.get("version")
+                if not version:
+                    continue
+
                 for req in requires_dist:
                     try:
-                        if not req:
-                            continue
-                            
                         # Parse dependency name and version
                         dep = self._parse_dependency(req)
 
                         dep_name = dep[0]
                         dep_version = dep[1]
+                        dep_version_range = dep[2]
+
+                        if not dep_name:
+                            continue
 
                         # Sometimes we don't get a version, so we need to get it from the database
                         if not dep_version:
@@ -325,20 +329,21 @@ class PyPITransformer(Transformer):
                             else:
                                 continue
 
-                        if not dep_name:
-                            continue
+                        # Use the original version range for semver_range if available
+                        # Otherwise use the clean version with an equals operator
+                        semver_range = dep_version_range if dep_version_range else f"=={dep_version}"
 
                         yield {
                             "version_id": f"pypi/{dep_name}-{dep_version}",
                             "import_id": pypi_id,
-                            "semver_range": dep_version,
+                            "semver_range": semver_range,
                             "dependency_type_id": dependency_type.id,
                         }
                     except Exception as e:
                         self.logger.error(f"Error processing dependency {req}: {e}")
                         continue
             except Exception as e:
-                self.logger.error(f"Error processing dependencies: {e}")
+                self.logger.error(f"Error processing package {package_data.get('info', {}).get('name')}: {e}")
                 continue
 
     def users(self) -> Generator[Dict[str, Any], None, None]:
@@ -353,21 +358,21 @@ class PyPITransformer(Transformer):
         """Skip user-version relationships as we can't get GitHub info from PyPI API."""
         return iter(())
 
-    def _parse_dependency(self, req: str) -> tuple[str, str]:
-        """Parse a dependency string into name and version range.
+    def _parse_dependency(self, req: str) -> tuple[str, str, str]:
+        """Parse a dependency string into name, clean version, and version range.
         
         Examples:
-            "charset-normalizer (>=2,<4)" -> ("charset-normalizer", "2")
-            "idna (>=2.5,<4)" -> ("idna", "2.5")
-            "urllib3 (>=1.21.1,<3)" -> ("urllib3", "1.21.1")
-            "PySocks (>=1.5.6,!=1.5.7)" -> ("PySocks", "1.5.6")
-            "pycparser ==2.21" -> ("pycparser", "2.21")
-            "pytest >=5.4.1,<6.0.0" -> ("pytest", "5.4.1")
-            "python-jose[cryptography] >=3.1.0,<4.0.0" -> ("python-jose", "3.1.0")
-            "GPUtil~=1.4.0" -> ("GPUtil", "1.4.0")
-            "requests ~=2.25" -> ("requests", "2.25")
-            "ipykernel<7.0.0,>=6.29.3" -> ("ipykernel", "6.29.3")
-            "pydantic>=2.10" -> ("pydantic", "2.10")
+            "charset-normalizer (>=2,<4)" -> ("charset-normalizer", "2", ">=2,<4")
+            "idna (>=2.5,<4)" -> ("idna", "2.5", ">=2.5,<4")
+            "urllib3 (>=1.21.1,<3)" -> ("urllib3", "1.21.1", ">=1.21.1,<3")
+            "PySocks (>=1.5.6,!=1.5.7)" -> ("PySocks", "1.5.6", ">=1.5.6,!=1.5.7")
+            "pycparser ==2.21" -> ("pycparser", "2.21", "==2.21")
+            "pytest >=5.4.1,<6.0.0" -> ("pytest", "5.4.1", ">=5.4.1,<6.0.0")
+            "python-jose[cryptography] >=3.1.0,<4.0.0" -> ("python-jose", "3.1.0", ">=3.1.0,<4.0.0")
+            "GPUtil~=1.4.0" -> ("GPUtil", "1.4.0", "~=1.4.0")
+            "requests ~=2.25" -> ("requests", "2.25", "~=2.25")
+            "ipykernel<7.0.0,>=6.29.3" -> ("ipykernel", "6.29.3", "<7.0.0,>=6.29.3")
+            "pydantic>=2.10" -> ("pydantic", "2.10", ">=2.10")
         """
         try:
             # Remove any extra conditions after semicolon
@@ -386,9 +391,9 @@ class PyPITransformer(Transformer):
             if "(" in req and ")" in req:
                 name = req.split(" (")[0].strip()
                 version_constraints = req.split("(")[1].rstrip(")").strip()
-                # Get the first version number from constraints
-                version = self._extract_version(version_constraints)
-                return name, version
+                # Get both clean version and version range
+                clean_version = self._extract_version(version_constraints)
+                return name, clean_version, version_constraints.replace(" ", "")
             
             # Handle various version constraint formats
             version_operators = [">=", "<=", "==", "!=", "~=", ">", "<", "="]
@@ -407,16 +412,16 @@ class PyPITransformer(Transformer):
                 # Split at the operator position
                 name = req[:operator_pos].strip()
                 version_constraints = req[operator_pos:].strip()
-                # Get the first version number from constraints
-                version = self._extract_version(version_constraints)
-                return name, version
+                # Get both clean version and version range
+                clean_version = self._extract_version(version_constraints)
+                return name, clean_version, version_constraints.replace(" ", "")
                 
             # If no version info found
-            return req.strip(), ""
+            return req.strip(), "", ""
             
         except Exception as e:
             self.logger.error(f"Error parsing dependency string '{req}': {e}")
-            return req.strip(), ""
+            return req.strip(), "", ""
 
     def _extract_version(self, version_constraints: str) -> str:
         """Extract the first valid version number from version constraints.
