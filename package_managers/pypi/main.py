@@ -27,7 +27,12 @@ def fetch(config: Config) -> Generator[Data, None, None]:
 def run_pipeline(db: DB, config: Config) -> None:
     """Run the PyPI pipeline."""
     logger.log("\n🚀 Starting PyPI pipeline...")
-    logger.log(f"Mode: {'TEST' if config.exec_config.test else 'PRODUCTION'}")
+
+    # Download all the package data from PyPI, and process them after that
+    # As of Jan 2025, PyPI has ~600k packages
+    logger.log("\n🔄 Starting download pipeline...")
+    for data in fetch(config):
+        logger.log(f"Saved batch to {data.file_name}")
     
     # Create transformer
     transformer = PyPITransformer(
@@ -53,6 +58,8 @@ def run_pipeline(db: DB, config: Config) -> None:
     # Step 4: Insert URLs and package URLs
     logger.log("\n🔗 Inserting URLs...")
     db.insert_urls(transformer.urls())
+
+    logger.log("\n🔗 Linking URLs and Packages...")
     db.insert_package_urls(transformer.package_urls())
     
     # Step 5: Insert versions

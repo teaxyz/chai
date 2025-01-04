@@ -502,6 +502,18 @@ class DB:
             result = session.query(Version).filter_by(import_id=import_id).first()
             if result:
                 return result
+    
+    def select_latest_version_by_import_id(self, import_id: str) -> Version | None:
+        with self.session() as session:
+            # First get the package
+            package = session.query(Package).filter_by(import_id=import_id).first()
+            if not package:
+                return None
+            
+            # Then get the latest version for this package
+            result = session.query(Version).filter_by(package_id=package.id).order_by(Version.version.desc()).first()
+            if result:
+                return result
 
     def select_package_manager_name_by_id(self, id: UUID) -> str | None:
         with self.session() as session:

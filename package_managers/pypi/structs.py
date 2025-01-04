@@ -1,13 +1,10 @@
-from enum import Enum, auto
+from enum import IntEnum
 
+class DependencyType(IntEnum):
+    """Enum for PyPI dependency types."""
+    RUNTIME = 1  # Default runtime dependency
+    DEV = 2      # Development dependency
+    OPTIONAL = 3  # Optional dependency (e.g., extras)
 
-class DependencyType(Enum):
-    """
-    Enum representing different types of PyPI dependencies.
-    Based on https://packaging.python.org/en/latest/specifications/dependency-specifiers/
-    """
-    REQUIRES = auto()  # Regular dependencies
-    REQUIRES_PYTHON = auto()  # Python version requirement
-    EXTRA_REQUIRES = auto()  # Optional dependencies
-    TEST_REQUIRES = auto()  # Test dependencies
-    DEV_REQUIRES = auto()  # Development dependencies
+    def __str__(self):
+        return self.name.lower()

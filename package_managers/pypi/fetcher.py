@@ -39,9 +39,9 @@ class PyPIFetcher(Fetcher):
         self.rate_limit_delay = 0.1  # seconds between requests
         self.batch_size = 100  # packages per batch
         self.max_workers = multiprocessing.cpu_count() * 4  # Number of threads for parallel downloads
-        self.data_dir = "/data/pypi"
-        self.process_file = os.path.join(self.data_dir, "progress.json")
-        self.packages_file = os.path.join(self.data_dir, "packages.txt")
+        self.data_dir = "/data/pypi" # We will mount to ./data/pypi on the host
+        self.process_file = os.path.join(self.data_dir, "progress.json") # to store the progress of the fetch
+        self.packages_file = os.path.join(self.data_dir, "packages.txt") # a list of all package names
         
     def _save_process(self, batch_num: int, downloaded: int, fetched: int, total: int):
         """Save current process to progress.json"""
@@ -85,7 +85,7 @@ class PyPIFetcher(Fetcher):
 
     def _get_package_list(self) -> List[str]:
         """Fetch list of all packages from PyPI simple index."""
-        url = f"{self.base_url}/simple/"
+        url = f"{self.base_url}/simple/" # PyPI simple index
         response = self.session.get(url)
         response.raise_for_status()
         
@@ -99,7 +99,7 @@ class PyPIFetcher(Fetcher):
         package_name = package_name.replace('/simple/', '')
         # Remove any trailing slash
         package_name = package_name.rstrip('/')
-        url = f"{self.base_url}/pypi/{package_name}/json"
+        url = f"{self.base_url}/pypi/{package_name}/json" # PyPI JSON API
         
         try:
             response = self.session.get(url)
@@ -144,6 +144,7 @@ class PyPIFetcher(Fetcher):
         current_batch, downloaded, fetched, total = self._load_process()
         
         # If everything is fetched, don't do anything
+        # TODO: implement a re-download logic
         if fetched == total and total > 0:
             self.logger.log(f"All packages already fetched ({downloaded}/{fetched}/{total})")
             return

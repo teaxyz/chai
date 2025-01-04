@@ -10,6 +10,8 @@ from core.utils import safe_int
 from core.db import DB
 from core.logger import Logger
 from core.models import URL, PackageURL
+from package_managers.pypi.structs import DependencyType
+
 
 class PyPITransformer(Transformer):
     """Transform PyPI package data into CHAI's package format."""
@@ -23,7 +25,6 @@ class PyPITransformer(Transformer):
         self.db = db
         self.data_dir = data_dir
         self.logger = Logger("pypi_transformer")
-        self.test_mode = False
         
         # Load progress to know how many batches to process
         self.progress_file = os.path.join(data_dir, "progress.json")
@@ -47,7 +48,6 @@ class PyPITransformer(Transformer):
         total_packages = 0
         self.logger.log(f"Processing {self.total_batches} batch files")
         
-        processed_count = 0
         for batch_num in range(1, self.total_batches + 1):
             file_path = os.path.join(self.data_dir, f"{batch_num}.json")
             try:
@@ -55,11 +55,7 @@ class PyPITransformer(Transformer):
                     packages = json.load(f)
                     self.logger.log(f"Processing batch {batch_num} with {len(packages)} packages")
                     for package in packages:
-                        if self.test_mode and processed_count >= 100:
-                            self.logger.log("Test mode: Processed 100 entries, stopping")
-                            return
                         yield package
-                        processed_count += 1
                         total_packages += 1
             except (FileNotFoundError, json.JSONDecodeError) as e:
                 self.logger.error(f"Error processing {file_path}: {e}")
@@ -97,7 +93,6 @@ class PyPITransformer(Transformer):
 
     def urls(self) -> Generator[Dict[str, str], None, None]:
         """Transform PyPI URLs into CHAI's URL format."""
-        seen_urls = set()
         
         for package_data in self._read_batch_files():
             try:
@@ -144,15 +139,13 @@ class PyPITransformer(Transformer):
                         if url_type:
                             urls.append((url, url_type))
                 
-                # Deduplicate and yield URLs
+                # yield URLs
                 for url, url_type in urls:
-                    if url not in seen_urls:
-                        seen_urls.add(url)
-                        yield {
-                            "url": url,
-                            "url_type_id": url_type
-                        }
-                        
+                    yield {
+                        "url": url,
+                        "url_type_id": url_type
+                    }
+                    
             except Exception as e:
                 self.logger.error(f"Error processing URLs: {e}")
                 continue
@@ -165,44 +158,30 @@ class PyPITransformer(Transformer):
                 name = info.get("name")
                 if not name:
                     continue
-                
-                # Get package from cache
-                package = self.db.package_cache.get(f"pypi/{name}")
-                if not package:
-                    continue
-                    
-                package_id = package.get("id")
-                if not package_id:
-                    continue
-                
-                # Extract URLs from various fields
-                urls = []
+
+                import_id = f"pypi/{name}"
                 
                 # Homepage URL
                 homepage = info.get("home_page")
                 if homepage and isinstance(homepage, str):
                     homepage = homepage.strip()
                     if homepage:
-                        # Get URL from cache or create new one
-                        url_obj = self.db.url_cache.get(homepage)
-                        if url_obj:
-                            yield {
-                                "package_id": package_id,
-                                "url_id": url_obj["id"]
-                            }
+                        yield {
+                            "import_id": import_id,
+                            "url": homepage,
+                            "url_type_id": self.url_types.homepage
+                        }
                 
                 # Documentation URL
                 docs_url = info.get("docs_url")
                 if docs_url and isinstance(docs_url, str):
                     docs_url = docs_url.strip()
                     if docs_url:
-                        # Get URL from cache or create new one
-                        url_obj = self.db.url_cache.get(docs_url)
-                        if url_obj:
-                            yield {
-                                "package_id": package_id,
-                                "url_id": url_obj["id"]
-                            }
+                        yield {
+                            "import_id": import_id,
+                            "url": docs_url,
+                            "url_type_id": self.url_types.documentation
+                        }
                 
                 # Project URLs
                 project_urls = info.get("project_urls", {})
@@ -226,13 +205,11 @@ class PyPITransformer(Transformer):
                             url_type = self.url_types.homepage
                         
                         if url_type:
-                            # Get URL from cache or create new one
-                            url_obj = self.db.url_cache.get(url)
-                            if url_obj:
-                                yield {
-                                    "package_id": package_id,
-                                    "url_id": url_obj["id"]
-                                }
+                            yield {
+                                "import_id": import_id,
+                                "url": url,
+                                "url_type_id": url_type
+                            }
                     
             except Exception as e:
                 self.logger.error(f"Error processing package URLs: {e}")
@@ -240,6 +217,7 @@ class PyPITransformer(Transformer):
 
     def versions(self) -> Generator[Dict[str, Any], None, None]:
         """Transform PyPI versions into CHAI's format."""
+
         for package_data in self._read_batch_files():
             try:
                 info = package_data.get("info")
@@ -247,59 +225,59 @@ class PyPITransformer(Transformer):
                     continue
                     
                 name = info.get("name")
-                version = info.get("version")
-                if not name or not version:
-                    continue
-                
-                # Get package from cache
-                package = self.db.package_cache.get(f"pypi/{name}")
+                pypi_id = f"pypi/{name}"
+
+                package = self.db.select_package_by_import_id(pypi_id)
                 if not package:
-                    self.logger.warn(f"Package not found in cache: pypi/{name}")
+                    self.logger.warn(f"Package {pypi_id} not found in database")
                     continue
+
+                # We are reading from .releases, the object key is the version number
+                # We need to loop through all the versions from the .releases object
+                for version, releases in package_data.get("releases", {}).items():
+                    # Check if the release array is empty
+                    if len(releases) == 0:
+                        continue
+
+                    # As there can be multiple releases for a version, we will take the first one
+                    release = releases[0]
+
+                    # Get license
+                    license_name = info.get("license") or "Unknown"
+
+                    # Some license has set to a full paragraph
+                    # We need to check if the length is greater than 50, and try to extract the name with a comma
+                    # And get the first part of that
+                    if len(license_name) > 50:
+                        license_name = license_name.split(",")[0]
                     
-                package_id = package.get("id")
-                if not package_id:
-                    self.logger.warn(f"Package has no ID in cache: pypi/{name}")
-                    continue
-                
-                # Get license
-                license_name = info.get("license") or "Unknown"
-                license_id = self.db.select_license_by_name(license_name, create=True)
-                if not license_id:
-                    continue
-                
-                # Get downloads - use last_month if available, otherwise 0
-                downloads = info.get("downloads", {})
-                if not isinstance(downloads, dict):
-                    downloads = {}
-                download_count = downloads.get("last_month", 0)
-                if download_count < 0:  # PyPI uses -1 for unknown
-                    download_count = 0
-                
-                # Get release info
-                urls = package_data.get("urls", [])
-                if urls and isinstance(urls, list):
-                    release = urls[0]  # Use first file for metadata
+                    # If it still has more than 50 characters, just skip it
+                    if len(license_name) > 50:
+                        continue
+
+                    # Get downloads
+                    downloads = release.get("downloads", -1)
+
+                    # Get size
                     size = release.get("size", 0)
-                    published_at = release.get("upload_time_iso_8601")
-                    checksum = release.get("digests", {}).get("sha256", "")
-                else:
-                    size = 0
-                    published_at = info.get("created")
-                    checksum = ""
-                
-                # Build version data
-                yield {
-                    "import_id": f"pypi/{name}/{version}",
-                    "package_id": package_id,
-                    "version": version,
-                    "size": size or 0,
-                    "published_at": published_at,
-                    "license_id": license_id,
-                    "downloads": download_count,
-                    "checksum": checksum,
-                    "yanked": info.get("yanked", False)
-                }
+
+                    # Get published_at
+                    published_at = release.get("upload_time_iso_8601", "")
+
+                    # Get checksum
+                    checksum = release.get("digests", {}).get("sha256")
+
+                    # Yield data
+                    yield {
+                        "version": version,
+                        "package_id": package.id,
+                        "import_id": f"{pypi_id}-{version}",
+                        "size": size,
+                        "published_at": published_at,
+                        "license": license_name,
+                        "downloads": downloads,
+                        "checksum": checksum,
+                    }
                     
             except Exception as e:
                 self.logger.error(f"Error processing version: {e}")
@@ -307,10 +285,7 @@ class PyPITransformer(Transformer):
 
     def dependencies(self) -> Generator[Dict[str, Any], None, None]:
         """Transform PyPI dependency data into CHAI's dependency format."""
-        runtime_type = self.db.select_dependency_type_by_name("runtime", create=True)
-        if not runtime_type:
-            self.logger.error("Failed to get/create runtime dependency type")
-            return iter(())
+        dependency_type = self.db.select_dependency_type_by_name("runtime")
         
         for package_data in self._read_batch_files():
             try:
@@ -323,10 +298,7 @@ class PyPITransformer(Transformer):
                 if not name or not version:
                     continue
                 
-                # Get version ID
-                version_obj = self.db.select_version_by_import_id(f"pypi/{name}/{version}")
-                if not version_obj:
-                    continue
+                pypi_id = f"pypi/{name}"
                 
                 # Process dependencies
                 requires_dist = info.get("requires_dist", [])
@@ -339,21 +311,28 @@ class PyPITransformer(Transformer):
                             continue
                             
                         # Parse dependency name and version
-                        dep_name, dep_version = self._parse_dependency(req)
+                        dep = self._parse_dependency(req)
+
+                        dep_name = dep[0]
+                        dep_version = dep[1]
+
+                        # Sometimes we don't get a version, so we need to get it from the database
+                        if not dep_version:
+                            # And getting the latest version
+                            dep_version_from_db = self.db.select_latest_version_by_import_id(f"pypi/{dep_name}")
+                            if dep_version_from_db:
+                                dep_version = dep_version_from_db.version
+                            else:
+                                continue
+
                         if not dep_name:
                             continue
-                            
-                        # Get dependent package
-                        dep_package = self.db.select_package_by_import_id(f"pypi/{dep_name}")
-                        if not dep_package:
-                            continue
-                            
+
                         yield {
-                            "version_id": version_obj.id,
-                            "package_id": dep_package.id,
-                            "dependency_type_id": runtime_type.id,
-                            "version_range": dep_version,
-                            "optional": False  # PyPI doesn't have optional dependencies
+                            "version_id": f"pypi/{dep_name}-{dep_version}",
+                            "import_id": pypi_id,
+                            "semver_range": dep_version,
+                            "dependency_type_id": dependency_type.id,
                         }
                     except Exception as e:
                         self.logger.error(f"Error processing dependency {req}: {e}")
@@ -378,17 +357,98 @@ class PyPITransformer(Transformer):
         """Parse a dependency string into name and version range.
         
         Examples:
-            "charset-normalizer (>=2,<4)" -> ("charset-normalizer", ">=2,<4")
-            "idna (>=2.5,<4)" -> ("idna", ">=2.5,<4")
-            "urllib3 (>=1.21.1,<3)" -> ("urllib3", ">=1.21.1,<3")
-            "PySocks (>=1.5.6,!=1.5.7)" -> ("PySocks", ">=1.5.6,!=1.5.7")
+            "charset-normalizer (>=2,<4)" -> ("charset-normalizer", "2")
+            "idna (>=2.5,<4)" -> ("idna", "2.5")
+            "urllib3 (>=1.21.1,<3)" -> ("urllib3", "1.21.1")
+            "PySocks (>=1.5.6,!=1.5.7)" -> ("PySocks", "1.5.6")
+            "pycparser ==2.21" -> ("pycparser", "2.21")
+            "pytest >=5.4.1,<6.0.0" -> ("pytest", "5.4.1")
+            "python-jose[cryptography] >=3.1.0,<4.0.0" -> ("python-jose", "3.1.0")
+            "GPUtil~=1.4.0" -> ("GPUtil", "1.4.0")
+            "requests ~=2.25" -> ("requests", "2.25")
+            "ipykernel<7.0.0,>=6.29.3" -> ("ipykernel", "6.29.3")
+            "pydantic>=2.10" -> ("pydantic", "2.10")
         """
-        if "; " in req:  # Remove any extra conditions
-            req = req.split("; ")[0]
+        try:
+            # Remove any extra conditions after semicolon
+            if "; " in req:
+                req = req.split("; ")[0].strip()
+            
+            # First, handle extras in square brackets
+            name = req
+            if "[" in req and "]" in req:
+                name = req.split("[")[0].strip()
+                after_bracket = req[req.find("]")+1:].strip()
+                if after_bracket:
+                    req = name + after_bracket
+            
+            # Handle parentheses format: "name (version)"
+            if "(" in req and ")" in req:
+                name = req.split(" (")[0].strip()
+                version_constraints = req.split("(")[1].rstrip(")").strip()
+                # Get the first version number from constraints
+                version = self._extract_version(version_constraints)
+                return name, version
+            
+            # Handle various version constraint formats
+            version_operators = [">=", "<=", "==", "!=", "~=", ">", "<", "="]
+            
+            # Find the first version operator in the string
+            operator_pos = len(req)
+            found_operator = None
+            
+            for op in version_operators:
+                pos = req.find(op)
+                if pos != -1 and pos < operator_pos:
+                    operator_pos = pos
+                    found_operator = op
+            
+            if found_operator:
+                # Split at the operator position
+                name = req[:operator_pos].strip()
+                version_constraints = req[operator_pos:].strip()
+                # Get the first version number from constraints
+                version = self._extract_version(version_constraints)
+                return name, version
+                
+            # If no version info found
+            return req.strip(), ""
+            
+        except Exception as e:
+            self.logger.error(f"Error parsing dependency string '{req}': {e}")
+            return req.strip(), ""
+
+    def _extract_version(self, version_constraints: str) -> str:
+        """Extract the first valid version number from version constraints.
         
-        if "(" in req and ")" in req:
-            name = req.split(" (")[0].strip()
-            version = req.split("(")[1].rstrip(")").strip()
-            version = version.replace(" ", "")  # Clean up version string
-            return name, version
-        return req.strip(), ""  # No version constraint
+        Examples:
+            ">=2,<4" -> "2"
+            ">=2.5,<4" -> "2.5"
+            ">=1.21.1,<3" -> "1.21.1"
+            ">=1.5.6,!=1.5.7" -> "1.5.6"
+            "==2.21" -> "2.21"
+            ">=5.4.1,<6.0.0" -> "5.4.1"
+            ">=3.1.0,<4.0.0" -> "3.1.0"
+            "~=1.4.0" -> "1.4.0"
+        """
+        # Remove all spaces
+        version_constraints = "".join(version_constraints.split())
+        
+        # List of version operators to strip
+        operators = [">=", "<=", "==", "!=", "~=", ">", "<", "="]
+        
+        # Split by comma to handle multiple constraints
+        parts = version_constraints.split(",")
+        
+        for part in parts:
+            # Strip any operators
+            clean_version = part
+            for op in operators:
+                if clean_version.startswith(op):
+                    clean_version = clean_version[len(op):]
+            
+            # If we have a valid version number (contains a digit), return it
+            if any(c.isdigit() for c in clean_version):
+                return clean_version
+        
+        return ""
