@@ -87,7 +87,7 @@ class CratesTransformer(Transformer):
                 # map string to enum
                 dependency_type = DependencyType(kind)
             except ValueError:
-                self.logger.warn(f"Unknown dependency kind: {kind}")
+                self.logger.warning(f"Unknown dependency kind: {kind}")
                 continue
 
             yield {
@@ -97,9 +97,9 @@ class CratesTransformer(Transformer):
                 "dependency_type": dependency_type,
             }
 
-    # gh_id is unique to github, and is from GitHub
+    # gh_id is unique to GitHub, and is from GitHub
     # our users table is unique on import_id and source_id
-    # so, we actually get some github data for free here!
+    # so, we actually get some GitHub data for free here!
     def users(self) -> Generator[Dict[str, str], None, None]:
         usernames = set()
         for row in self._read_csv_rows("users"):
@@ -108,7 +108,7 @@ class CratesTransformer(Transformer):
 
             # Deduplicate based on gh_login
             if gh_login in usernames:
-                self.logger.warn(f"Duplicate username detected: ID={user_id}, Username={gh_login}")
+                self.logger.warning(f"Duplicate username detected: ID={user_id}, Username={gh_login}")
                 continue
             usernames.add(gh_login)
 
