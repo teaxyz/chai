@@ -18,10 +18,10 @@ def fetch(config: Config) -> Generator[Data, None, None]:
     
     if config.exec_config.fetch:
         logger.log("📥 Fetching new data from PyPI...")
-        return fetcher.fetch()
+        yield from fetcher.fetch()
     else:
         logger.log("ℹ️  Skipping fetch (FETCH=false)")
-        return iter([])  # Return empty iterator
+        return  # Empty generator
 
 
 def run_pipeline(db: DB, config: Config) -> None:

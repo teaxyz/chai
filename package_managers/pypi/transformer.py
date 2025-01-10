@@ -51,7 +51,7 @@ class PyPITransformer(Transformer):
         for batch_num in range(1, self.total_batches + 1):
             file_path = os.path.join(self.data_dir, f"{batch_num}.json")
             try:
-                with open(file_path, 'r') as f:
+                with open(file_path) as f:
                     packages = json.load(f)
                     self.logger.log(f"Processing batch {batch_num} with {len(packages)} packages")
                     for package in packages:
@@ -68,7 +68,10 @@ class PyPITransformer(Transformer):
         for package_data in self._read_batch_files():
             try:
                 info = package_data.get("info")
-                if not info:
+                try:
+                    assert info, "Package info is missing"
+                except AssertionError as e:
+                    self.logger.warn(str(e))
                     continue
                 
                 name = info.get("name")
@@ -221,7 +224,10 @@ class PyPITransformer(Transformer):
         for package_data in self._read_batch_files():
             try:
                 info = package_data.get("info")
-                if not info:
+                try:
+                    assert info, "Package info is missing"
+                except AssertionError as e:
+                    self.logger.warn(str(e))
                     continue
                     
                 name = info.get("name")
@@ -290,7 +296,10 @@ class PyPITransformer(Transformer):
         for package_data in self._read_batch_files():
             try:
                 info = package_data.get("info")
-                if not info:
+                try:
+                    assert info, "Package info is missing"
+                except AssertionError as e:
+                    self.logger.warn(str(e))
                     continue
                     
                 name = info.get("name")
@@ -348,15 +357,18 @@ class PyPITransformer(Transformer):
 
     def users(self) -> Generator[Dict[str, Any], None, None]:
         """Skip user data as we can't get GitHub info from PyPI API."""
-        return iter(())
+        if False:  # This ensures it's a generator but never yields anything
+            yield {}
 
     def user_packages(self) -> Generator[Dict[str, Any], None, None]:
         """Skip user-package relationships as we can't get GitHub info from PyPI API."""
-        return iter(())
+        if False:
+            yield {}
 
     def user_versions(self) -> Generator[Dict[str, Any], None, None]:
         """Skip user-version relationships as we can't get GitHub info from PyPI API."""
-        return iter(())
+        if False:
+            yield {}
 
     def _parse_dependency(self, req: str) -> tuple[str, str, str]:
         """Parse a dependency string into name, clean version, and version range.

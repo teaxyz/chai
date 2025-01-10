@@ -1,12 +1,13 @@
-import json
-import os
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
-from datetime import datetime
+from typing import Generator, List, Optional, Any
 from html.parser import HTMLParser
-from typing import Generator, List, Optional
+from dataclasses import dataclass
+from urllib.parse import urljoin
+from datetime import datetime
 import multiprocessing
+import json
+import time
+import os
 
 import requests
 
@@ -43,7 +44,7 @@ class PyPIFetcher(Fetcher):
         self.process_file = os.path.join(self.data_dir, "progress.json") # to store the progress of the fetch
         self.packages_file = os.path.join(self.data_dir, "packages.txt") # a list of all package names
         
-    def _save_process(self, batch_num: int, downloaded: int, fetched: int, total: int):
+    def _save_process(self, batch_num: int, downloaded: int, fetched: int, total: int) -> None:
         """Save current process to progress.json"""
         process = {
             "batch_num": batch_num,
@@ -52,13 +53,18 @@ class PyPIFetcher(Fetcher):
             "total": total,
             "timestamp": datetime.now().isoformat()
         }
-        with open(self.process_file, 'w') as f:
-            json.dump(process, f, indent=2)
+        try:
+            with open(self.process_file, 'w') as f:
+                json.dump(process, f, indent=2)
+        except (IOError, OSError) as e:
+            self.logger.error(f"Failed to open process file for writing: {e}")
+        except json.JSONEncodeError as e:
+            self.logger.error(f"Failed to serialize process data to JSON: {e}")
     
     def _load_process(self) -> tuple[int, int, int, int]:
         """Load process from progress.json if exists"""
         try:
-            with open(self.process_file, 'r') as f:
+            with open(self.process_file) as f:
                 process = json.load(f)
                 return (
                     process["batch_num"],
@@ -66,14 +72,17 @@ class PyPIFetcher(Fetcher):
                     process.get("fetched", 0),
                     process["total"]
                 )
-        except (FileNotFoundError, json.JSONDecodeError):
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            self.logger.error(f"Failed to load process file: {e}")
             return 0, 0, 0, 0
     
     def _save_package_list(self, packages: List[str]):
         """Save package list to packages.txt"""
-        with open(self.packages_file, 'w') as f:
-            for package in packages:
-                f.write(f"{package}\n")
+        try:
+            with open(self.packages_file, 'w') as f:
+                f.writelines(f"{package}\n" for package in packages)
+        except (IOError, OSError) as e:
+            self.logger.error(f"Failed to open package list file for writing: {e}")
     
     def _load_package_list(self) -> List[str]:
         """Load package list from packages.txt if exists"""
@@ -82,24 +91,37 @@ class PyPIFetcher(Fetcher):
                 return [line.strip() for line in f if line.strip()]
         except FileNotFoundError:
             return []
+        except (IOError, OSError) as e:
+            self.logger.error(f"Failed to load package list file: {e}")
+            return []
 
     def _get_package_list(self) -> List[str]:
         """Fetch list of all packages from PyPI simple index."""
-        url = f"{self.base_url}/simple/" # PyPI simple index
-        response = self.session.get(url)
-        response.raise_for_status()
+        url = urljoin(self.base_url, "simple")  # PyPI simple index
+        try:
+            response = self.session.get(url)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            self.logger.error(f"Failed to fetch package list from {url}")
+            self.logger.error(f"Status code: {response.status_code if 'response' in locals() else 'N/A'}")
+            self.logger.error(f"Response body: {response.text if 'response' in locals() else 'N/A'}")
+            self.logger.error(f"Error: {str(e)}")
+            return []
         
         parser = SimpleIndexParser()
         parser.feed(response.text)
         return parser.packages
     
-    def _get_package_data(self, package_name: str) -> Optional[dict]:
+    def _get_package_data(self, package_name: str) -> dict[str, Any] | None:
         """Fetch JSON data for a specific package."""
         # Remove any /simple/ prefix if present
         package_name = package_name.replace('/simple/', '')
         # Remove any trailing slash
         package_name = package_name.rstrip('/')
-        url = f"{self.base_url}/pypi/{package_name}/json" # PyPI JSON API
+
+        base_api_url = urljoin(self.base_url, "pypi/")
+        package_url = urljoin(base_api_url, f"{package_name}/")
+        url = urljoin(package_url, "json")
         
         try:
             response = self.session.get(url)
@@ -138,7 +160,11 @@ class PyPIFetcher(Fetcher):
         6. Track progress in progress.json
         """
         # Create data directory if needed
-        os.makedirs(self.data_dir, exist_ok=True)
+        try:
+            os.makedirs(self.data_dir, exist_ok=True)
+        except (IOError, OSError) as e:
+            self.logger.error(f"Failed to create data directory: {e}")
+            return
         
         # Check if we need to resume
         current_batch, downloaded, fetched, total = self._load_process()
@@ -193,8 +219,13 @@ class PyPIFetcher(Fetcher):
                 file_name = f"{batch_num}.json"
                 file_path = os.path.join(self.data_dir, file_name)
                 
-                with open(file_path, 'w') as f:
-                    json.dump(results, f)
+                try:
+                    with open(file_path, 'w') as f:
+                        json.dump(results, f)
+                except (IOError, OSError) as e:
+                    self.logger.error(f"Failed to open batch file for writing: {e}")
+                except json.JSONEncodeError as e:
+                    self.logger.error(f"Failed to serialize batch data to JSON: {e}")
                 
                 # Update progress
                 self._save_process(batch_num, downloaded, fetched, total_packages)

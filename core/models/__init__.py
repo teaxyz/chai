@@ -196,7 +196,7 @@ class DependsOn(Base):
         }
 
         # if dependency_type_id is provided, include it
-        if hasattr(self, 'dependency_type_id') and self.dependency_type_id is not None:
+        if self.dependency_type_id is not None:
             result["dependency_type_id"] = self.dependency_type_id
         
         return result

@@ -163,9 +163,7 @@ class DB:
         # but the original logic here tries to use the package's import_id as the version's import_id
         # this is a temporary fix (for the implementation of pypi)
         # to fix this completely, we need to update the logic of the crates transformer too
-        if item["package_id"]:
-            package_id = item["package_id"]
-        else:
+        if not (package_id := item.get("package_id")):
             package_id = self.package_cache.get(item["import_id"])
             if not package_id:
                 self.logger.warn(f"package {item['import_id']} not found")
@@ -228,8 +226,9 @@ class DB:
         }
 
         # Add dependency_type_id if provided
-        if "dependency_type_id" in item:
-            depends_on["dependency_type_id"] = item["dependency_type_id"]
+        depends_on.update(
+            {"dependency_type_id": item["dependency_type_id"]} if "dependency_type_id" in item else {}
+        )
 
         return DependsOn(**depends_on).to_dict()
 
