@@ -65,7 +65,7 @@ class TestTransformer:
         - Processing of optional fields
         """
         test_data = {
-            "crate_id": "123",
+            "import_id": "123",
             "num": "1.0.0",
             "id": "456",
             "crate_size": "1000",
@@ -81,7 +81,7 @@ class TestTransformer:
         assert len(versions) == 1
 
         version = versions[0]
-        assert version["crate_id"] == "123"
+        assert version["import_id"] == "123"
         assert version["version"] == "1.0.0"
         assert version["import_id"] == "456"
         assert version["size"] == 1000
@@ -101,7 +101,7 @@ class TestTransformer:
         """
         test_data = {
             "version_id": "456",
-            "crate_id": "789",
+            "import_id": "789",
             "req": "^1.0",
             "kind": "0",  # normal dependency
         }
@@ -113,7 +113,7 @@ class TestTransformer:
 
         dependency = dependencies[0]
         assert dependency["version_id"] == "456"
-        assert dependency["crate_id"] == "789"
+        assert dependency["import_id"] == "789"
         assert dependency["semver_range"] == "^1.0"
         assert dependency["dependency_type"] == DependencyType(0)
 

@@ -69,6 +69,26 @@ services:
       alembic:
         condition: service_completed_successfully
 
+  pypi:
+    build:
+      context: .
+      dockerfile: ./package_managers/pypi/Dockerfile
+    environment:
+      - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
+      - NO_CACHE=${NO_CACHE:-false}
+      - PYTHONPATH=/
+      - DEBUG=${DEBUG:-false}
+      - TEST=${TEST:-false}
+      - FETCH=${FETCH:-true}
+      - FREQUENCY=${FREQUENCY:-24}
+    volumes:
+      - ./data/pypi:/data/pypi
+    depends_on:
+      db:
+        condition: service_healthy
+      alembic:
+        condition: service_completed_successfully
+
   api:
     build:
       context: ./api
