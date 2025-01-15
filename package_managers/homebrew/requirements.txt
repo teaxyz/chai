@@ -1,0 +1,4 @@
+GitPython>=3.1.40
+sqlalchemy>=2.0.34
+psycopg2>=2.9.9
+requests>=2.32.3 
