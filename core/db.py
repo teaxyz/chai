@@ -1,7 +1,7 @@
 import os
-from typing import Any, Dict, Iterable, List, Type
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Type
 
-from sqlalchemy import UUID, create_engine
+from sqlalchemy import UUID, and_, create_engine
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
@@ -10,6 +10,8 @@ from sqlalchemy.orm.decl_api import DeclarativeMeta
 from core.logger import Logger
 from core.models import (
     URL,
+    Commit,
+    CommitParent,
     DependsOn,
     DependsOnType,
     License,
@@ -17,6 +19,7 @@ from core.models import (
     Package,
     PackageManager,
     PackageURL,
+    Signature,
     Source,
     URLType,
     User,
@@ -541,3 +544,128 @@ class DB:
             session.add(DependsOnType(name=name))
             session.commit()
             return session.query(DependsOnType).filter_by(name=name).first()
+
+    def select_packages_by_package_manager_id(
+        self, package_manager_id: UUID
+    ) -> List[Package]:
+        with self.session() as session:
+            return (
+                session.query(Package)
+                .filter_by(package_manager_id=package_manager_id)
+                .all()
+            )
+
+    def get_homepage_url_type(self) -> Optional[URLType]:
+        """Get the homepage URL type"""
+        with self.session() as session:
+            return session.query(URLType).filter(URLType.name == "homepage").first()
+
+    def get_github_url_for_package(
+        self, package_id: UUID, url_type_id: UUID
+    ) -> Optional[str]:
+        """Get a GitHub URL for a package if it exists"""
+        with self.session() as session:
+            package_url = (
+                session.query(PackageURL)
+                .join(URL)
+                .filter(
+                    and_(
+                        PackageURL.package_id == package_id,
+                        URL.url_type_id == url_type_id,
+                        URL.url.like("%github.com%"),
+                    )
+                )
+                .first()
+            )
+            if not package_url:
+                return None
+
+            url = session.query(URL).get(package_url.url_id)
+            if not url:
+                return None
+
+            return url.url
+
+    def get_or_create_user(
+        self, name: str, email: str, source_id: UUID
+    ) -> Tuple[User, bool]:
+        """Get or create a user based on name and email"""
+        import_id = f"{name}<{email}>"
+        with self.session() as session:
+            user = (
+                session.query(User)
+                .filter(
+                    User.source_id == source_id,
+                    User.import_id == import_id,
+                )
+                .first()
+            )
+            if user:
+                return user, False
+
+            user = User(
+                username=name,
+                source_id=source_id,
+                import_id=import_id,
+            )
+            session.add(user)
+            session.commit()
+            return user, True
+
+    def get_or_create_signature(
+        self, key_id: str, verification_status: str, signer_id: Optional[UUID]
+    ) -> Tuple[Signature, bool]:
+        """Get or create a signature based on key_id and verification status"""
+        with self.session() as session:
+            signature = (
+                session.query(Signature)
+                .filter(
+                    Signature.key_id == key_id,
+                    Signature.verification_status == verification_status,
+                )
+                .first()
+            )
+            if signature:
+                return signature, False
+
+            signature = Signature(
+                key_id=key_id,
+                verification_status=verification_status,
+                signer_id=signer_id,
+            )
+            session.add(signature)
+            session.commit()
+            return signature, True
+
+    def get_commit_by_package_and_sha(
+        self, package_id: UUID, sha: str
+    ) -> Optional[Commit]:
+        """Get a commit by package ID and SHA"""
+        with self.session() as session:
+            return (
+                session.query(Commit)
+                .filter(
+                    Commit.package_id == package_id,
+                    Commit.sha == sha,
+                )
+                .first()
+            )
+
+    def create_commit(self, commit_data: Dict[str, Any]) -> Commit:
+        """Create a new commit"""
+        with self.session() as session:
+            commit = Commit(**commit_data)
+            session.add(commit)
+            session.commit()
+            return commit
+
+    def create_commit_parent(self, commit_id: UUID, parent_id: UUID) -> CommitParent:
+        """Create a new commit parent relationship"""
+        with self.session() as session:
+            commit_parent = CommitParent(
+                commit_id=commit_id,
+                parent_id=parent_id,
+            )
+            session.add(commit_parent)
+            session.commit()
+            return commit_parent
