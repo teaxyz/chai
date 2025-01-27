@@ -80,7 +80,7 @@ class DB:
 
     def insert_packages(
         self,
-        package_generator: Iterable[str],
+        package_generator: Iterable[Dict[str, str]],
         package_manager_id: UUID,
         package_manager_name: str,
     ) -> List[UUID]:
@@ -304,7 +304,7 @@ class DB:
                 UserVersion, self._process_batch(batch, process_user_version)
             )
 
-    def insert_urls(self, url_generator: Iterable[str]):
+    def insert_urls(self, url_generator: Iterable[Dict[str, str]]):
         def process_url(item: Dict[str, str]):
             return URL(url=item["url"], url_type_id=item["url_type_id"]).to_dict()
 
