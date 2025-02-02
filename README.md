@@ -50,7 +50,7 @@ These arguments are all configurable in the `docker-compose.yml` file.
 1. `db`: [PostgreSQL] database for the reduced package data
 2. `alembic`: handles migrations
 3. `package_managers`: fetches and writes data for each package manager
-4. `api`: a simple REST api for reading from the db
+4. `api`: a simple REST API for reading from the db
 
 ### Hard Reset
 
