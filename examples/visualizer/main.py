@@ -87,8 +87,14 @@ class DB:
         )
 
     def connect(self) -> None:
-        self.conn = psycopg2.connect(CHAI_DATABASE_URL)
-        self.cursor = self.conn.cursor()
+        if not CHAI_DATABASE_URL:
+            raise RuntimeError("Environment variable CHAI_DATABASE_URL is not set.")
+            
+        try:
+            self.conn = psycopg2.connect(CHAI_DATABASE_URL)
+            self.cursor = self.conn.cursor()
+        except psycopg2.OperationalError as e:
+            raise RuntimeError(f"Failed to connect to the database: {e}")
 
     def select_id(self, package: str) -> int:
         self.cursor.execute("EXECUTE select_id (%s)", (package,))
@@ -196,7 +202,7 @@ def draw(graph: Graph, package: str, img_type: str = "svg"):
         """Convert depth to a grayscale color."""
         if depth == 1:
             return "red"
-        return f"grey{depth + 10 + (depth - 1) // 9}"
+        return f"gray{depth + 10 + (depth - 1) // 9}"
 
     # Unused because I don't visualize edges
     def color_edge(edge):
@@ -225,7 +231,7 @@ def draw(graph: Graph, package: str, img_type: str = "svg"):
         out_dict = {
             "label": label_nodes(node),
             "fontsize": "5",
-            "fontcolor": "grey",
+            "fontcolor": "gray",
             "fontname": "Menlo",
             "color": depth_to_grayscale(node.depth),
             "shape": "circle",

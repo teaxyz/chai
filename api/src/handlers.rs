@@ -24,9 +24,38 @@ struct PaginatedResponse {
     data: Vec<Value>,
 }
 
+pub fn check_table_exists(table: &str, tables: &[String]) -> Option<HttpResponse> {
+    if !tables.contains(&table.to_string()) {
+        Some(HttpResponse::NotFound().json(json!({
+            "error": format!("Table '{}' not found", table),
+            "valid_tables": tables,
+            "help": "Refer to the API documentation for valid table names."
+        })))
+    } else {
+        None
+    }
+}
+
 #[get("/tables")]
-pub async fn list_tables(data: web::Data<AppState>) -> impl Responder {
-    HttpResponse::Ok().json(&*data.tables)
+pub async fn list_tables(
+    query: web::Query<PaginationParams>,
+    data: web::Data<AppState>,
+) -> impl Responder {
+    let total_count = data.tables.len() as i64;
+    let pagination = Pagination::new(query, total_count);
+
+    let start = pagination.offset as usize;
+    let end = (start + pagination.limit as usize).min(data.tables.len());
+
+    let paginated_tables = &data.tables[start..end];
+
+    HttpResponse::Ok().json(json!({
+        "total_count": total_count,
+        "page": pagination.page,
+        "limit": pagination.limit,
+        "total_pages": pagination.total_pages,
+        "data": paginated_tables,
+    }))
 }
 
 #[get("/heartbeat")]
@@ -53,10 +82,8 @@ pub async fn get_table(
     data: web::Data<AppState>,
 ) -> impl Responder {
     let table = path.into_inner();
-    if !data.tables.contains(&table) {
-        return HttpResponse::NotFound().json(json!({
-            "error": format!("Table '{}' not found", table)
-        }));
+    if let Some(response) = check_table_exists(&table, &data.tables) {
+        return response;
     }
 
     let count_query = format!("SELECT COUNT(*) FROM {}", table);
@@ -114,10 +141,8 @@ pub async fn get_table_row(
 ) -> impl Responder {
     let (table_name, id) = path.into_inner();
 
-    if !data.tables.contains(&table_name) {
-        return HttpResponse::NotFound().json(json!({
-            "error": format!("Table '{}' not found", table_name)
-        }));
+    if let Some(response) = check_table_exists(&table_name, &data.tables) {
+        return response;
     }
 
     let query = format!("SELECT * FROM {} WHERE id = $1", table_name);

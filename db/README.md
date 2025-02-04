@@ -1,8 +1,8 @@
 # CHAI Data Model
 
-The CHAI data model is designed to respresnt the package manager data in a unified and
+The CHAI data model is designed to represent the package manager data in a unified and
 consistent form. The model's goal is _standardization_ - of the various complexities,
-and idiosyncracies of each individual package manager. We want to provide a standard way
+and idiosyncrasies of each individual package manager. We want to provide a standard way
 for analysis, querying, and whatever your use case might be.
 
 ## Definitions
@@ -69,7 +69,7 @@ Key fields:
 
 These models define categorizations and types used across the system. All these values
 are loaded from the alembic service, specifically in the
-[load-values.sql](../alembic/versions/load-values.sql) script.
+[load-values.sql](../alembic/load-values.sql) script.
 
 ### URLType
 
@@ -86,8 +86,8 @@ Predefined types (from load-values.sql):
 
 Categorizes different types of dependencies between packages.
 Predefined types (from load-values.sql):
-build
 
+- `build`
 - `development`
 - `runtime`
 - `test`
@@ -160,7 +160,7 @@ one point where we can modify any information about 'crates'.
 ### License
 
 Represents software licenses associated with package versions. Great place to start
-contirbutions!
+contributions!
 
 ### LoadHistory
 
