@@ -63,7 +63,7 @@ class Fetcher:
         os.symlink(latest_path, latest_symlink)
 
     def fetch(self):
-        if self.fetch:
+        if self.source:
             response = get(self.source)
             try:
                 response.raise_for_status()
@@ -104,16 +104,16 @@ class TarballFetcher(Fetcher):
 
 
 class JSONFetcher(Fetcher):
-    def __init__(self, name: str, source: str):
-        super().__init__(name, source)
+    def __init__(self, name: str, config: Config):
+        super().__init__(name, config)
 
     def fetch(self):
         pass
 
 
 class YAMLFetcher(Fetcher):
-    def __init__(self, name: str, source: str):
-        super().__init__(name, source)
+    def __init__(self, name: str, config: Config):
+        super().__init__(name, config)
 
     def fetch(self):
         pass
