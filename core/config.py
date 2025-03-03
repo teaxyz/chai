@@ -21,7 +21,11 @@ NO_CACHE = env_vars("NO_CACHE", "true")
 SOURCES = {
     PackageManager.CRATES: "https://static.crates.io/db-dump.tar.gz",
     PackageManager.HOMEBREW: "https://github.com/Homebrew/homebrew-core/tree/master/Formula",  # noqa
-    PackageManager.DEBIAN: "https://ftp.debian.org/debian/dists/stable/main/source/Sources.gz",  # noqa
+    # for debian, sources contains the urls, packages is tied to the linux distribution
+    PackageManager.DEBIAN: [
+        "https://ftp.debian.org/debian/dists/stable/main/binary-amd64/Packages.gz",
+        "https://ftp.debian.org/debian/dists/stable/main/source/Sources.gz",
+    ],
 }
 
 # The three configuration values URLTypes, DependencyTypes, and UserTypes will query the
