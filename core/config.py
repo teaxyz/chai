@@ -1,6 +1,6 @@
 from enum import Enum
 
-from sqlalchemy import UUID, true
+from sqlalchemy import UUID
 
 from core.db import DB
 from core.logger import Logger
