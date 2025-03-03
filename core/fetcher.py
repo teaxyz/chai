@@ -1,3 +1,4 @@
+import gzip
 import os
 import tarfile
 from dataclasses import dataclass
@@ -103,17 +104,14 @@ class TarballFetcher(Fetcher):
         return files
 
 
-class JSONFetcher(Fetcher):
-    def __init__(self, name: str, config: Config):
+# GZip generally compresses only one file, so file_path and file_name are not used
+class GZipFetcher(Fetcher):
+    def __init__(self, name: str, config: Config, file_path: str, file_name: str):
         super().__init__(name, config)
+        self.file_path = file_path
+        self.file_name = file_name
 
-    def fetch(self):
-        pass
-
-
-class YAMLFetcher(Fetcher):
-    def __init__(self, name: str, config: Config):
-        super().__init__(name, config)
-
-    def fetch(self):
-        pass
+    def fetch(self) -> list[Data]:
+        content = super().fetch()
+        decompressed = gzip.decompress(content).decode("utf-8")
+        return [Data(self.file_path, self.file_name, decompressed.encode("utf-8"))]
