@@ -49,7 +49,7 @@ class ExecConf:
 
 class PMConf:
     pm_id: str
-    source: str
+    source: str | list[str]
 
     def __init__(self, pm: PackageManager, db: DB):
         self.pm_id = db.select_package_manager_by_name(pm.value, create=True).id
