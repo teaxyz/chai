@@ -1,5 +1,6 @@
 import gzip
 import os
+import sys
 import tarfile
 from dataclasses import dataclass
 from datetime import datetime
@@ -63,15 +64,28 @@ class Fetcher:
         self.logger.debug(f"creating symlink {latest_symlink} -> {latest_path}")
         os.symlink(latest_path, latest_symlink)
 
-    def fetch(self):
-        if self.source:
+    def fetch(self) -> bytes | list[bytes]:
+        if not self.source:
+            raise ValueError("source is not set")
+
+        if isinstance(self.source, list):
+            content = []
+            for source in self.source:
+                response = get(source)
+                try:
+                    response.raise_for_status()
+                except Exception as e:
+                    self.logger.error(f"error fetching {source}: {e}")
+                    raise e
+                content.append(response.content)
+            return content
+        else:
             response = get(self.source)
             try:
                 response.raise_for_status()
             except Exception as e:
                 self.logger.error(f"error fetching {self.source}: {e}")
                 raise e
-
             return response.content
 
     def cleanup(self):
@@ -90,6 +104,7 @@ class TarballFetcher(Fetcher):
         bytes_io_object = BytesIO(content)
         bytes_io_object.seek(0)
 
+        # TODO: if multiple files
         files = []
         with tarfile.open(fileobj=bytes_io_object, mode="r:gz") as tar:
             for member in tar.getmembers():
@@ -113,5 +128,19 @@ class GZipFetcher(Fetcher):
 
     def fetch(self) -> list[Data]:
         content = super().fetch()
-        decompressed = gzip.decompress(content).decode("utf-8")
-        return [Data(self.file_path, self.file_name, decompressed.encode("utf-8"))]
+        files = []
+
+        if isinstance(content, list):
+            print("***** LIST")
+            for item in content:
+                decompressed = gzip.decompress(item).decode("utf-8")
+                files.append(
+                    Data(self.file_path, self.file_name, decompressed.encode("utf-8"))
+                )
+        else:
+            decompressed = gzip.decompress(content).decode("utf-8")
+            files.append(
+                Data(self.file_path, self.file_name, decompressed.encode("utf-8"))
+            )
+
+        return files
