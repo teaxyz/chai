@@ -128,7 +128,7 @@ class DB:
     ):
         if update_packages:
             self._update_cache(
-                self.package_cache, Package, "import_id", "id", items, "crate_id"
+                self.package_cache, Package, "import_id", "id", items, "import_id"
             )
         if update_users:
             self._update_cache(
@@ -136,7 +136,7 @@ class DB:
             )
         if update_versions:
             self._update_cache(
-                self.version_cache, Version, "import_id", "id", items, "version_id"
+                self.version_cache, Version, "import_id", "id", items, "import_id"
             )
         if update_licenses:
             self._update_cache(
@@ -159,10 +159,15 @@ class DB:
             self._insert_batch(Version, versions)
 
     def _process_version(self, item: Dict[str, str]):
-        package_id = self.package_cache.get(item["crate_id"])
-        if not package_id:
-            self.logger.warn(f"package {item['crate_id']} not found")
-            return None
+        # FIXME: this is a hack, the import_id of a version shouldn't be the same as the package's import_id
+        # but the original logic here tries to use the package's import_id as the version's import_id
+        # this is a temporary fix (for the implementation of pypi)
+        # to fix this completely, we need to update the logic of the crates transformer too
+        if not (package_id := item.get("package_id")):
+            package_id = self.package_cache.get(item["import_id"])
+            if not package_id:
+                self.logger.warn(f"package {item['import_id']} not found")
+                return None
 
         license_id = self.license_cache.get(item["license"])
         if not license_id:
@@ -201,11 +206,31 @@ class DB:
             self._insert_batch(DependsOn, dependencies)
 
     def _process_depends_on(self, item: Dict[str, str]):
-        return DependsOn(
-            version_id=self.version_cache[item["version_id"]],
-            dependency_id=self.package_cache[item["crate_id"]],
-            semver_range=item["semver_range"],
-        ).to_dict()
+        version_id = self.version_cache.get(item["version_id"])
+
+        # in case the version cannot be found from the cache
+        if not version_id:
+            # we need to fetch from the database
+            version = self.select_version_by_import_id(item["version_id"])
+            if not version:
+                self.logger.warn(f"version {item['version_id']} not found")
+                return None
+            version_id = version.id
+            self.version_cache[item["version_id"]] = version_id
+
+        # Create base dependency object
+        depends_on = {
+            "version_id": self.version_cache[item["version_id"]],
+            "dependency_id": self.package_cache[item["import_id"]],
+            "semver_range": item["semver_range"]
+        }
+
+        # Add dependency_type_id if provided
+        depends_on.update(
+            {"dependency_type_id": item["dependency_type_id"]} if "dependency_type_id" in item else {}
+        )
+
+        return DependsOn(**depends_on).to_dict()
 
     def insert_users(self, user_generator: Iterable[dict[str, str]], source_id: UUID):
         def process_user(item: Dict[str, str]):
@@ -245,13 +270,13 @@ class DB:
             self.logger.warn(f"user {item['owner_id']} not found")
             return None
 
-        if item["crate_id"] not in self.package_cache:
-            self.logger.warn(f"package {item['crate_id']} not found")
+        if item["import_id"] not in self.package_cache:
+            self.logger.warn(f"package {item['import_id']} not found")
             return None
 
         return UserPackage(
             user_id=self.user_cache[item["owner_id"]],
-            package_id=self.package_cache[item["crate_id"]],
+            package_id=self.package_cache[item["import_id"]],
         ).to_dict()
 
     def insert_user_versions(
@@ -474,6 +499,18 @@ class DB:
     def select_version_by_import_id(self, import_id: str) -> Version | None:
         with self.session() as session:
             result = session.query(Version).filter_by(import_id=import_id).first()
+            if result:
+                return result
+    
+    def select_latest_version_by_import_id(self, import_id: str) -> Version | None:
+        with self.session() as session:
+            # First get the package
+            package = session.query(Package).filter_by(import_id=import_id).first()
+            if not package:
+                return None
+            
+            # Then get the latest version for this package
+            result = session.query(Version).filter_by(package_id=package.id).order_by(Version.version.desc()).first()
             if result:
                 return result
 

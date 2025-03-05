@@ -92,7 +92,7 @@ class CratesTransformer(Transformer):
 
             yield {
                 "version_id": start_id,
-                "crate_id": end_id,
+                "import_id": end_id,
                 "semver_range": req,
                 "dependency_type": dependency_type,
             }
@@ -130,7 +130,7 @@ class CratesTransformer(Transformer):
             owner_id = row["owner_id"]
 
             yield {
-                "crate_id": crate_id,
+                "import_id": crate_id,
                 "owner_id": owner_id,
             }
 

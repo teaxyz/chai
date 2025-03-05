@@ -12,6 +12,7 @@ logger = Logger("config")
 class PackageManager(Enum):
     CRATES = "crates"
     HOMEBREW = "homebrew"
+    PYPI = "pypi"
 
 
 TEST = env_vars("TEST", "false")
@@ -20,6 +21,7 @@ NO_CACHE = env_vars("NO_CACHE", "true")
 SOURCES = {
     PackageManager.CRATES: "https://static.crates.io/db-dump.tar.gz",
     PackageManager.HOMEBREW: "https://github.com/Homebrew/homebrew-core/tree/master/Formula",  # noqa
+    PackageManager.PYPI: "https://pypi.org/simple/",  # Base URL for PyPI's Simple API
 }
 
 # The three configuration values URLTypes, DependencyTypes, and UserTypes will query the
