@@ -9,7 +9,6 @@ from typing import Any
 
 from requests import get
 
-from core.config import Config
 from core.logger import Logger
 
 
