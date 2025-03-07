@@ -1,4 +1,6 @@
-from package_managers.debian.parser import DebianData, DebianParser
+# ruff: noqa: E501
+
+from package_managers.debian.parser import DebianParser
 
 
 class TestDebianParser:

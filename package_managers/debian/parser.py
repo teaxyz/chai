@@ -251,8 +251,3 @@ def handle_maintainer(value: str) -> Maintainer:
     if match:
         return Maintainer(name=match.group(1), email=match.group(2))
     raise ValueError(f"Invalid maintainer: {value}")
-
-
-if __name__ == "__main__":
-    x = DebianData()
-    print(x)
