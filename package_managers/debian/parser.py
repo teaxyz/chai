@@ -216,15 +216,7 @@ class DebianParser:
             case "Maintainer":
                 obj.maintainer = handle_maintainer(value.strip())
 
-            # File Fields
-            # case "Files":
-            #     files = value.split(" ")
-            #     obj.files.append(File(hash=files[0], size=files[1], filename=files[2]))
-            # case "Checksums-Sha256":
-            #     files = value.split(" ")
-            #     obj.checksums_sha256.append(
-            #         File(hash=files[0], size=files[1], filename=files[2])
-            #     )
+            # TODO: File Fields
             case _:
                 pass
 
