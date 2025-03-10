@@ -207,8 +207,8 @@ def draw(graph: Graph, package: str, img_type: str = "svg"):
     # Unused because I don't visualize edges
     def color_edge(edge):
         out_dict = {
-            "color": "lightgrey",
-            "fillcolor": "lightgrey",
+            "color": "lightgray",
+            "fillcolor": "lightgray",
             "penwidth": "0.05",
             "arrowsize": "0.05",
             "arrowhead": "tee",
