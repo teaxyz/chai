@@ -116,7 +116,7 @@ Testsuite-Triggers: g++, pyrex
         assert source.uploaders[1].email == "euank@euank.com"
 
         # Test build depends parsing
-        assert len(source.build_depends) > 0
+        assert len(source.build_depends) == 25
         assert any(dep.package == "debhelper-compat" for dep in source.build_depends)
 
         # Test other source fields
