@@ -12,6 +12,7 @@ logger = Logger("config")
 class PackageManager(Enum):
     CRATES = "crates"
     HOMEBREW = "homebrew"
+    DEBIAN = "debian"
 
 
 TEST = env_vars("TEST", "false")
@@ -20,6 +21,11 @@ NO_CACHE = env_vars("NO_CACHE", "true")
 SOURCES = {
     PackageManager.CRATES: "https://static.crates.io/db-dump.tar.gz",
     PackageManager.HOMEBREW: "https://github.com/Homebrew/homebrew-core/tree/master/Formula",  # noqa
+    # for debian, sources contains the urls, packages is tied to the linux distribution
+    PackageManager.DEBIAN: [
+        "https://ftp.debian.org/debian/dists/stable/main/binary-amd64/Packages.gz",
+        "https://ftp.debian.org/debian/dists/stable/main/source/Sources.gz",
+    ],
 }
 
 # The three configuration values URLTypes, DependencyTypes, and UserTypes will query the
@@ -43,10 +49,10 @@ class ExecConf:
 
 class PMConf:
     pm_id: str
-    source: str
+    source: str | list[str]
 
     def __init__(self, pm: PackageManager, db: DB):
-        self.pm_id = db.select_package_manager_by_name(pm.value).id
+        self.pm_id = db.select_package_manager_by_name(pm.value, create=True).id
         self.source = SOURCES[pm]
 
     def __str__(self):
@@ -120,7 +126,3 @@ class Config:
 
     def __str__(self):
         return f"Config(exec_config={self.exec_config}, pm_config={self.pm_config}, url_types={self.url_types}, user_types={self.user_types}, dependency_types={self.dependency_types})"  # noqa
-
-
-if __name__ == "__main__":
-    print(PackageManager.CRATES.value)

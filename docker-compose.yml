@@ -69,28 +69,28 @@ services:
       alembic:
         condition: service_completed_successfully
 
-  api:
-    build:
-      context: ./api
-      dockerfile: Dockerfile
-    environment:
-      - DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
-      - HOST=0.0.0.0
-      - PORT=8080
-    ports:
-      - "8080:8080"
-    depends_on:
-      db:
-        condition: service_healthy
-      alembic:
-        condition: service_completed_successfully
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/heartbeat"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
+  # api:
+  #   build:
+  #     context: ./api
+  #     dockerfile: Dockerfile
+  #   environment:
+  #     - DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
+  #     - HOST=0.0.0.0
+  #     - PORT=8080
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     alembic:
+  #       condition: service_completed_successfully
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8080/heartbeat"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 5s
 
   monitor:
     build:
@@ -105,3 +105,23 @@ services:
         condition: service_started
       homebrew:
         condition: service_started
+
+  debian:
+    build:
+      context: .
+      dockerfile: ./package_managers/debian/Dockerfile
+    environment:
+      - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
+      - NO_CACHE=${NO_CACHE:-false}
+      - PYTHONPATH=/
+      - DEBUG=${DEBUG:-false}
+      - TEST=${TEST:-false}
+      - FETCH=${FETCH:-true}
+      - FREQUENCY=${FREQUENCY:-24}
+    volumes:
+      - ./data/debian:/data/debian
+    depends_on:
+      db:
+        condition: service_healthy
+      alembic:
+        condition: service_completed_successfully

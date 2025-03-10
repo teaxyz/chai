@@ -150,6 +150,15 @@ docker compose down
 docker compose logs
 ```
 
+### db-start
+
+Runs migrations and starts up te database
+
+```sh
+docker compose build --no-cache db alembic
+docker compose up alembic -d
+```
+
 ### db-reset
 
 Requires: stop

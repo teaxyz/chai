@@ -11,7 +11,12 @@ logger = Logger("crates_orchestrator")
 
 
 def fetch(config: Config) -> TarballFetcher:
-    fetcher = TarballFetcher("crates", config)
+    fetcher = TarballFetcher(
+        "crates",
+        config.pm_config.source,
+        config.exec_config.no_cache,
+        config.exec_config.test,
+    )
     files = fetcher.fetch()
     fetcher.write(files)
     return fetcher
