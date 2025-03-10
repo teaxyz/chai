@@ -1,7 +1,5 @@
 #!/usr/bin/env pkgx +python@3.11 uv run --with alembic==1.13.2 --with certifi==2024.8.30 --with charset-normalizer==3.3.2 --with idna==3.8 --with mako==1.3.5 --with markupsafe==2.1.5 --with psycopg2==2.9.9 --with pyyaml==6.0.2 --with requests==2.32.3 --with ruff==0.6.5 --with schedule==1.2.0 --with sqlalchemy==2.0.34 --with typing-extensions==4.12.2 --with urllib3==2.2.2 #noqa
 
-# from debian_mirror import DebianMirror
-
 from core.config import Config, PackageManager
 from core.db import DB
 from core.fetcher import GZipFetcher
