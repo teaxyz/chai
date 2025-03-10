@@ -189,10 +189,8 @@ class DebianParser:
                     obj.provides.append(handle_depends(dependency.strip()))
             case "Recommends":
                 dependencies = value.split(", ")
-                print(f"******* Recommended dependencies: {dependencies}")
                 for dependency in dependencies:
                     obj.recommends.append(handle_depends(dependency.strip()))
-                print(f"******* Recommends: {obj.recommends}")
             case "Suggests":
                 dependencies = value.split(", ")
                 for dependency in dependencies:
@@ -211,7 +209,26 @@ class DebianParser:
 
             # Maintainer fields
             case "Uploaders":
-                for uploader in value.split(", "):
+                # Split by comma but respect quoted sections
+                uploaders = []
+                in_quotes = False
+                current = ""
+
+                for char in value:
+                    if char == '"':
+                        in_quotes = not in_quotes
+                        current += char
+                    elif char == "," and not in_quotes:
+                        if current.strip():
+                            uploaders.append(current.strip())
+                        current = ""
+                    else:
+                        current += char
+
+                if current.strip():
+                    uploaders.append(current.strip())
+
+                for uploader in uploaders:
                     obj.uploaders.append(handle_maintainer(uploader.strip()))
             case "Maintainer":
                 obj.maintainer = handle_maintainer(value.strip())
@@ -237,9 +254,18 @@ def handle_depends(dependency: str) -> Depends:
 
 
 def handle_maintainer(value: str) -> Maintainer:
-    match = re.match(r"^(.*) <(.*)>,?$", value)
-    # Debian Games Team <pkg-games-devel@lists.alioth.debian.org>
-    # There might be a comma at the end of the name
+    # Remove trailing comma if present
+    value = value.rstrip(",")
+
+    # For names with quotes like "Adam C. Powell, IV" <hazelsct@debian.org>
+    if '"' in value:
+        match = re.match(r'^"([^"]*)" <([^>]*)>$', value)
+        if match:
+            return Maintainer(name=match.group(1), email=match.group(2))
+
+    # Standard format: Name <email@example.com>
+    match = re.match(r"^(.*) <([^>]*)>$", value)
     if match:
         return Maintainer(name=match.group(1), email=match.group(2))
+
     raise ValueError(f"Invalid maintainer: {value}")

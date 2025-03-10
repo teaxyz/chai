@@ -1,6 +1,6 @@
 # ruff: noqa: E501
 
-from package_managers.debian.parser import DebianParser
+from package_managers.debian.parser import DebianParser, handle_maintainer
 
 
 class TestDebianParser:
@@ -125,3 +125,27 @@ Testsuite-Triggers: g++, pyrex
         assert source.vcs_git == "https://salsa.debian.org/games-team/0ad.git"
         assert source.testsuite == "autopkgtest"
         assert source.testsuite_triggers == "g++, pyrex"
+
+    def test_handle_uploaders(self):
+        maintainer = """Package: example
+Uploaders: "Adam C. Powell, IV" <hazelsct@debian.org>, Drew Parsons <dparsons@debian.org>"""
+        parser = DebianParser(maintainer)
+        sources = list(parser.parse())
+        assert len(sources) == 1
+        source = sources[0]
+        assert len(source.uploaders) == 2
+        assert source.uploaders[0].name == "Adam C. Powell, IV"
+        assert source.uploaders[0].email == "hazelsct@debian.org"
+        assert source.uploaders[1].name == "Drew Parsons"
+        assert source.uploaders[1].email == "dparsons@debian.org"
+
+        maintainer = """Package: calamares-extensions
+Binary: calamares-extensions, calamares-extensions-data
+Version: 1.2.1-2
+Maintainer: Debian KDE Extras Team <pkg-kde-extras@lists.alioth.debian.org>,"""
+        parser = DebianParser(maintainer)
+        sources = list(parser.parse())
+        assert len(sources) == 1
+        source = sources[0]
+        assert source.maintainer.name == "Debian KDE Extras Team"
+        assert source.maintainer.email == "pkg-kde-extras@lists.alioth.debian.org"
