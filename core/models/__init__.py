@@ -417,3 +417,20 @@ class PackageURL(Base):
             "package_id": self.package_id,
             "url_id": self.url_id,
         }
+
+
+class LegacyDependency(Base):
+    __tablename__ = "legacy_dependencies"
+    id = Column(Integer, primary_key=True)
+    package_id = Column(
+        UUID(as_uuid=True), ForeignKey("packages.id"), nullable=False, index=True
+    )
+    dependency_id = Column(
+        UUID(as_uuid=True), ForeignKey("packages.id"), nullable=False, index=True
+    )
+    created_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+    updated_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
