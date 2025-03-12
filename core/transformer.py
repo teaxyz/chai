@@ -40,6 +40,11 @@ class Transformer:
             self.logger.error(f"{file_name} not found in {input_dir}")
             raise FileNotFoundError(f"Missing {file_name} file")
 
+    def open(self, file_name: str) -> str:
+        file_path = self.finder(file_name)
+        with open(file_path, "r") as file:
+            return file.read()
+
     def packages(self):
         pass
 
