@@ -2,60 +2,46 @@
 
 Tools for loading legacy CHAI data into the current CHAI database framework.
 
+## Requirements
+
+- pkgx.sh
+
 ## Overview
 
-This project provides scripts to efficiently transfer data from the legacy CHAI database into the current CHAI schema. It handles large volumes of data through batched processing to prevent memory issues.
+This is a set of utility python scripts to efficiently transfer data from the legacy CHAI
+database into the current CHAI schema.
 
 ## Loader Scripts
 
-- `package_loader.py`: Loads package data from the legacy database to the current schema
+- `add_package_fields.py`: enriches package data dumps from Legacy CHAI with fields
+  required by CHAI
+- `copy_dependencies_no_thread.py`: fetches dependency data from `public.sources` for a
+  given package manager and uses psycopg2's `copy_expert` function to load it in
+  batches into CHAI
 
 ## Usage
 
 1. Set up environment variables (or use defaults):
 
 ```bash
-export LEGACY_DB_HOST=localhost
-export LEGACY_DB_NAME=chai_legacy
-export LEGACY_DB_USER=postgres
-export LEGACY_DB_PASSWORD=postgres
-export LEGACY_DB_PORT=5432
-export CHAI_DB_URL=postgresql://postgres:postgres@localhost:5432/chai
+export LEGACY_CHAI_DATABASE_URL=credentials_from_itn
+export CHAI_DATABASE_URL=postgresql://postgres:postgres@localhost:5435/chai
 ```
 
-2. Run the package loader:
+2. Loading packages
+
+   1. Run [packages.sql](sql/packages.sql), which generates a csv
+   1. Run `add_package_fields.py` to enrich it with additional fields
+   1. `psql $CHAI_DATABASE_URL -c CREATE TABLE temp_import (LIKE packages)`
+   1. `psql $CHAI_DATABASE_URL -c "\COPY temp_import (derived_id, name, import_id, id, created_at, updated_at, package_manager_id) FROM '/path/to/csv' WITH (FORMAT csv, HEADER true, DELIMITER ',')"`
+   1. `psql $CHAI_DATABASE_URL -c INSERT INTO packages SELECT * FROM temp_import ON CONFLICT DO NOTHING;`
+   1. `psql $CHAI_DATABASE_URL -c DROP TABLE temp_import`
+
+3. Loading dependencies
+
+With pkgx, just invoking the script from the root directory of chai
 
 ```bash
-python package_loader.py
+cd ../..
+PYTHONPATH=. copy_dependencies_no_thread.py
 ```
-
-## Data Loading Order
-
-Based on database relationships, the loaders should be run in this order:
-
-1. Packages
-2. Versions (requires package IDs)
-3. URLs and Package URLs
-4. Dependencies (requires version IDs and package IDs)
-
-## Development
-
-### Requirements
-
-- Python 3.6+
-- `psycopg2`
-- `sqlalchemy`
-
-Install dependencies:
-
-```bash
-pip install psycopg2-binary sqlalchemy
-```
-
-### Adding New Loaders
-
-When adding loaders for additional tables:
-
-1. Create SQL files in the `sql/` directory to extract data from legacy tables
-2. Follow the pattern in existing loaders for efficient batch processing
-3. Maintain proper relationships by loading tables in the correct order
