@@ -1,9 +1,9 @@
 #!/usr/bin/env pkgx +python@3.11 uv run --with alembic==1.13.2 --with certifi==2024.8.30 --with charset-normalizer==3.3.2 --with idna==3.8 --with mako==1.3.5 --with markupsafe==2.1.5 --with psycopg2==2.9.9 --with pyyaml==6.0.2 --with requests==2.32.3 --with ruff==0.6.5 --with schedule==1.2.0 --with sqlalchemy==2.0.34 --with typing-extensions==4.12.2 --with urllib3==2.2.2 #noqa
 
 from core.config import Config, PackageManager
-from core.db import DB
 from core.fetcher import GZipFetcher
 from core.logger import Logger
+from core.scheduler import Scheduler
 from package_managers.debian.loader import DebianLoader
 from package_managers.debian.transformer import DebianTransformer
 
@@ -42,7 +42,7 @@ def fetch(config: Config) -> None:
     sources_fetcher.cleanup()
 
 
-def run_pipeline(db: DB, config: Config) -> None:
+def run_pipeline(config: Config) -> None:
     logger.log("Starting Debian pipeline")
     fetch(config)
     transformer = DebianTransformer(config)
@@ -67,15 +67,14 @@ def run_pipeline(db: DB, config: Config) -> None:
 
 def main():
     logger.log("Initializing Debian package manager")
-    db = DB()
-    config = Config(PackageManager.DEBIAN, db)
+    config = Config(PackageManager.DEBIAN)
     logger.debug(f"Using config: {config}")
 
-    # scheduler = Scheduler("debian")
-    # scheduler.start(run_pipeline, db, config)
+    scheduler = Scheduler("debian")
+    scheduler.start(run_pipeline, config)
 
     # run immediately
-    run_pipeline(db, config)
+    run_pipeline(config)
 
 
 if __name__ == "__main__":

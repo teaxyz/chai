@@ -158,6 +158,7 @@ class TestTransformer:
 
         urls = list(transformer.package_urls())
         assert len(urls) == 3  # One for each URL type
+        print(urls)
 
         # Check homepage URL
         homepage = next(
