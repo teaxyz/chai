@@ -104,7 +104,7 @@ class TarballFetcher(Fetcher):
         return files
 
 
-# GZip generally compresses only one file, so file_path and file_name are not used
+# GZip compresses only one file, so file_path and file_name are not used
 class GZipFetcher(Fetcher):
     def __init__(
         self,

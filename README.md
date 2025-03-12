@@ -152,7 +152,7 @@ docker compose logs
 
 ### db-start
 
-Runs migrations and starts up te database
+Runs migrations and starts up the database
 
 ```sh
 docker compose build --no-cache db alembic
