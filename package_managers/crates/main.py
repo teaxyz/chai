@@ -1,10 +1,11 @@
+#!/usr/bin/env pkgx +python@3.11 uv run
 import time
 
 from core.config import Config, PackageManager
-from core.db import DB
 from core.fetcher import TarballFetcher
 from core.logger import Logger
 from core.scheduler import Scheduler
+from package_managers.crates.db import CratesDB
 from package_managers.crates.transformer import CratesTransformer
 
 logger = Logger("crates_orchestrator")
@@ -22,7 +23,7 @@ def fetch(config: Config) -> TarballFetcher:
     return fetcher
 
 
-def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
+def load(db: CratesDB, transformer: CratesTransformer, config: Config) -> None:
     db.insert_packages(
         transformer.packages(),
         config.pm_config.pm_id,
@@ -42,7 +43,7 @@ def load(db: DB, transformer: CratesTransformer, config: Config) -> None:
     logger.log("✅ crates")
 
 
-def run_pipeline(db: DB, config: Config) -> None:
+def run_pipeline(db: CratesDB, config: Config) -> None:
     fetcher = fetch(config)
     transformer = CratesTransformer(config.url_types, config.user_types)
     load(db, transformer, config)
@@ -57,8 +58,8 @@ def run_pipeline(db: DB, config: Config) -> None:
 
 
 def main():
-    db = DB()
-    config = Config(PackageManager.CRATES, db)
+    db = CratesDB("crates_db")
+    config = Config(PackageManager.CRATES)
     logger.debug(config)
 
     scheduler = Scheduler("crates")
