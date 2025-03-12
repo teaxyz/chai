@@ -1,3 +1,4 @@
+import gzip
 import os
 import tarfile
 from dataclasses import dataclass
@@ -8,7 +9,6 @@ from typing import Any
 
 from requests import get
 
-from core.config import Config
 from core.logger import Logger
 
 
@@ -20,13 +20,13 @@ class Data:
 
 
 class Fetcher:
-    def __init__(self, name: str, config: Config):
+    def __init__(self, name: str, source: str, no_cache: bool, test: bool):
         self.name = name
-        self.source = config.pm_config.source
+        self.source = source
         self.output = f"data/{name}"
         self.logger = Logger(f"{name}_fetcher")
-        self.no_cache = config.exec_config.no_cache
-        self.test = config.exec_config.test
+        self.no_cache = no_cache
+        self.test = test
 
     def write(self, files: list[Data]):
         """generic write function for some collection of files"""
@@ -62,16 +62,17 @@ class Fetcher:
         self.logger.debug(f"creating symlink {latest_symlink} -> {latest_path}")
         os.symlink(latest_path, latest_symlink)
 
-    def fetch(self):
-        if self.source:
-            response = get(self.source)
-            try:
-                response.raise_for_status()
-            except Exception as e:
-                self.logger.error(f"error fetching {self.source}: {e}")
-                raise e
+    def fetch(self) -> bytes:
+        if not self.source:
+            raise ValueError("source is not set")
 
-            return response.content
+        response = get(self.source)
+        try:
+            response.raise_for_status()
+        except Exception as e:
+            self.logger.error(f"error fetching {self.source}: {e}")
+            raise e
+        return response.content
 
     def cleanup(self):
         if self.no_cache:
@@ -80,8 +81,8 @@ class Fetcher:
 
 
 class TarballFetcher(Fetcher):
-    def __init__(self, name: str, config: Config):
-        super().__init__(name, config)
+    def __init__(self, name: str, source: str, no_cache: bool, test: bool):
+        super().__init__(name, source, no_cache, test)
 
     def fetch(self) -> list[Data]:
         content = super().fetch()
@@ -103,17 +104,26 @@ class TarballFetcher(Fetcher):
         return files
 
 
-class JSONFetcher(Fetcher):
-    def __init__(self, name: str, config: Config):
-        super().__init__(name, config)
+# GZip compresses only one file, so file_path and file_name are not used
+class GZipFetcher(Fetcher):
+    def __init__(
+        self,
+        name: str,
+        source: str,
+        no_cache: bool,
+        test: bool,
+        file_path: str,
+        file_name: str,
+    ):
+        super().__init__(name, source, no_cache, test)
+        self.file_path = file_path
+        self.file_name = file_name
 
-    def fetch(self):
-        pass
+    def fetch(self) -> list[Data]:
+        content = super().fetch()
+        files = []
 
+        decompressed = gzip.decompress(content).decode("utf-8")
+        files.append(Data(self.file_path, self.file_name, decompressed.encode("utf-8")))
 
-class YAMLFetcher(Fetcher):
-    def __init__(self, name: str, config: Config):
-        super().__init__(name, config)
-
-    def fetch(self):
-        pass
+        return files
