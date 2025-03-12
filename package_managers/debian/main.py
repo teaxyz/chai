@@ -68,7 +68,7 @@ def run_pipeline(db: DB, config: Config) -> None:
 def main():
     logger.log("Initializing Debian package manager")
     db = DB()
-    config = Config(PackageManager.DEBIAN, db)
+    config = Config(PackageManager.DEBIAN)
     logger.debug(f"Using config: {config}")
 
     # scheduler = Scheduler("debian")
