@@ -13,7 +13,7 @@ BATCH_SIZE = 10000
 
 class DebianLoader(DB):
     def __init__(self, config: Config, data: Dict[str, Cache]):
-        super().__init__()
+        super().__init__("debian_db")
         self.data = data
         self.debug = config.exec_config.test
         self.logger.debug(f"Initialized DebianLoader with {len(data)} cache entries")
