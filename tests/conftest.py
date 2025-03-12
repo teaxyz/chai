@@ -11,7 +11,7 @@ from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session
 
 from core.config import URLTypes, UserTypes
-from core.db import DB
+from core.db import ConfigDB
 from core.models import Base, PackageManager, Source, URLType
 
 
@@ -21,7 +21,7 @@ def mock_db():
     Create a mock DB with necessary methods for transformer tests.
     This fixture provides consistent mock objects for URL types and sources.
     """
-    db = MagicMock(spec=DB)
+    db = MagicMock(spec=ConfigDB)
 
     # Mock URL types with consistent UUIDs
     homepage_type = MagicMock()
@@ -33,10 +33,12 @@ def mock_db():
     source_type = MagicMock()
     source_type.id = uuid.UUID("00000000-0000-0000-0000-000000000004")
 
-    db.select_url_types_homepage.return_value = homepage_type
-    db.select_url_types_repository.return_value = repository_type
-    db.select_url_types_documentation.return_value = documentation_type
-    db.select_url_types_source.return_value = source_type
+    db.select_url_types_by_name.side_effect = lambda name: {
+        "homepage": homepage_type,
+        "repository": repository_type,
+        "documentation": documentation_type,
+        "source": source_type,
+    }[name]
 
     # Mock sources with consistent UUIDs
     github_source = MagicMock()
