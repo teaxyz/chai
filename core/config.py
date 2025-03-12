@@ -44,7 +44,7 @@ class ExecConf:
         self.no_cache = NO_CACHE
 
     def __str__(self):
-        return f"ExecConf(test={self.test},fetch={self.fetch},no_cache={self.no_cache}"
+        return f"ExecConf(test={self.test},fetch={self.fetch},no_cache={self.no_cache})"
 
 
 class PMConf:
