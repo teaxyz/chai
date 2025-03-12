@@ -142,9 +142,7 @@ class DebianLoader(DB):
                         temp_version.package_id = cache.package.id
                     version_objects.append(temp_version)
                 else:
-                    raise ValueError(
-                        f"Unexpected version type: {type(temp_version)} when loading versions"
-                    )
+                    raise ValueError(f"Unexpected version type: {type(temp_version)}")
 
         self.logger.log(f"Found {len(version_objects)} versions to insert")
 
@@ -172,7 +170,7 @@ class DebianLoader(DB):
                 for i in range(0, len(version_dicts), BATCH_SIZE):
                     batch = version_dicts[i : i + BATCH_SIZE]
                     self.logger.log(
-                        f"Processing batch {i//BATCH_SIZE + 1}/{(len(version_dicts)-1)//BATCH_SIZE + 1} ({len(batch)} versions)"
+                        f"Processing batch {i//BATCH_SIZE + 1}/{(len(version_dicts)-1)//BATCH_SIZE + 1} ({len(batch)} versions)"  # noqa
                     )
 
                     # Use PostgreSQL dialect insert with returning clause
@@ -229,7 +227,7 @@ class DebianLoader(DB):
                         )
 
                         if import_id in version_id_map:
-                            # If it's a TempVersion, replace it with a full Version object
+                            # Replace TempVersion with Version
                             if isinstance(version, TempVersion):
                                 cache.versions[i] = Version(
                                     id=version_id_map[import_id],
@@ -278,9 +276,7 @@ class DebianLoader(DB):
                             break
 
                     if version_id is None:
-                        raise ValueError(
-                            f"Couldn't find version ID for package {key}, skipping dependency"
-                        )
+                        raise ValueError(f"Couldn't find version ID for package {key}")
 
                     # Find the dependency package ID
                     dependency_id = None
@@ -335,7 +331,7 @@ class DebianLoader(DB):
                 for i in range(0, len(dependency_dicts), BATCH_SIZE):
                     batch = dependency_dicts[i : i + BATCH_SIZE]
                     self.logger.log(
-                        f"Processing batch {i//BATCH_SIZE + 1}/{(len(dependency_dicts)-1)//BATCH_SIZE + 1} ({len(batch)} dependencies)"
+                        f"Processing batch {i//BATCH_SIZE + 1}/{(len(dependency_dicts)-1)//BATCH_SIZE + 1} ({len(batch)} dependencies)"  # noqa
                     )
 
                     # Use PostgreSQL dialect insert
@@ -408,7 +404,7 @@ class DebianLoader(DB):
                 for i in range(0, len(url_dicts), BATCH_SIZE):
                     batch = url_dicts[i : i + BATCH_SIZE]
                     self.logger.log(
-                        f"Processing batch {i//BATCH_SIZE + 1}/{(len(url_dicts)-1)//BATCH_SIZE + 1} ({len(batch)} URLs)"
+                        f"Processing batch {i//BATCH_SIZE + 1}/{(len(url_dicts)-1)//BATCH_SIZE + 1} ({len(batch)} URLs)"  # noqa
                     )
 
                     # Use PostgreSQL dialect insert with returning clause
