@@ -2,7 +2,7 @@ from enum import Enum
 
 from sqlalchemy import UUID
 
-from core.db import DB
+from core.db import ConfigDB
 from core.logger import Logger
 from core.utils import env_vars
 
@@ -51,8 +51,8 @@ class PMConf:
     pm_id: str
     source: str | list[str]
 
-    def __init__(self, pm: PackageManager, db: DB):
-        self.pm_id = db.select_package_manager_by_name(pm.value, create=True).id
+    def __init__(self, pm: PackageManager, db: ConfigDB):
+        self.pm_id = db.select_package_manager_by_name(pm.value).id
         self.source = SOURCES[pm]
 
     def __str__(self):
@@ -65,14 +65,14 @@ class URLTypes:
     documentation: UUID
     source: UUID
 
-    def __init__(self, db: DB):
+    def __init__(self, db: ConfigDB):
         self.load_url_types(db)
 
-    def load_url_types(self, db: DB) -> None:
-        self.homepage = db.select_url_types_homepage().id
-        self.repository = db.select_url_types_repository().id
-        self.documentation = db.select_url_types_documentation().id
-        self.source = db.select_url_types_source().id
+    def load_url_types(self, db: ConfigDB) -> None:
+        self.homepage = db.select_url_types_by_name("homepage").id
+        self.repository = db.select_url_types_by_name("repository").id
+        self.documentation = db.select_url_types_by_name("documentation").id
+        self.source = db.select_url_types_by_name("source").id
 
     def __str__(self) -> str:
         return f"URLs(homepage={self.homepage},repo={self.repository},docs={self.documentation},src={self.source})"  # noqa
@@ -82,7 +82,7 @@ class UserTypes:
     crates: UUID
     github: UUID
 
-    def __init__(self, db: DB):
+    def __init__(self, db: ConfigDB):
         self.crates = db.select_source_by_name("crates").id
         self.github = db.select_source_by_name("github").id
 
@@ -98,7 +98,7 @@ class DependencyTypes:
     optional: UUID
     recommended: UUID
 
-    def __init__(self, db: DB):
+    def __init__(self, db: ConfigDB):
         self.build = db.select_dependency_type_by_name("build").id
         self.development = db.select_dependency_type_by_name("development").id
         self.runtime = db.select_dependency_type_by_name("runtime").id
@@ -117,7 +117,8 @@ class Config:
     user_types: UserTypes
     dependency_types: DependencyTypes
 
-    def __init__(self, pm: PackageManager, db: DB) -> None:
+    def __init__(self, pm: PackageManager) -> None:
+        db = ConfigDB()
         self.exec_config = ExecConf()
         self.pm_config = PMConf(pm, db)
         self.url_types = URLTypes(db)
