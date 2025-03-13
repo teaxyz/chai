@@ -87,7 +87,7 @@ def dedupe(db: GraphDB):
         )
 
 
-if __name__ == "__main__":
+def main():
     db = GraphDB()
     if db.is_canon_populated() or db.is_canon_package_populated():
         logger.warn(
@@ -96,3 +96,7 @@ if __name__ == "__main__":
         exit(1)
 
     dedupe(db)
+
+
+if __name__ == "__main__":
+    main()
