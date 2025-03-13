@@ -16,8 +16,8 @@ class PageRankParams:
         self.system_sources = ["debian", "homebrew"]
         self.alpha = Decimal(0.85)
         self.favorites = {
-            "debian": Decimal(0.5),
-            "homebrew": Decimal(0.5),
+            "debian": Decimal(0.6),
+            "homebrew": Decimal(0.4),
         }
         # TODO: we can enrich with this download data, for example
         self.weights: dict[Package, Decimal] = {}
