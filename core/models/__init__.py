@@ -450,6 +450,7 @@ class Canon(Base):
     __tablename__ = "canons"
     id = Column(UUID(as_uuid=True), primary_key=True)
     url = Column(String, nullable=False, index=True, unique=True)  # the derived key
+    # CanonNames should be its own table, so we collect all aliases of a package!
     name = Column(String, nullable=False, index=True)
     created_at = Column(
         DateTime, nullable=False, default=func.now(), server_default=func.now()

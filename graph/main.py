@@ -28,11 +28,12 @@ def generate_mapping(
     canon_id: UUID, packages: list[DedupedPackage]
 ) -> list[CanonPackage]:
     return [
-        CanonPackage(canon_id=canon_id, package_id=pkg.package_id) for pkg in packages
+        CanonPackage(id=uuid4(), canon_id=canon_id, package_id=pkg.package_id)
+        for pkg in packages
     ]
 
 
-def main(db: GraphDB):
+def dedupe(db: GraphDB):
     data = db.get_packages_with_urls()
     logger.log(f"Collected {len(data)} packages")
 
@@ -77,17 +78,21 @@ def main(db: GraphDB):
 
     logger.log(f"Canonical packages: {len(canonical_packages)}")
 
-    # load the canons
-    db.load_canonical_packages(list(canonical_packages.keys()), save=not LOAD)
-
-    # load the canonical package mappings
-    # they need to be flattened first
-    db.load_canonical_package_mappings(
-        [item for sublist in canonical_packages.values() for item in sublist],
-        save=not LOAD,
-    )
+    # load the canons and the mappings
+    if LOAD:
+        db.load_canonical_packages(list(canonical_packages.keys()))
+        # the mappings need to be flattened first
+        db.load_canonical_package_mappings(
+            [item for sublist in canonical_packages.values() for item in sublist]
+        )
 
 
 if __name__ == "__main__":
     db = GraphDB()
-    main(db)
+    if db.is_canon_populated() or db.is_canon_package_populated():
+        logger.warn(
+            "Deduplicated graph already exists. Clear them to generate a new one."
+        )
+        exit(1)
+
+    dedupe(db)

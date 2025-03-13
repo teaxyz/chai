@@ -18,6 +18,14 @@ class GraphDB(DB):
     def __init__(self):
         super().__init__("graph_db")
 
+    def is_canon_populated(self) -> bool:
+        with self.session() as session:
+            return session.query(Canon).count() > 0
+
+    def is_canon_package_populated(self) -> bool:
+        with self.session() as session:
+            return session.query(CanonPackage).count() > 0
+
     def get_packages_with_urls(self) -> List[Tuple[UUID, UUID, str, UUID, str, str]]:
         """
         Retrieve packages with their associated URLs and URL types.
@@ -49,15 +57,15 @@ class GraphDB(DB):
         with self.session() as session:
             for i in range(0, len(data), BATCH_SIZE):
                 batch = data[i : i + BATCH_SIZE]
-            session.add_all(batch)
-            session.flush()
+                session.add_all(batch)
+                session.flush()
 
-            # log
-            batch_number = (i // BATCH_SIZE) + 1
-            total_batches = (len(data) + BATCH_SIZE - 1) // BATCH_SIZE
-            self.logger.log(f"Processed batch {batch_number} of {total_batches}")
+                # log
+                batch_number = (i // BATCH_SIZE) + 1
+                total_batches = (len(data) + BATCH_SIZE - 1) // BATCH_SIZE
+                self.logger.log(f"Processed batch {batch_number} of {total_batches}")
 
-        session.commit()
+            session.commit()
 
     def load_canonical_package_mappings(self, data: List[CanonPackage]) -> None:
         """
@@ -78,4 +86,4 @@ class GraphDB(DB):
                 total_batches = (len(data) + BATCH_SIZE - 1) // BATCH_SIZE
                 self.logger.log(f"Processed batch {batch_number} of {total_batches}")
 
-        session.commit()
+            session.commit()
