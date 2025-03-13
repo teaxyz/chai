@@ -444,3 +444,33 @@ class LegacyDependency(Base):
     updated_at = Column(
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
+
+
+class Canon(Base):
+    __tablename__ = "canons"
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    url = Column(String, nullable=False, index=True, unique=True)  # the derived key
+    name = Column(String, nullable=False, index=True)
+    created_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+    updated_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+
+
+class CanonPackage(Base):
+    __tablename__ = "canon_packages"
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    canon_id = Column(
+        UUID(as_uuid=True), ForeignKey("canons.id"), nullable=False, index=True
+    )
+    package_id = Column(
+        UUID(as_uuid=True), ForeignKey("packages.id"), nullable=False, index=True
+    )
+    created_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+    updated_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
