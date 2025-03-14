@@ -2,6 +2,10 @@
 
 Tools for loading legacy CHAI data into the current CHAI database framework.
 
+> [!NOTE]
+> This can only be executed if you have access to the Legacy CHAI database. If not,
+> you can ignore everything inside this folder.
+
 ## Requirements
 
 - pkgx.sh
@@ -18,6 +22,7 @@ database into the current CHAI schema.
 - `copy_dependencies_no_thread.py`: fetches dependency data from `public.sources` for a
   given package manager and uses psycopg2's `copy_expert` function to load it in
   batches into CHAI
+- `add_urls.py`: add urls and package_urls relationships from Legacy CHAI
 
 ## Usage
 
@@ -45,3 +50,8 @@ With pkgx, just invoking the script from the root directory of chai
 cd ../..
 PYTHONPATH=. copy_dependencies_no_thread.py
 ```
+
+4. Loading dependencies
+
+   1. Run [urls.sql](sql/urls.sql), which generates a csv
+   1. Run `add_urls.py path/to/csv` to load the data into CHAI

@@ -11,7 +11,6 @@ from typing import Dict
 import psycopg2
 
 from core.config import Config, PackageManager
-from core.db import DB
 from core.logger import Logger
 
 CHAI_DATABASE_URL = os.environ.get("CHAI_DATABASE_URL")
