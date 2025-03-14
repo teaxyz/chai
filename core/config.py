@@ -13,6 +13,7 @@ class PackageManager(Enum):
     CRATES = "crates"
     HOMEBREW = "homebrew"
     DEBIAN = "debian"
+    NPM = "npm"
 
 
 TEST = env_vars("TEST", "false")
@@ -26,6 +27,7 @@ SOURCES = {
         "https://ftp.debian.org/debian/dists/stable/main/binary-amd64/Packages.gz",
         "https://ftp.debian.org/debian/dists/stable/main/source/Sources.gz",
     ],
+    PackageManager.NPM: "https://registry.npmjs.org/-/all",  # fake for now
 }
 
 # The three configuration values URLTypes, DependencyTypes, and UserTypes will query the
