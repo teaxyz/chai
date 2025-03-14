@@ -1,5 +1,7 @@
 # graph & ranker
 
+parse_log.py helps parse tmux logs
+
 ## Improvements
 
 1. when building the graph, there are some dependencies who won't be in the canon table
