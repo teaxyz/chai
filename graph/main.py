@@ -124,7 +124,7 @@ def main(config: Config) -> None:
     logger.log(f"{len(packages)} packages")
 
     # load the graph
-    chai = load_graph(config.pm_config.npm_pm_id, package_to_canon, packages, 1000)
+    chai = load_graph(config.pm_config.npm_pm_id, package_to_canon, packages)
     logger.log(f"CHAI has {len(chai)} nodes and {len(chai.edge_to_index)} edges")
 
     # generate tea_ranks
