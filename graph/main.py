@@ -16,6 +16,10 @@ logger = Logger("graph.main")
 config = load_config()
 db = GraphDB()
 
+# data directory for ranks
+ranks_dir = pathlib.Path("data/ranks")
+ranks_dir.mkdir(parents=True, exist_ok=True)
+
 
 @dataclass
 class PackageInfo:
@@ -36,7 +40,7 @@ def load_graph(
         try:
             canon_id = package_to_canon_mapping[package.id]
         except KeyError:
-            missing.add((package.id, package.package_manager_id))
+            missing.add((str(package.id), str(package.package_manager_id)))
             continue
 
         node = PackageNode(canon_id=canon_id)
@@ -57,7 +61,7 @@ def load_graph(
             try:
                 dep_canon_id = package_to_canon_mapping[dep]
             except KeyError:
-                missing.add((dep, package.package_manager_id))
+                missing.add((str(dep), str(package.package_manager_id)))
                 continue
 
             dep_node = PackageNode(canon_id=dep_canon_id)
@@ -73,16 +77,13 @@ def load_graph(
             )
 
     logger.log(f"Missing {len(missing)} packages")
-    with open("missing.json", "w") as f:
+    with open(ranks_dir / "missing_test.json", "w") as f:
         json.dump(list(missing), f)
 
     return chai
 
 
-def save_ranks(ranks: Dict[UUID, float]) -> None:
-    ranks_dir = pathlib.Path("graph/ranks")
-    ranks_dir.mkdir(parents=True, exist_ok=True)
-
+def save_ranks(ranks: Dict[str, float]) -> None:
     # Find the highest existing rank index
     existing_files = [f for f in ranks_dir.glob("ranks_*.json")]
     next_index = 1
@@ -112,24 +113,29 @@ def save_ranks(ranks: Dict[UUID, float]) -> None:
 
 
 def main(config: Config) -> None:
+    # get the map of package_id -> canon_id
     package_to_canon: Dict[UUID, UUID] = db.get_package_to_canon_mapping()
     logger.log(f"{len(package_to_canon)} package to canon mappings")
 
+    # get the list of packages
     packages = [
         PackageInfo(id=id, package_manager_id=pm_id) for id, pm_id in db.get_packages()
     ]
     logger.log(f"{len(packages)} packages")
 
+    # load the graph
     chai = load_graph(config.pm_config.npm_pm_id, package_to_canon, packages, 1000)
     logger.log(f"CHAI has {len(chai)} nodes and {len(chai.edge_to_index)} edges")
 
+    # generate tea_ranks
     ranks = chai.pagerank(
         config.tearank_config.alpha, config.tearank_config.personalization
     )
-    ranks = {chai[id].canon_id: rank for id, rank in ranks.items()}
-    logger.log(f"Ranks have {len(ranks)} entries")
+    str_ranks = {str(chai[id].canon_id): rank for id, rank in ranks.items()}
+    logger.log(f"Ranks have {len(str_ranks)} entries")
 
-    save_ranks(ranks)
+    # save the ranks
+    save_ranks(str_ranks)
 
 
 if __name__ == "__main__":
