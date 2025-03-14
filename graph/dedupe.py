@@ -35,7 +35,7 @@ def generate_mapping(
 
 def dedupe(db: GraphDB):
     data = db.get_packages_with_urls()
-    logger.log(f"Collected {len(data)} packages")
+    logger.log(f"Collected {len(data)} package_urls")
 
     url_map: dict[str, list[DedupedPackage]] = {}
 
@@ -85,6 +85,8 @@ def dedupe(db: GraphDB):
         db.load_canonical_package_mappings(
             [item for sublist in canonical_packages.values() for item in sublist]
         )
+
+    logger.log("✅ Deduplicated graph")
 
 
 def main():
