@@ -1,8 +1,6 @@
 from typing import List, Tuple
 from uuid import UUID
 
-from sqlalchemy import func
-
 from core.db import DB
 from core.models import (
     URL,
@@ -23,7 +21,7 @@ BATCH_SIZE = 20000
 
 class GraphDB(DB):
     def __init__(self):
-        super().__init__("graph_db")
+        super().__init__("graph.db")
 
     def is_canon_populated(self) -> bool:
         with self.session() as session:
@@ -95,22 +93,21 @@ class GraphDB(DB):
 
             session.commit()
 
-    def get_canons(self) -> List[Canon]:
+    def get_packages(self) -> List[Tuple[UUID, UUID]]:
         with self.session() as session:
-            return session.query(Canon.id).all()
+            return session.query(Package.id, Package.package_manager_id).all()
 
-    def get_package_dependencies(self, canon_id: UUID) -> List[UUID]:
+    def get_dependencies(self, package_id: UUID) -> List[Tuple[UUID]]:
         with self.session() as session:
             return (
                 session.query(DependsOn.dependency_id)
                 .join(Version, DependsOn.version_id == Version.id)
                 .join(Package, Version.package_id == Package.id)
-                .join(CanonPackage, Package.id == CanonPackage.package_id)
-                .filter(CanonPackage.canon_id == canon_id)
+                .filter(Package.id == package_id)
                 .all()
             )
 
-    def get_canon_packages(self) -> dict[UUID, UUID]:
+    def get_package_to_canon_mapping(self) -> dict[UUID, UUID]:
         with self.session() as session:
             return {
                 canon_package.package_id: canon.id
@@ -119,49 +116,11 @@ class GraphDB(DB):
                 )
             }
 
-    def get_canons_by_package_manager(self, package_manager: str) -> List[UUID]:
-        with self.session() as session:
-            return (
-                session.query(Canon.id)
-                .join(CanonPackage, Canon.id == CanonPackage.canon_id)
-                .join(Package, CanonPackage.package_id == Package.id)
-                .join(PackageManager, Package.package_manager_id == PackageManager.id)
-                .join(Source, PackageManager.source_id == Source.id)
-                .filter(Source.type == package_manager)
-                .all()
-            )
-
-    def get_canons_with_source_types(
-        self, source_types: List[str]
-    ) -> List[Tuple[UUID, List[str]]]:
-        """
-        Get canons and their associated source types (package managers).
-
-        Args:
-            source_types: List of source types to filter by (e.g., ['homebrew', 'debian'])
-
-        Returns:
-            List of tuples containing canon IDs and lists of their associated source types
-        """
-
-        with self.session() as session:
-            return (
-                session.query(
-                    Canon.id, func.array_agg(Source.type).label("source_types")
-                )
-                .join(CanonPackage, Canon.id == CanonPackage.canon_id)
-                .join(Package, CanonPackage.package_id == Package.id)
-                .join(PackageManager, Package.package_manager_id == PackageManager.id)
-                .join(Source, PackageManager.source_id == Source.id)
-                .filter(Source.type.in_(source_types))
-                .group_by(Canon.id)
-                .all()
-            )
-
-    def get_npm_dependencies(self, package_id: UUID) -> List[UUID]:
+    def get_legacy_dependencies(self, package_id: UUID) -> List[Tuple[UUID]]:
         with self.session() as session:
             return (
                 session.query(LegacyDependency.dependency_id)
                 .filter(LegacyDependency.package_id == package_id)
+                .filter(LegacyDependency.dependency_id != package_id)
                 .all()
             )

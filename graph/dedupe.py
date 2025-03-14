@@ -33,6 +33,16 @@ def generate_mapping(
     ]
 
 
+def bad_homepage_url(url: str) -> bool:
+    match url:
+        case "null":  # from legacy data, a bunch of npm projects have "null"
+            return True
+        case "":
+            return True
+        case _:
+            return False
+
+
 def dedupe(db: GraphDB):
     data = db.get_packages_with_urls()
     logger.log(f"Collected {len(data)} package_urls")
@@ -44,7 +54,7 @@ def dedupe(db: GraphDB):
         url = row.url
 
         # if homepage is not set, skip
-        if not url:
+        if bad_homepage_url(url):
             continue
 
         pkg = DedupedPackage(

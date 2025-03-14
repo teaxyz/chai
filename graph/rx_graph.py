@@ -15,7 +15,10 @@ logger = Logger("graph.chai_graph")
 
 
 @dataclass
-class Package:
+class PackageNode:
+    """Note that this is different from PackageInfo in main.py!
+    This is based on canons!"""
+
     canon_id: UUID
     weight: Decimal = field(default_factory=Decimal)
     index: int = field(default_factory=lambda: -1)
@@ -27,13 +30,15 @@ class CHAI(rx.PyDiGraph):
         self.canon_to_index: dict[UUID, int] = {}
         self.edge_to_index: dict[tuple[int, int], int] = {}
 
-    def add_node(self, node: Package) -> int:
+    def add_node(self, node: PackageNode) -> int:
+        """Safely add a note to the graph. If exists, return the index"""
         if node.canon_id not in self.canon_to_index:
             index = super().add_node(node)
             self.canon_to_index[node.canon_id] = index
         return self.canon_to_index[node.canon_id]
 
     def add_edge(self, u: int, v: int, edge_data: Any) -> None:
+        """Safely add an edge to the graph. If exists, return the index"""
         if (u, v) not in self.edge_to_index:
             index = super().add_edge(u, v, edge_data)
             self.edge_to_index[(u, v)] = index
@@ -49,9 +54,12 @@ class CHAI(rx.PyDiGraph):
             result[self.canon_to_index[id]] = float(weight)
         return result
 
-    def pagerank(self, personalization: dict[UUID, Decimal]) -> dict[UUID, Decimal]:
+    def pagerank(
+        self, alpha: Decimal, personalization: dict[UUID, Decimal]
+    ) -> dict[UUID, Decimal]:
         return rx.pagerank(
             self,
+            alpha=float(alpha),
             personalization=self.generate_personalization(personalization),
         )
 
@@ -77,7 +85,7 @@ class CHAI(rx.PyDiGraph):
             if package_id != typescript_package_id:
                 # this if is present because typescript has a canon ID
                 # but we're working with package ids for the rest of it
-                i = self.add_node(Package(canon_id=package_id))
+                i = self.add_node(PackageNode(canon_id=package_id))
 
                 # note that this happens EVERY time except the first instance
                 # (when typescript is already loaded)
@@ -87,7 +95,7 @@ class CHAI(rx.PyDiGraph):
             dependencies = db.get_npm_dependencies(package_id)
 
             for dependency in dependencies:
-                dep_package = Package(canon_id=dependency[0])
+                dep_package = PackageNode(canon_id=dependency[0])
 
                 # add it to the graph
                 dep_package.index = self.add_node(dep_package)
@@ -99,3 +107,8 @@ class CHAI(rx.PyDiGraph):
                 queue.append(dependency[0])
 
             visited.add(package_id)
+
+    def distribute(self):
+        # 80 / 20
+        # distribute by rank for the bottom 20
+        pass
