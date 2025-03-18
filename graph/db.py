@@ -9,9 +9,7 @@ from core.models import (
     DependsOn,
     LegacyDependency,
     Package,
-    PackageManager,
     PackageURL,
-    Source,
     URLType,
     Version,
 )
@@ -20,8 +18,10 @@ BATCH_SIZE = 20000
 
 
 class GraphDB(DB):
-    def __init__(self):
+    def __init__(self, legacy_pm_id: UUID, system_pm_ids: List[UUID]):
         super().__init__("graph.db")
+        self.legacy_pm_id = legacy_pm_id
+        self.system_pm_ids = system_pm_ids
 
     def is_canon_populated(self) -> bool:
         with self.session() as session:
@@ -94,10 +94,17 @@ class GraphDB(DB):
             session.commit()
 
     def get_packages(self) -> List[Tuple[UUID, UUID]]:
+        """Gets all packages for the run"""
         with self.session() as session:
-            return session.query(Package.id, Package.package_manager_id).all()
+            return (
+                session.query(Package.id, Package.package_manager_id)
+                .where(Package.package_manager_id.in_(self.system_pm_ids))
+                # TODO: remove this where condition for prod runs
+                .all()
+            )
 
     def get_dependencies(self, package_id: UUID) -> List[Tuple[UUID]]:
+        """Gets all the dependencies based on the CHAI data model"""
         with self.session() as session:
             return (
                 session.query(DependsOn.dependency_id)
@@ -111,12 +118,14 @@ class GraphDB(DB):
         with self.session() as session:
             return {
                 canon_package.package_id: canon.id
-                for canon, canon_package in session.query(Canon, CanonPackage).join(
-                    CanonPackage, Canon.id == CanonPackage.canon_id
-                )
+                for canon, canon_package in session.query(Canon, CanonPackage)
+                .join(CanonPackage, Canon.id == CanonPackage.canon_id)
+                .join(Package, CanonPackage.package_id == Package.id)
+                .where(Package.package_manager_id != self.legacy_pm_id)
             }
 
     def get_legacy_dependencies(self, package_id: UUID) -> List[Tuple[UUID]]:
+        """Gets all the legacy dependencies based on the legacy CHAI data model"""
         with self.session() as session:
             return (
                 session.query(LegacyDependency.dependency_id)
