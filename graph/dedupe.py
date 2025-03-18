@@ -46,7 +46,14 @@ def bad_homepage_url(url: str) -> bool:
 
 def dedupe(db: GraphDB):
     data = db.get_packages_with_urls()
-    logger.log(f"Collected {len(data)} package_urls")
+    logger.log(f"Collected {len(data)} homepage URLs from packages")
+
+    # get most recent URL per package
+    latest_by_package = {}
+    for pkg_id, pkg_name, url, created_at in data:
+        if pkg_id not in latest_by_package:
+            latest_by_package[pkg_id] = (pkg_id, pkg_name, url)
+    logger.log(f"Found {len(latest_by_package)} most recent homepage URLs")
 
     url_map: dict[str, list[DedupedPackage]] = {}
 
