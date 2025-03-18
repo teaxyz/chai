@@ -1,14 +1,15 @@
 #!/usr/bin/env uv run
 
 from dataclasses import dataclass
-from os import getenv
 from uuid import UUID, uuid4
 
 from core.logger import Logger
 from core.models import Canon, CanonPackage
+from core.utils import env_vars
+from graph.config import load_config
 from graph.db import GraphDB
 
-LOAD = getenv("LOAD", "false").lower() == "true"
+LOAD = env_vars("LOAD", "false")
 logger = Logger("graph_main")
 
 
@@ -100,7 +101,8 @@ def dedupe(db: GraphDB):
 
 
 def main():
-    db = GraphDB()
+    config = load_config()
+    db = GraphDB(config.pm_config.npm_pm_id, config.pm_config.system_pm_ids)
     if db.is_canon_populated() or db.is_canon_package_populated():
         logger.warn(
             "Deduplicated graph already exists. Clear them to generate a new one."
