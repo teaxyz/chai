@@ -156,14 +156,14 @@ pub async fn get_table_row(
             }
             Err(e) => {
                 if e.as_db_error()
-                    .map_or(false, |e| e.code() == &SqlState::UNDEFINED_TABLE)
+                    .is_some_and(|db_err| db_err.code() == &SqlState::UNDEFINED_TABLE)
                 {
                     HttpResponse::NotFound().json(json!({
                         "error": format!("Table '{}' not found", table_name)
                     }))
                 } else if e
                     .as_db_error()
-                    .map_or(false, |e| e.code() == &SqlState::NO_DATA_FOUND)
+                    .is_some_and(|e| e.code() == &SqlState::NO_DATA_FOUND)
                 {
                     HttpResponse::NotFound().json(json!({
                         "error": format!("No row found with id '{}' in table '{}'", id, table_name)
