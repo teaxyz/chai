@@ -475,3 +475,36 @@ class CanonPackage(Base):
     updated_at = Column(
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
+
+
+class TeaRankRun(Base):
+    __tablename__ = "tea_rank_runs"
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=func.uuid_generate_v4(),
+        server_default=func.uuid_generate_v4(),
+    )
+    run = Column(Integer, nullable=False)
+    split_ratio = Column(String, nullable=False)
+    created_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+
+
+class TeaRank(Base):
+    __tablename__ = "tea_ranks"
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=func.uuid_generate_v4(),
+        server_default=func.uuid_generate_v4(),
+    )
+    tea_rank_run = Column(Integer, nullable=False, index=True)
+    canon_id = Column(
+        UUID(as_uuid=True), ForeignKey("canons.id"), nullable=False, index=True
+    )
+    rank = Column(String, nullable=False)
+    created_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )

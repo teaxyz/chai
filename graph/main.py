@@ -1,16 +1,11 @@
 #! /usr/bin/env pkgx +python@3.11 uv run
 
-import json
-import os
-import pathlib
 from dataclasses import dataclass
-from decimal import Decimal, getcontext
 from typing import Dict, List, Tuple
 from uuid import UUID
 
-import numpy as np
-
 from core.logger import Logger
+from core.models import TeaRank, TeaRankRun
 from graph.config import Config, load_config
 from graph.db import GraphDB
 from graph.rx_graph import CHAI, PackageNode
@@ -18,27 +13,6 @@ from graph.rx_graph import CHAI, PackageNode
 logger = Logger("graph.main")
 config = load_config()
 db = GraphDB(config.pm_config.npm_pm_id, config.pm_config.system_pm_ids)
-
-# data directory for ranks
-RANKS_DIR = pathlib.Path("data/ranker/ranks")
-RANKS_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def generate_run_id() -> str:
-    """generates the run_id based on the number of files in the ranks directory"""
-    existing_files = [f for f in RANKS_DIR.glob("ranks_*.json")]
-    next_index = 1
-    if existing_files:
-        indices = []
-        for file in existing_files:
-            try:
-                index = int(file.stem.split("_")[1])
-                indices.append(index)
-            except (IndexError, ValueError):
-                continue
-        if indices:
-            next_index = max(indices) + 1
-    return f"{next_index}"
 
 
 @dataclass
@@ -100,34 +74,13 @@ def load_graph(
         if stop is not None and i >= stop:
             break
 
-        if i % 1000 == 0:
-            logger.log(
-                f"{i}: Graph has {len(chai)} nodes and {len(chai.edge_to_index)} edges"
-            )
-
     logger.log(f"Missing {len(missing)} packages")
-    with open(RANKS_DIR / "missing.json", "w") as f:
-        json.dump(list(missing), f)
+    # TODO: should we save the missing packages?
 
     return chai
 
 
-def save_ranks(ranks: Dict[str, float], run_id: str) -> None:
-    # Save the ranks file with the new index
-    ranks_file = RANKS_DIR / f"ranks_{run_id}.json"
-    with open(ranks_file, "w") as f:
-        json.dump(ranks, f)
-    logger.log(f"Saved ranks to {ranks_file}")
-
-    # Create/update symlink to the latest ranks file
-    latest_link = RANKS_DIR / "latest.json"
-    if latest_link.exists():
-        latest_link.unlink()
-    os.symlink(ranks_file.name, latest_link)
-    logger.log(f"Updated latest symlink to point to {ranks_file.name}")
-
-
-def main(config: Config, run_id: str) -> None:
+def main(config: Config) -> None:
     # get the map of package_id -> canon_id
     package_to_canon: Dict[UUID, UUID] = db.get_package_to_canon_mapping()
     logger.log(f"{len(package_to_canon)} package to canon mappings")
@@ -150,22 +103,34 @@ def main(config: Config, run_id: str) -> None:
     config.tearank_config.personalize(canons_with_source_types)
 
     # generate tea_ranks
-    getcontext().prec = 9
-    split_ratios = [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55]
-    for split_ratio in split_ratios:
-        decimal_split_ratio = Decimal(split_ratio)
-        ranks = chai.distribute(
-            config.tearank_config.personalization,
-            decimal_split_ratio,
-            config.tearank_config.tol,
-            config.tearank_config.max_iter,
-        )
-        str_ranks = {str(chai[id].canon_id): f"{rank}" for id, rank in ranks.items()}
+    ranks = chai.distribute(
+        config.tearank_config.personalization,
+        config.tearank_config.split_ratio,
+        config.tearank_config.tol,
+        config.tearank_config.max_iter,
+    )
+    str_ranks = {str(chai[id].canon_id): f"{rank}" for id, rank in ranks.items()}
 
-        # save the ranks
-        save_ranks(str_ranks, f"{run_id}_{split_ratio}")
+    # Determine the next run ID
+    latest_run = db.get_current_tea_rank_run()
+    current_run = latest_run.run_id + 1 if latest_run else 1
+    logger.log(f"Starting TeaRank run number: {current_run}")
+
+    # Prepare TeaRank objects with the *next* run ID
+    tea_ranks = [
+        TeaRank(canon_id=UUID(canon_id), tea_rank_run=current_run, rank=rank)
+        for canon_id, rank in str_ranks.items()
+    ]
+    # Load all ranks first
+    db.load_tea_ranks(tea_ranks)
+
+    # Only after successfully loading ranks, load the corresponding run entry
+    tea_rank_run = TeaRankRun(
+        run=current_run, split_ratio=config.tearank_config.split_ratio
+    )
+    db.load_tea_rank_runs([tea_rank_run])
+    logger.log("Done!")
 
 
 if __name__ == "__main__":
-    i = generate_run_id()
-    main(config, i)
+    main(config)

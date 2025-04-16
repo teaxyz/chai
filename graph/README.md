@@ -1,12 +1,35 @@
-# graph & ranker
+# ranker
 
-parse_log.py helps parse tmux logs
+generates a deduplicated graph across all CHAI package managers by URL, and publishes 
+a tea_rank
 
-## Improvements
+## Dedupe
 
-1. when building the graph, there are some dependencies who won't be in the canon table
-   [doc needed]
-1. the only NPM dedupe that's happening is with typescript, need to add the NPM URLs to
-   the dataset
-1. need to add npm legacy dependencies to the dependency query set
-1.
+- [ ] Add a description here
+
+## Ranking
+
+- [ ] Add a description here
+
+## Usage
+
+1. First deduplicate
+
+   ```bash
+   LOAD=true PYTHONPATH=.. ./dedupe.py
+   ```
+
+2. Then rank
+
+### With pkgx
+
+```bash
+chmod +x main.py
+./main.py
+```
+
+### Without pkgx
+
+```bash
+uv run main.py
+```

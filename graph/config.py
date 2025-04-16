@@ -1,4 +1,3 @@
-#!/usr/bin/env pkgx +python@3.11 uv run
 from dataclasses import dataclass, field
 from decimal import Decimal, getcontext
 from typing import List, Tuple
@@ -75,7 +74,7 @@ class TeaRankConfig:
     favorites: dict[str, Decimal] = {}
     weights: dict[UUID, Decimal] = {}
     personalization: dict[UUID, Decimal] = {}
-    split_ratio: Decimal = Decimal(0.8)
+    split_ratio: Decimal = Decimal(0.5)
     tol: Decimal = Decimal(1e-6)
     max_iter: int = 1000000
 
@@ -163,9 +162,3 @@ def load_config() -> Config:
         pm_config=PMConfig(),
         url_types=URLTypes(),
     )
-
-
-if __name__ == "__main__":
-    logger.mode = Logger.VERBOSE
-    config = load_config()
-    logger.debug(config)

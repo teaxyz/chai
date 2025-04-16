@@ -10,6 +10,8 @@ from core.models import (
     LegacyDependency,
     Package,
     PackageURL,
+    TeaRank,
+    TeaRankRun,
     URLType,
     Version,
 )
@@ -130,4 +132,23 @@ class GraphDB(DB):
                 .filter(LegacyDependency.package_id == package_id)
                 .filter(LegacyDependency.dependency_id != package_id)
                 .all()
+            )
+
+    def load_tea_ranks(self, data: List[TeaRank]) -> None:
+        """Loads tea ranks into the database"""
+        with self.session() as session:
+            session.add_all(data)
+            session.commit()
+
+    def load_tea_rank_runs(self, data: List[TeaRankRun]) -> None:
+        """Loads tea rank runs into the database"""
+        with self.session() as session:
+            session.add_all(data)
+            session.commit()
+
+    def get_current_tea_rank_run(self) -> TeaRankRun:
+        """Gets the current tea rank run"""
+        with self.session() as session:
+            return (
+                session.query(TeaRankRun).order_by(TeaRankRun.created_at.desc()).first()
             )

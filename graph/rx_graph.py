@@ -14,9 +14,6 @@ from graph.db import GraphDB
 
 logger = Logger("graph.chai_graph")
 
-qsv_canon = UUID("0753ab2c-c003-4a27-ae72-e6a337aaebb2")
-qsv_package = UUID("1749e330-96a4-405a-9e90-3770878f4fa8")
-
 
 @dataclass
 class PackageNode:
@@ -152,8 +149,6 @@ class CHAI(rx.PyDiGraph):
                 raise ValueError(f"Canon ID {id} not found in CHAI")
             q.append((self.canon_to_index[id], weight))
 
-        logger.log("***** INITIAL QUEUE ******")
-        logger.log(f"Sum of personalization: {sum(personalization.values()):.9f}")
         iterations: int = 0
 
         while q:
