@@ -1,17 +1,21 @@
 #!/usr/bin/env pkgx +python@3.11 uv run
 
-from collections import deque
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any
+from typing import Any, List
 from uuid import UUID
 
 import rustworkx as rx
 
 from core.logger import Logger
+from graph.config import Config
 from graph.db import GraphDB
 
 logger = Logger("graph.chai_graph")
+
+qsv_canon = UUID("0753ab2c-c003-4a27-ae72-e6a337aaebb2")
+qsv_package = UUID("1749e330-96a4-405a-9e90-3770878f4fa8")
 
 
 @dataclass
@@ -20,6 +24,7 @@ class PackageNode:
     This is based on canons!"""
 
     canon_id: UUID
+    package_manager_ids: List[UUID] = field(default_factory=list)
     weight: Decimal = field(default_factory=Decimal)
     index: int = field(default_factory=lambda: -1)
 
@@ -56,7 +61,7 @@ class CHAI(rx.PyDiGraph):
 
     def pagerank(
         self, alpha: Decimal, personalization: dict[UUID, Decimal]
-    ) -> dict[UUID, Decimal]:
+    ) -> rx.CentralityMapping:
         return rx.pagerank(
             self,
             alpha=float(alpha),
@@ -108,7 +113,124 @@ class CHAI(rx.PyDiGraph):
 
             visited.add(package_id)
 
-    def distribute(self):
-        # 80 / 20
-        # distribute by rank for the bottom 20
-        pass
+    def pretty_print(self, results: dict[int, Decimal]) -> None:
+        if not logger.is_verbose():
+            return
+
+        logger.debug("***** RESULTS ******")
+        for i, rank in results.items():
+            logger.debug(f"\tNode {i} has rank {rank:.9f}")
+        logger.debug(f"Sum of results: {sum(results.values()):.9f}")
+
+    def pretty_print_queue(self, q: deque[tuple[int, Decimal]]) -> None:
+        if not logger.is_verbose():
+            return
+
+        logger.debug("***** QUEUE ******")
+        for node_id, weight in q:
+            logger.debug(f"\tNode {node_id} has weight {weight:.9f}")
+        logger.debug(f"Sum of queue: {sum(weight for _, weight in q):.9f}")
+
+    def distribute(
+        self,
+        personalization: dict[UUID, Decimal],
+        split_ratio: Decimal,
+        tol: Decimal,
+        max_iter: int = 100,
+    ) -> dict[int, Decimal]:
+        """Distribute values across the graph based on dependencies."""
+        if not personalization:
+            raise ValueError("Personalization is empty")
+
+        # Convert personalization to index-based dict
+        result = defaultdict(Decimal)
+        q: deque[tuple[int, Decimal]] = deque()
+
+        for id, weight in personalization.items():
+            if id not in self.canon_to_index:
+                logger.log(f"{id} is type {type(id)}")
+                raise ValueError(f"Canon ID {id} not found in CHAI")
+            q.append((self.canon_to_index[id], weight))
+
+        logger.log("***** INITIAL QUEUE ******")
+        logger.log(f"Sum of personalization: {sum(personalization.values()):.9f}")
+        iterations: int = 0
+
+        while q:
+            iterations += 1
+            node_id, weight = q.popleft()
+
+            # first, calculate keep
+            # if you have no dependencies, you don't split
+            dependencies = self.successors(node_id)
+            num_dependencies = len(dependencies)
+            if num_dependencies == 0:
+                keep = weight
+            else:  # otherwise, you split
+                keep = weight * split_ratio
+
+            # second, check if we should continue for keep
+            if keep < tol:
+                continue
+
+            # we can continue -> add keep to result
+            result[node_id] += keep
+
+            # third, deal with splits
+            # if you have no dependencies, there's nothing to split so move on
+            if num_dependencies == 0:
+                continue
+
+            # otherwise, calculate split
+            split = (weight - keep) / num_dependencies
+            for dep in dependencies:
+                q.append((dep.index, split))
+
+            if iterations > max_iter:
+                logger.warn(f"Max iterations reached: {max_iter}")
+                break
+
+        logger.log(f"Iterations: {iterations}. Ranks sum to {sum(result.values()):.9f}")
+
+        return dict(result)
+
+
+if __name__ == "__main__":
+    config = Config()
+    G = CHAI()
+    # create a simple graph
+    uuid_1 = UUID("123e4567-e89b-12d3-a456-426614174000")
+    uuid_2 = UUID("123e4567-e89b-12d3-a456-426614174001")
+    uuid_3 = UUID("123e4567-e89b-12d3-a456-426614174002")
+    uuid_4 = UUID("123e4567-e89b-12d3-a456-426614174003")
+
+    a = PackageNode(canon_id=uuid_1)
+    b = PackageNode(canon_id=uuid_2)
+    c = PackageNode(canon_id=uuid_3)
+    d = PackageNode(canon_id=uuid_4)
+
+    a.index = G.add_node(a)
+    b.index = G.add_node(b)
+    c.index = G.add_node(c)
+    d.index = G.add_node(d)
+
+    G.add_edge(a.index, b.index, None)
+    G.add_edge(a.index, c.index, None)
+    G.add_edge(b.index, d.index, None)
+
+    initial_personalization = {
+        uuid_1: Decimal(0.3),  # Homebrew
+        uuid_2: Decimal(0.3),  # Homebrew
+        uuid_3: Decimal(0.4),  # Homebrew
+        uuid_4: Decimal(0.0),  # crates
+    }
+
+    ranks = G.distribute(
+        initial_personalization,
+        config.tearank_config.split_ratio,
+        config.tearank_config.tol,
+        max_iter=2,
+    )
+    for i, rank in ranks.items():
+        print(f"\tNode {i} has rank {rank:.9f}")
+    print(f"Sum of results: {sum(ranks.values()):.9f}")

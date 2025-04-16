@@ -4,8 +4,11 @@ import json
 import os
 import pathlib
 from dataclasses import dataclass
+from decimal import Decimal, getcontext
 from typing import Dict, List, Tuple
 from uuid import UUID
+
+import numpy as np
 
 from core.logger import Logger
 from graph.config import Config, load_config
@@ -14,11 +17,28 @@ from graph.rx_graph import CHAI, PackageNode
 
 logger = Logger("graph.main")
 config = load_config()
-db = GraphDB()
+db = GraphDB(config.pm_config.npm_pm_id, config.pm_config.system_pm_ids)
 
 # data directory for ranks
-ranks_dir = pathlib.Path("data/ranks")
-ranks_dir.mkdir(parents=True, exist_ok=True)
+RANKS_DIR = pathlib.Path("data/ranker/ranks")
+RANKS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def generate_run_id() -> str:
+    """generates the run_id based on the number of files in the ranks directory"""
+    existing_files = [f for f in RANKS_DIR.glob("ranks_*.json")]
+    next_index = 1
+    if existing_files:
+        indices = []
+        for file in existing_files:
+            try:
+                index = int(file.stem.split("_")[1])
+                indices.append(index)
+            except (IndexError, ValueError):
+                continue
+        if indices:
+            next_index = max(indices) + 1
+    return f"{next_index}"
 
 
 @dataclass
@@ -28,13 +48,15 @@ class PackageInfo:
 
 
 def load_graph(
-    legacy_pm_id: UUID,  # TODO: would probably be a list later
+    config: Config,
     package_to_canon_mapping: Dict[UUID, UUID],
     packages: List[PackageInfo],
     stop: int = None,
 ) -> CHAI:
     chai = CHAI()
     missing: set[Tuple[UUID, UUID]] = set()
+    npm_pm_id = config.pm_config.npm_pm_id
+
     for i, package in enumerate(packages):
         # add this package's canon to the graph
         try:
@@ -43,13 +65,20 @@ def load_graph(
             missing.add((str(package.id), str(package.package_manager_id)))
             continue
 
-        node = PackageNode(canon_id=canon_id)
-        node.index = chai.add_node(node)
+        # grab the object from the graph if it exists
+        if canon_id in chai.canon_to_index:
+            node = chai[chai.canon_to_index[canon_id]]
+        else:  # otherwise, create a new one
+            node = PackageNode(canon_id=canon_id)
+            node.index = chai.add_node(node)
+
+        # add the package manager id to the node
+        node.package_manager_ids.append(package.package_manager_id)
 
         # now grab its dependencies
         # there are two cases: legacy CHAI or new CHAI
         # the db handles these two distinctions
-        if package.package_manager_id == legacy_pm_id:
+        if package.package_manager_id == npm_pm_id:
             dependencies = db.get_legacy_dependencies(package.id)
         else:
             dependencies = db.get_dependencies(package.id)
@@ -77,42 +106,28 @@ def load_graph(
             )
 
     logger.log(f"Missing {len(missing)} packages")
-    with open(ranks_dir / "missing_test.json", "w") as f:
+    with open(RANKS_DIR / "missing.json", "w") as f:
         json.dump(list(missing), f)
 
     return chai
 
 
-def save_ranks(ranks: Dict[str, float]) -> None:
-    # Find the highest existing rank index
-    existing_files = [f for f in ranks_dir.glob("ranks_*.json")]
-    next_index = 1
-    if existing_files:
-        indices = []
-        for file in existing_files:
-            try:
-                index = int(file.stem.split("_")[1])
-                indices.append(index)
-            except (IndexError, ValueError):
-                continue
-        if indices:
-            next_index = max(indices) + 1
-
+def save_ranks(ranks: Dict[str, float], run_id: str) -> None:
     # Save the ranks file with the new index
-    ranks_file = ranks_dir / f"ranks_{next_index}.json"
+    ranks_file = RANKS_DIR / f"ranks_{run_id}.json"
     with open(ranks_file, "w") as f:
         json.dump(ranks, f)
     logger.log(f"Saved ranks to {ranks_file}")
 
     # Create/update symlink to the latest ranks file
-    latest_link = ranks_dir / "latest.json"
+    latest_link = RANKS_DIR / "latest.json"
     if latest_link.exists():
         latest_link.unlink()
     os.symlink(ranks_file.name, latest_link)
     logger.log(f"Updated latest symlink to point to {ranks_file.name}")
 
 
-def main(config: Config) -> None:
+def main(config: Config, run_id: str) -> None:
     # get the map of package_id -> canon_id
     package_to_canon: Dict[UUID, UUID] = db.get_package_to_canon_mapping()
     logger.log(f"{len(package_to_canon)} package to canon mappings")
@@ -124,19 +139,33 @@ def main(config: Config) -> None:
     logger.log(f"{len(packages)} packages")
 
     # load the graph
-    chai = load_graph(config.pm_config.npm_pm_id, package_to_canon, packages)
+    chai = load_graph(config, package_to_canon, packages)
     logger.log(f"CHAI has {len(chai)} nodes and {len(chai.edge_to_index)} edges")
 
-    # generate tea_ranks
-    ranks = chai.pagerank(
-        config.tearank_config.alpha, config.tearank_config.personalization
-    )
-    str_ranks = {str(chai[id].canon_id): rank for id, rank in ranks.items()}
-    logger.log(f"Ranks have {len(str_ranks)} entries")
+    # now, I need to generate the personalization vector
+    canons_with_source_types: List[Tuple[UUID, List[UUID]]] = []
+    for idx in chai.node_indexes():
+        node = chai[idx]
+        canons_with_source_types.append((node.canon_id, node.package_manager_ids))
+    config.tearank_config.personalize(canons_with_source_types)
 
-    # save the ranks
-    save_ranks(str_ranks)
+    # generate tea_ranks
+    getcontext().prec = 9
+    split_ratios = [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55]
+    for split_ratio in split_ratios:
+        decimal_split_ratio = Decimal(split_ratio)
+        ranks = chai.distribute(
+            config.tearank_config.personalization,
+            decimal_split_ratio,
+            config.tearank_config.tol,
+            config.tearank_config.max_iter,
+        )
+        str_ranks = {str(chai[id].canon_id): f"{rank}" for id, rank in ranks.items()}
+
+        # save the ranks
+        save_ranks(str_ranks, f"{run_id}_{split_ratio}")
 
 
 if __name__ == "__main__":
-    main(config)
+    i = generate_run_id()
+    main(config, i)

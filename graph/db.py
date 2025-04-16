@@ -31,24 +31,21 @@ class GraphDB(DB):
         with self.session() as session:
             return session.query(CanonPackage).count() > 0
 
-    def get_packages_with_urls(self) -> List[Tuple[UUID, UUID, str, UUID, str, str]]:
+    def get_packages_with_urls(self) -> List[Tuple[UUID, str, str, str]]:
         """
         Retrieve packages with their associated URLs and URL types.
 
         Returns:
-            List of tuples containing package details and their URLs.
+            List of tuples containing id, name, and url
         """
         with self.session() as session:
             return (
-                session.query(
-                    Package.id,
-                    Package.name,
-                    URL.url,
-                )
+                session.query(Package.id, Package.name, URL.url, URL.created_at)
                 .join(PackageURL, Package.id == PackageURL.package_id)
                 .join(URL, PackageURL.url_id == URL.id)
                 .join(URLType, URL.url_type_id == URLType.id)
                 .where(URLType.name == "homepage")  # TODO: is this assumpion okay?
+                .order_by(URL.created_at.desc())
                 .all()
             )
 
@@ -95,6 +92,7 @@ class GraphDB(DB):
 
     def get_packages(self) -> List[Tuple[UUID, UUID]]:
         """Gets all packages for the run"""
+        self.logger.log(f"Getting packages for {self.system_pm_ids} package managers")
         with self.session() as session:
             return (
                 session.query(Package.id, Package.package_manager_id)

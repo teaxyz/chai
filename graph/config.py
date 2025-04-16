@@ -83,38 +83,32 @@ class TeaRankConfig:
         for pm in package_managers:
             match pm:
                 case "homebrew":
-                    self.favorites[pm] = Decimal(0.4)
+                    pm_id = db.get_pm_id_by_name("homebrew")[0][0]
+                    self.favorites[pm_id] = Decimal(1.0)
                 case "debian":
-                    self.favorites[pm] = Decimal(0.6)
+                    pm_id = db.get_pm_id_by_name("debian")[0][0]
+                    self.favorites[pm_id] = Decimal(0.6)
                 case _:
                     raise ValueError(f"Unknown system package manager: {pm}")
 
     def __init__(self) -> None:
         self.map_favorites(SYSTEM_PACKAGE_MANAGERS)
-        self.personalize()
 
-    def personalize(self) -> None:
+    def personalize(
+        self, canons_with_source_types: List[Tuple[UUID, List[str]]]
+    ) -> None:
         """Adjust canon weights proportionally to the sum of `favorites` in their
         associated package managers, normalized to total 1."""
 
         def coefficient(source_types: List[str]) -> Decimal:
             return sum(self.favorites[source_type] for source_type in source_types)
 
-        # these are the system package managers
-        source_types: List[str] = list(self.favorites.keys())
-
-        # get each canon, along with the list of package managers its part of
-        canons_with_source_types: List[Tuple[UUID, List[str]]] = (
-            db.get_canons_with_source_types(source_types)
-        )
-        logger.debug(f"Queried system_pm canons: {len(canons_with_source_types)}")
-
         # calculate raw weights for each canon based on favorites
         raw_weights = {}
         total = Decimal(0)
-        for canon_id, source_types in canons_with_source_types:
+        for canon_id, package_manager_ids in canons_with_source_types:
             # make source_types a set to deduplicate
-            source_types = set(source_types)
+            source_types = set(package_manager_ids)
 
             # sum the weights for all package managers this canon appears in
             weight = coefficient(source_types)
@@ -126,7 +120,7 @@ class TeaRankConfig:
         for canon_id, weight in raw_weights.items():
             self.personalization[canon_id] = weight * constant
 
-        logger.debug(f"Personalized {len(self.personalization)} canons")
+        logger.log(f"Personalized {len(self.personalization)} canons")
 
     def __str__(self) -> str:
         return f"TeaRankConfig(alpha={self.alpha}, favorites={self.favorites}, weights={len(self.weights)}, personalization={len(self.personalization)})"  # noqa
