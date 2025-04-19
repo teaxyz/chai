@@ -1,0 +1,8 @@
+{
+  "name": "example-project",
+  "description": "Contoh kontribusi metadata oleh @madyarch2 untuk tea Protocol",
+  "version": "1.0.0",
+  "author": "madyarch2",
+  "repository": "https://github.com/madyarch2/example-project",
+  "license": "MIT"
+}
