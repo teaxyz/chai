@@ -1,6 +1,1 @@
-psycopg2-binary
-sqlalchemy
 pyyaml
-requests
-python-dotenv
-gitpython
