@@ -1,5 +1,6 @@
+import re
 from os import getenv
-from typing import Dict, List
+from typing import Any, Dict, List
 
 
 def safe_int(val: str) -> int | None:
@@ -24,3 +25,18 @@ def build_query_params(
 def env_vars(env_var: str, default: str) -> bool:
     var = getenv(env_var, default).lower()
     return var == "true" or var == "1"
+
+
+# convert keys to snake case
+def convert_keys_to_snake_case(data: Any) -> Any:
+    """Recursively converts dictionary keys from hyphen-case to snake_case."""
+    if isinstance(data, dict):
+        new_dict = {}
+        for key, value in data.items():
+            new_key = key.replace("-", "_")
+            new_dict[new_key] = convert_keys_to_snake_case(value)  # handle nested
+        return new_dict
+    elif isinstance(data, list):
+        return [convert_keys_to_snake_case(item) for item in data]
+    else:
+        return data

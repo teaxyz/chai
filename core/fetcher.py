@@ -7,6 +7,7 @@ from io import BytesIO
 from shutil import rmtree
 from typing import Any
 
+import git
 from requests import get
 
 from core.logger import Logger
@@ -76,6 +77,7 @@ class Fetcher:
 
     def cleanup(self):
         if self.no_cache:
+            # TODO: it's deleting everything here
             rmtree(self.output, ignore_errors=True)
             os.makedirs(self.output, exist_ok=True)
 
@@ -127,3 +129,27 @@ class GZipFetcher(Fetcher):
         files.append(Data(self.file_path, self.file_name, decompressed.encode("utf-8")))
 
         return files
+
+
+class GitFetcher(Fetcher):
+    def __init__(self, name: str, source: str, no_cache: bool, test: bool):
+        super().__init__(name, source, no_cache, test)
+
+    def fetch(self) -> str:
+        # assume that source is a git repo whose main branch needs to be cloned
+        # we'll first prep the output directory, then clone, then update the symlinks
+        # NOTE: this is what the main Fetcher does, but slightly modified for this case
+
+        now = datetime.now().strftime("%Y-%m-%d")
+        root_dir = f"{self.output}/{now}"
+        os.makedirs(root_dir, exist_ok=True)
+
+        # now, clone the repo here
+        self.logger.debug(f"Cloning {self.source} into {root_dir}...")
+        _ = git.Repo.clone_from(self.source, root_dir, depth=1, branch="main")
+        self.logger.debug("Repository cloned successfully.")
+
+        # update the symlinks
+        self.update_symlink(now)
+
+        return root_dir
