@@ -289,9 +289,9 @@ class DebianLoader(DB):
                         dependency_id = dep_cache.package.id
 
                     if dependency_id is None:
-                        self.logger.warn(
-                            f"Weird dependency data: {temp_dep.dependency_name}, skip"
-                        )
+                        # TODO: certain Debian packages don't have a `"Package:`
+                        # in the Packages or Sources files, so we can't load them
+                        self.logger.warn(f"{temp_dep.dependency_name} not in cache")
                         continue
 
                     # Create the DependsOn object
