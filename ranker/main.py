@@ -15,6 +15,7 @@ from core.logger import Logger
 from core.models import TeaRank, TeaRankRun
 from ranker.config import Config, load_config
 from ranker.db import GraphDB
+from ranker.dedupe import dedupe
 from ranker.rx_graph import CHAI, PackageNode
 
 logger = Logger("ranker.main")
@@ -90,6 +91,10 @@ def load_graph(
 
 
 def main(config: Config) -> None:
+    # Call dedupe first
+    dedupe(db)
+    logger.log("✅ Deduplication finished, proceeding with TeaRank calculation.")
+
     # get the map of package_id -> canon_id
     package_to_canon: Dict[UUID, UUID] = db.get_package_to_canon_mapping()
     logger.log(f"{len(package_to_canon)} package to canon mappings")
@@ -142,4 +147,8 @@ def main(config: Config) -> None:
 
 
 if __name__ == "__main__":
-    main(config)
+    try:
+        main(config)
+    except Exception as e:
+        logger.error(f"Some error occurred: {e}")
+        raise

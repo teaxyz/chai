@@ -3,6 +3,11 @@
 generates a deduplicated graph across all CHAI package managers by URL, and publishes a 
 tea_rank
 
+## Requirements
+
+1. [pkgx](pkgx.sh)
+2. [uv](astral.sh/uv)
+
 ## Deduplication (`dedupe.py`)
 
 `dedupe.py` handles the deduplication of packages based on their homepage URLs. It 
@@ -36,14 +41,6 @@ correct state based on the latest available package URL data.
 
 ## Usage
 
-1. First deduplicate
-
-   ```bash
-   LOAD=true PYTHONPATH=.. ./dedupe.py
-   ```
-
-2. Then rank
-
 ### With pkgx
 
 ```bash
@@ -56,3 +53,29 @@ chmod +x main.py
 ```bash
 uv run main.py
 ```
+
+## Docker
+
+This service can be run inside a Docker container. The container assumes that the `core`
+library is available and that the `CHAI_DATABASE_URL` environment variable is set to 
+point to the database.
+
+**Building the Image:**
+
+From the root of the `chai-oss` repository:
+
+```bash
+docker build -t chai-ranker -f ranker/Dockerfile .
+```
+
+**Running the Container:**
+
+Make sure to provide the database connection string via the `CHAI_DATABASE_URL` 
+environment variable:
+
+```bash
+docker run --rm -e CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@localhost:5435/chai chai-ranker
+```
+
+The container will execute `dedupe.py` followed by `main.py` and exit with code 0 on 
+success or a non-zero code on failure.

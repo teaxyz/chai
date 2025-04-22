@@ -145,3 +145,16 @@ services:
         condition: service_healthy
       alembic:
         condition: service_completed_successfully
+
+  ranker:
+    build:
+      context: .
+      dockerfile: ./ranker/Dockerfile
+    environment:
+      - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
+      - PYTHONPATH=/
+    depends_on:
+      db:
+        condition: service_healthy
+      alembic:
+        condition: service_completed_successfully
