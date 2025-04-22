@@ -467,7 +467,11 @@ class CanonPackage(Base):
         UUID(as_uuid=True), ForeignKey("canons.id"), nullable=False, index=True
     )
     package_id = Column(
-        UUID(as_uuid=True), ForeignKey("packages.id"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("packages.id"),
+        nullable=False,
+        index=True,
+        unique=True,
     )
     created_at = Column(
         DateTime, nullable=False, default=func.now(), server_default=func.now()

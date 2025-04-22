@@ -1,6 +1,8 @@
 from typing import List, Tuple
 from uuid import UUID
 
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
 from core.db import DB
 from core.models import (
     URL,
@@ -33,6 +35,12 @@ class GraphDB(DB):
         with self.session() as session:
             return session.query(CanonPackage).count() > 0
 
+    def get_all_canons(self) -> dict[str, UUID]:
+        """Fetch all existing canons as a map from URL to Canon ID."""
+        with self.session() as session:
+            results = session.query(Canon.url, Canon.id).all()
+            return {url: canon_id for url, canon_id in results}
+
     def get_packages_with_urls(self) -> List[Tuple[UUID, str, str, str]]:
         """
         Retrieve packages with their associated URLs and URL types.
@@ -46,14 +54,14 @@ class GraphDB(DB):
                 .join(PackageURL, Package.id == PackageURL.package_id)
                 .join(URL, PackageURL.url_id == URL.id)
                 .join(URLType, URL.url_type_id == URLType.id)
-                .where(URLType.name == "homepage")  # TODO: is this assumpion okay?
+                .where(URLType.name == "homepage")  # we're deduplicating on homepage
                 .order_by(URL.created_at.desc())
                 .all()
             )
 
     def load_canonical_packages(self, data: List[Canon]) -> None:
         """
-        Load canonical packages into the database in batches
+        Load canonical packages into the database in batches, handling conflicts.
 
         Args:
             data: List of Canon objects.
@@ -61,20 +69,33 @@ class GraphDB(DB):
         with self.session() as session:
             for i in range(0, len(data), BATCH_SIZE):
                 batch = data[i : i + BATCH_SIZE]
-                session.add_all(batch)
-                session.flush()
+                if not batch:
+                    continue
+
+                # Convert batch objects to dictionaries for insert statement
+                insert_data = [
+                    {"id": item.id, "url": item.url, "name": item.name}
+                    for item in batch
+                ]
+
+                stmt = pg_insert(Canon).values(insert_data)
+                stmt = stmt.on_conflict_do_nothing(index_elements=["url"])
+
+                if stmt is not None:
+                    session.execute(stmt)
 
                 # log
                 batch_number = (i // BATCH_SIZE) + 1
                 total_batches = (len(data) + BATCH_SIZE - 1) // BATCH_SIZE
-                self.logger.log(f"Processed batch {batch_number} of {total_batches}")
+                self.logger.log(
+                    f"Processed Canon batch {batch_number} of {total_batches}"
+                )
 
             session.commit()
 
     def load_canonical_package_mappings(self, data: List[CanonPackage]) -> None:
         """
-        Load canonical package mappings into the database in batches, returning the ids
-        of the canonical package mappings.
+        Load canonical package mappings into the database in batches, updating on conflict.
 
         Args:
             data: List of CanonPackage objects.
@@ -82,13 +103,38 @@ class GraphDB(DB):
         with self.session() as session:
             for i in range(0, len(data), BATCH_SIZE):
                 batch = data[i : i + BATCH_SIZE]
-                session.add_all(batch)
-                session.flush()
+                if not batch:
+                    continue
+
+                # Convert batch objects to dictionaries
+                insert_data = [
+                    {
+                        "id": item.id,
+                        "canon_id": item.canon_id,
+                        "package_id": item.package_id,
+                    }
+                    for item in batch
+                ]
+
+                stmt = pg_insert(CanonPackage).values(insert_data)
+                update_dict = {"canon_id": stmt.excluded.canon_id}
+
+                # this is the unique constraint on canon_packages -> if its violated,
+                # that means that the package has changed its URL, and the dedupe
+                # logic has corrected the correct canon for this package
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["package_id"], set_=update_dict
+                )
+
+                if stmt is not None:
+                    session.execute(stmt)
 
                 # log
                 batch_number = (i // BATCH_SIZE) + 1
                 total_batches = (len(data) + BATCH_SIZE - 1) // BATCH_SIZE
-                self.logger.log(f"Processed batch {batch_number} of {total_batches}")
+                self.logger.log(
+                    f"Processed CanonPackage batch {batch_number} of {total_batches}"
+                )
 
             session.commit()
 
