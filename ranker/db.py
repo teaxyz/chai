@@ -140,12 +140,11 @@ class GraphDB(DB):
 
     def get_packages(self) -> List[Tuple[UUID, UUID]]:
         """Gets all packages for the run"""
-        self.logger.log(f"Getting packages for {self.system_pm_ids} package managers")
+        self.logger.debug(f"Getting packages for {self.system_pm_ids} package managers")
         with self.session() as session:
             return (
                 session.query(Package.id, Package.package_manager_id)
                 .where(Package.package_manager_id.in_(self.system_pm_ids))
-                # TODO: remove this where condition for prod runs
                 .all()
             )
 
@@ -192,7 +191,7 @@ class GraphDB(DB):
             session.add_all(data)
             session.commit()
 
-    def get_current_tea_rank_run(self) -> TeaRankRun:
+    def get_current_tea_rank_run(self) -> TeaRankRun | None:
         """Gets the current tea rank run"""
         with self.session() as session:
             return (

@@ -10,7 +10,7 @@ from core.logger import Logger
 from core.models import Canon, CanonPackage, Package, PackageManager, Source, URLType
 
 logger = Logger("graph.config")
-SYSTEM_PACKAGE_MANAGERS = ["homebrew", "debian"]
+SYSTEM_PACKAGE_MANAGERS = ["homebrew", "debian", "pkgx"]
 
 # setup decimal
 getcontext().prec = 9
@@ -83,10 +83,13 @@ class TeaRankConfig:
             match pm:
                 case "homebrew":
                     pm_id = db.get_pm_id_by_name("homebrew")[0][0]
-                    self.favorites[pm_id] = Decimal(1.0)
+                    self.favorites[pm_id] = Decimal(0.3)
                 case "debian":
                     pm_id = db.get_pm_id_by_name("debian")[0][0]
                     self.favorites[pm_id] = Decimal(0.6)
+                case "pkgx":
+                    pm_id = db.get_pm_id_by_name("pkgx")[0][0]
+                    self.favorites[pm_id] = Decimal(0.1)
                 case _:
                     raise ValueError(f"Unknown system package manager: {pm}")
 
@@ -119,7 +122,7 @@ class TeaRankConfig:
         for canon_id, weight in raw_weights.items():
             self.personalization[canon_id] = weight * constant
 
-        logger.log(f"Personalized {len(self.personalization)} canons")
+        logger.debug(f"Personalization sum: {sum(self.personalization.values())}")
 
     def __str__(self) -> str:
         return f"TeaRankConfig(alpha={self.alpha}, favorites={self.favorites}, weights={len(self.weights)}, personalization={len(self.personalization)})"  # noqa
