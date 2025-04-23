@@ -41,7 +41,7 @@ jobs:
       pkgx: ${{ steps.filter.outputs.pkgx }}
       any_changes: ${{ steps.filter.outputs.any_changes }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -89,7 +89,7 @@ jobs:
           echo "Homebrew changes: ${{ needs.changes.outputs.homebrew }}"
           echo "Debian changes: ${{ needs.changes.outputs.debian }}"
           echo "Pkgx changes: ${{ needs.changes.outputs.pkgx }}"
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python 3.10
         uses: actions/setup-python@v3
         with:
