@@ -64,6 +64,7 @@ jobs:
   build:
     needs: changes
     if: ${{ needs.changes.outputs.any_changes == 'true' || github.event_name == 'workflow_dispatch' }}
+    environment: ${{ inputs.env || 'dev' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
