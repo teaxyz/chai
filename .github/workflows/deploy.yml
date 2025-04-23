@@ -72,7 +72,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v3
         with:
           audience: sts.amazonaws.com
-          aws-region: us-west-2
+          aws-region: us-east-1
           role-to-assume: ${{ secrets.TEA_AWS_ROLE }}
       
       - name: Login to Amazon ECR
@@ -150,7 +150,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v3
         with:
           audience: sts.amazonaws.com
-          aws-region: us-west-2
+          aws-region: us-east-1
           role-to-assume: ${{ secrets.TEA_AWS_ROLE }}
       
       - name: Set deployment ref
