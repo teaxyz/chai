@@ -1,16 +1,24 @@
 #! /usr/bin/env pkgx +python@3.11 uv run
 
+# /// script
+# dependencies = [
+#   "numpy==2.2.3",
+#   "rustworkx==0.16.0",
+# ]
+# ///
+
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 from uuid import UUID
 
 from core.logger import Logger
 from core.models import TeaRank, TeaRankRun
-from graph.config import Config, load_config
-from graph.db import GraphDB
-from graph.rx_graph import CHAI, PackageNode
+from ranker.config import Config, load_config
+from ranker.db import GraphDB
+from ranker.dedupe import dedupe
+from ranker.rx_graph import CHAI, PackageNode
 
-logger = Logger("graph.main")
+logger = Logger("ranker.main")
 config = load_config()
 db = GraphDB(config.pm_config.npm_pm_id, config.pm_config.system_pm_ids)
 
@@ -51,7 +59,9 @@ def load_graph(
 
         # now grab its dependencies
         # there are two cases: legacy CHAI or new CHAI
-        # the db handles these two distinctions
+        # the db helps us these two distinctions with two different helpers
+        # TODO: eventually, CHAI will be at package to package, so everything will
+        # "get_legacy_dependencies"
         if package.package_manager_id == npm_pm_id:
             dependencies = db.get_legacy_dependencies(package.id)
         else:
@@ -81,6 +91,10 @@ def load_graph(
 
 
 def main(config: Config) -> None:
+    # Call dedupe first
+    dedupe(db)
+    logger.log("✅ Deduplication finished, proceeding with TeaRank calculation.")
+
     # get the map of package_id -> canon_id
     package_to_canon: Dict[UUID, UUID] = db.get_package_to_canon_mapping()
     logger.log(f"{len(package_to_canon)} package to canon mappings")
@@ -113,7 +127,7 @@ def main(config: Config) -> None:
 
     # Determine the next run ID
     latest_run = db.get_current_tea_rank_run()
-    current_run = latest_run.run_id + 1 if latest_run else 1
+    current_run = latest_run.run + 1 if latest_run else 1
     logger.log(f"Starting TeaRank run number: {current_run}")
 
     # Prepare TeaRank objects with the *next* run ID
@@ -133,4 +147,8 @@ def main(config: Config) -> None:
 
 
 if __name__ == "__main__":
-    main(config)
+    try:
+        main(config)
+    except Exception as e:
+        logger.error(f"Some error occurred: {e}")
+        raise

@@ -228,5 +228,15 @@ docker-compose restart api
 docker compose down --remove-orphans
 ```
 
+### run-pipeline
+
+Inputs: SERVICE
+Requires: build
+Env: CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@localhost:5435/chai
+
+```sh
+docker compose up $SERVICE
+```
+
 [PostgreSQL]: https://www.postgresql.org
 [`pkgx`]: https://pkgx.sh
