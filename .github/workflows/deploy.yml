@@ -16,6 +16,10 @@ on:
         description: "The git ref (SHA or tag) to deploy"
         required: true
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   changes:
     runs-on: ubuntu-latest
@@ -72,9 +76,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
         with:
-          audience: sts.amazonaws.com
-          aws-region: us-east-1
           role-to-assume: ${{ secrets.TEA_AWS_ROLE }}
+          aws-region: us-east-1
       
       - name: Login to Amazon ECR
         id: login-ecr
@@ -150,9 +153,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
         with:
-          audience: sts.amazonaws.com
-          aws-region: us-east-1
           role-to-assume: ${{ secrets.TEA_AWS_ROLE }}
+          aws-region: us-east-1
       
       - name: Set deployment ref
         id: set-ref
