@@ -444,3 +444,71 @@ class LegacyDependency(Base):
     updated_at = Column(
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
+
+
+class Canon(Base):
+    __tablename__ = "canons"
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    url = Column(String, nullable=False, index=True, unique=True)  # the derived key
+    # CanonNames should be its own table, so we collect all aliases of a package!
+    name = Column(String, nullable=False, index=True)
+    created_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+    updated_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+
+
+class CanonPackage(Base):
+    __tablename__ = "canon_packages"
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    canon_id = Column(
+        UUID(as_uuid=True), ForeignKey("canons.id"), nullable=False, index=True
+    )
+    package_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("packages.id"),
+        nullable=False,
+        index=True,
+        unique=True,
+    )
+    created_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+    updated_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+
+
+class TeaRankRun(Base):
+    __tablename__ = "tea_rank_runs"
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=func.uuid_generate_v4(),
+        server_default=func.uuid_generate_v4(),
+    )
+    run = Column(Integer, nullable=False)
+    split_ratio = Column(String, nullable=False)
+    created_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+
+
+class TeaRank(Base):
+    __tablename__ = "tea_ranks"
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=func.uuid_generate_v4(),
+        server_default=func.uuid_generate_v4(),
+    )
+    tea_rank_run = Column(Integer, nullable=False, index=True)
+    canon_id = Column(
+        UUID(as_uuid=True), ForeignKey("canons.id"), nullable=False, index=True
+    )
+    rank = Column(String, nullable=False)
+    created_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )

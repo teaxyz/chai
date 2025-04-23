@@ -1,0 +1,2 @@
+numpy==2.2.3
+rustworkx==0.16.0

@@ -7,9 +7,9 @@ COPY . .
 WORKDIR /core
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install crates requirements
-WORKDIR /package_managers/crates
+# Install pkgx requirements
+WORKDIR /package_managers/pkgx
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Run the main application
-CMD ["python", "/package_managers/crates/main.py"]
+CMD ["python", "/package_managers/pkgx/main.py"] 

@@ -9,7 +9,7 @@ services:
     volumes:
       - ./data/db/data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -25,7 +25,7 @@ services:
       db:
         condition: service_healthy
     working_dir: /alembic
-    entrypoint: ["./run_migrations.sh"]
+    entrypoint: [ "./run_migrations.sh" ]
 
   crates:
     build:
@@ -120,6 +120,39 @@ services:
       - FREQUENCY=${FREQUENCY:-24}
     volumes:
       - ./data/debian:/data/debian
+    depends_on:
+      db:
+        condition: service_healthy
+      alembic:
+        condition: service_completed_successfully
+
+  pkgx:
+    build:
+      context: .
+      dockerfile: ./package_managers/pkgx/Dockerfile
+    environment:
+      - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
+      - NO_CACHE=${NO_CACHE:-false}
+      - PYTHONPATH=/
+      - DEBUG=${DEBUG:-false}
+      - TEST=${TEST:-false}
+      - FETCH=${FETCH:-true}
+      - FREQUENCY=${FREQUENCY:-24}
+    volumes:
+      - ./logs/pkgx:/var/log
+    depends_on:
+      db:
+        condition: service_healthy
+      alembic:
+        condition: service_completed_successfully
+
+  ranker:
+    build:
+      context: .
+      dockerfile: ./ranker/Dockerfile
+    environment:
+      - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
+      - PYTHONPATH=/
     depends_on:
       db:
         condition: service_healthy

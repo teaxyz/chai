@@ -1,0 +1,10 @@
+alembic==1.13.2
+GitPython>=3.1.0 # Or specify a particular version if needed
+requests==2.32.3
+certifi==2024.8.30
+charset-normalizer==3.3.2
+idna==3.8
+psycopg2==2.9.9
+schedule==1.2.0
+sqlalchemy==2.0.34
+urllib3==2.2.2 

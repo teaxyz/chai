@@ -1,6 +1,17 @@
 name: CI
 
 on:
+  workflow_dispatch:
+    inputs:
+      env:
+        description: "The environment to test against"
+        required: false
+        type: choice
+        options:
+          - dev
+          - testnet
+          - mainnet
+        default: 'dev'
   push:
     branches: ["main"]
     paths:
@@ -20,8 +31,55 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  changes:
     runs-on: ubuntu-latest
+    outputs:
+      core: ${{ steps.filter.outputs.core }}
+      crates: ${{ steps.filter.outputs.crates }}
+      homebrew: ${{ steps.filter.outputs.homebrew }}
+      debian: ${{ steps.filter.outputs.debian }}
+      pkgx: ${{ steps.filter.outputs.pkgx }}
+      any_changes: ${{ steps.filter.outputs.any_changes }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            core:
+              - 'core/**'
+              - 'tests/unit/test_db_models.py'
+            crates:
+              - 'package_managers/crates/**'
+              - 'tests/unit/test_crates_transformer.py'
+            homebrew:
+              - 'package_managers/homebrew/**'
+            debian:
+              - 'package_managers/debian/**'
+            pkgx:
+              - 'package_managers/pkgx/**'
+            system:
+              - 'tests/system/**'
+      
+      - name: Set any_changes output
+        id: set-any-changes
+        run: |
+          if [[ "${{ steps.filter.outputs.core }}" == "true" || \
+                "${{ steps.filter.outputs.crates }}" == "true" || \
+                "${{ steps.filter.outputs.homebrew }}" == "true" || \
+                "${{ steps.filter.outputs.debian }}" == "true" || \
+                "${{ steps.filter.outputs.pkgx }}" == "true" || \
+                "${{ steps.filter.outputs.system }}" == "true" ]]; then
+            echo "any_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "any_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+  test:
+    needs: changes
+    if: ${{ needs.changes.outputs.any_changes == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.env || 'dev' }}
     steps:
       - uses: actions/checkout@v3
       - name: Set up Python 3.10
@@ -32,8 +90,42 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r tests/requirements.txt
-      - name: Run tests
+      - name: Set environment
+        id: set-env
         run: |
+          TEST_ENV="dev"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TEST_ENV=${{ inputs.env }}
+          fi
+          echo "TEST_ENV=${TEST_ENV}" >> $GITHUB_ENV
+          echo "test_env=${TEST_ENV}" >> $GITHUB_OUTPUT
+          
+      - name: Run Crates Transformer Tests
+        if: ${{ needs.changes.outputs.crates == 'true' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          echo "Running Crates tests for environment: ${{ env.TEST_ENV }}"
           pytest tests/unit/test_crates_transformer.py -v -m transformer --cov=core --cov-report=xml --cov-report=term-missing
+      
+      - name: Run DB Model Tests
+        if: ${{ needs.changes.outputs.core == 'true' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          echo "Running DB model tests for environment: ${{ env.TEST_ENV }}"
           pytest tests/unit/test_db_models.py -v -m db --cov=core --cov-append --cov-report=xml --cov-report=term-missing
+      
+      - name: Run Debian Tests
+        if: ${{ needs.changes.outputs.debian == 'true' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          echo "Running Debian tests for environment: ${{ env.TEST_ENV }}"
+          pytest tests/unit/test_debian_transformer.py -v -m transformer --cov=core --cov-append --cov-report=xml --cov-report=term-missing
+      
+      - name: Run Pkgx Tests
+        if: ${{ needs.changes.outputs.pkgx == 'true' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          echo "Running Pkgx tests for environment: ${{ env.TEST_ENV }}"
+          pytest tests/unit/test_pkgx_transformer.py -v -m transformer --cov=core --cov-append --cov-report=xml --cov-report=term-missing
+      
+      - name: Run System Tests
+        if: ${{ needs.changes.outputs.any_changes == 'true' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          echo "Running system tests for environment: ${{ env.TEST_ENV }}"
           pytest tests/system -v -m system --cov=core --cov-append --cov-report=xml --cov-report=term-missing

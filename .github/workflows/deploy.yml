@@ -1,0 +1,176 @@
+name: "Release Chai"
+run-name: Release Chai - ${{ inputs.env || 'auto' }} - ${{ inputs.ref || github.ref }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        description: "The environment to deploy to"
+        required: true
+        type: choice
+        options:
+          - dev
+          - testnet
+          - mainnet
+      ref:
+        description: "The git ref (SHA or tag) to deploy"
+        required: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      crates: ${{ steps.filter.outputs.crates }}
+      homebrew: ${{ steps.filter.outputs.homebrew }}
+      debian: ${{ steps.filter.outputs.debian }}
+      pkgx: ${{ steps.filter.outputs.pkgx }}
+      alembic: ${{ steps.filter.outputs.alembic }}
+      any_changes: ${{ steps.filter.outputs.any_changes }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            crates:
+              - 'package_managers/crates/**'
+              - 'core/**'
+            homebrew:
+              - 'package_managers/homebrew/**'
+              - 'core/**'
+            debian:
+              - 'package_managers/debian/**'
+              - 'core/**'
+            pkgx:
+              - 'package_managers/pkgx/**'
+              - 'core/**'
+            alembic:
+              - 'alembic/**'
+              - 'core/models/**'
+          
+      - name: Set any_changes output
+        id: set-any-changes
+        run: |
+          if [[ "${{ steps.filter.outputs.crates }}" == "true" || \
+                "${{ steps.filter.outputs.homebrew }}" == "true" || \
+                "${{ steps.filter.outputs.debian }}" == "true" || \
+                "${{ steps.filter.outputs.pkgx }}" == "true" || \
+                "${{ steps.filter.outputs.alembic }}" == "true" ]]; then
+            echo "any_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "any_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: changes
+    if: ${{ needs.changes.outputs.any_changes == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          audience: sts.amazonaws.com
+          aws-region: us-west-2
+          role-to-assume: ${{ secrets.TEA_AWS_ROLE }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Set deployment ref
+        id: set-ref
+        run: |
+          DEPLOY_REF=${{ inputs.ref }}
+          echo "DEPLOY_REF=${DEPLOY_REF}" >> $GITHUB_ENV
+          echo "deploy_ref=${DEPLOY_REF}" >> $GITHUB_OUTPUT
+      
+      - name: Set environment
+        id: set-env
+        run: |
+          DEPLOY_ENV=${{ inputs.env }}
+          echo "DEPLOY_ENV=${DEPLOY_ENV}" >> $GITHUB_ENV
+          echo "deploy_env=${DEPLOY_ENV}" >> $GITHUB_OUTPUT
+      
+      - name: Build and push Crates indexer image
+        if: ${{ needs.changes.outputs.crates == 'true' || github.event_name == 'workflow_dispatch' }}
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./package_managers/crates/Dockerfile
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/crates:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+      
+      - name: Build and push Homebrew indexer image
+        if: ${{ needs.changes.outputs.homebrew == 'true' || github.event_name == 'workflow_dispatch' }}
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./package_managers/homebrew/Dockerfile
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/homebrew:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+      
+      - name: Build and push Debian indexer image
+        if: ${{ needs.changes.outputs.debian == 'true' || github.event_name == 'workflow_dispatch' }}
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./package_managers/debian/Dockerfile
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/debian:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+      
+      - name: Build and push Pkgx indexer image
+        if: ${{ needs.changes.outputs.pkgx == 'true' || github.event_name == 'workflow_dispatch' }}
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./package_managers/pkgx/Dockerfile
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/pkgx:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+      
+      - name: Build and push Alembic image
+        if: ${{ needs.changes.outputs.alembic == 'true' || github.event_name == 'workflow_dispatch' }}
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./alembic/Dockerfile
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/alembic:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+  
+  deploy:
+    needs: [changes, build]
+    if: ${{ needs.changes.outputs.any_changes == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.env || 'dev' }}
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          audience: sts.amazonaws.com
+          aws-region: us-west-2
+          role-to-assume: ${{ secrets.TEA_AWS_ROLE }}
+      
+      - name: Set deployment ref
+        id: set-ref
+        run: |
+          DEPLOY_REF=${{ inputs.ref }}
+          echo "DEPLOY_REF=${DEPLOY_REF}" >> $GITHUB_ENV
+          echo "deploy_ref=${DEPLOY_REF}" >> $GITHUB_OUTPUT
+      
+      - name: Set environment
+        id: set-env
+        run: |
+          DEPLOY_ENV=${{ inputs.env }}
+          echo "DEPLOY_ENV=${DEPLOY_ENV}" >> $GITHUB_ENV
+          echo "deploy_env=${DEPLOY_ENV}" >> $GITHUB_OUTPUT
+
+      - name: Run Alembic Migrations
+        if: ${{ needs.changes.outputs.alembic == 'true' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          aws ecs run-task --cluster ${{ env.DEPLOY_ENV }}-chai-cluster \
+                          --task-definition ${{ env.DEPLOY_ENV }}-chai-alembic-run \
+                          --launch-type FARGATE \
+                          --network-configuration "awsvpcConfiguration={subnets=['${{ secrets.PRIVATE_SUBNET_ID }}'],securityGroups=['${{ secrets.ECS_SECURITY_GROUP_ID }}'],assignPublicIp=DISABLED}"

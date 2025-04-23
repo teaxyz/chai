@@ -14,6 +14,7 @@ class PackageManager(Enum):
     HOMEBREW = "homebrew"
     DEBIAN = "debian"
     NPM = "npm"
+    PKGX = "pkgx"
 
 
 TEST = env_vars("TEST", "false")
@@ -28,6 +29,7 @@ SOURCES = {
         "https://ftp.debian.org/debian/dists/stable/main/source/Sources.gz",
     ],
     PackageManager.NPM: "https://registry.npmjs.org/-/all",  # fake for now
+    PackageManager.PKGX: "https://github.com/pkgxdev/pantry.git",
 }
 
 # The three configuration values URLTypes, DependencyTypes, and UserTypes will query the
