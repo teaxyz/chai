@@ -15,10 +15,6 @@ on:
       ref:
         description: "The git ref (SHA or tag) to deploy"
         required: true
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
 
 jobs:
   changes:
@@ -86,20 +82,14 @@ jobs:
       - name: Set deployment ref
         id: set-ref
         run: |
-          DEPLOY_REF=${{ github.sha }}
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            DEPLOY_REF=${{ inputs.ref }}
-          fi
+          DEPLOY_REF=${{ inputs.ref }}
           echo "DEPLOY_REF=${DEPLOY_REF}" >> $GITHUB_ENV
           echo "deploy_ref=${DEPLOY_REF}" >> $GITHUB_OUTPUT
       
       - name: Set environment
         id: set-env
         run: |
-          DEPLOY_ENV="dev"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            DEPLOY_ENV=${{ inputs.env }}
-          fi
+          DEPLOY_ENV=${{ inputs.env }}
           echo "DEPLOY_ENV=${DEPLOY_ENV}" >> $GITHUB_ENV
           echo "deploy_env=${DEPLOY_ENV}" >> $GITHUB_OUTPUT
       
@@ -168,25 +158,19 @@ jobs:
       - name: Set deployment ref
         id: set-ref
         run: |
-          DEPLOY_REF=${{ github.sha }}
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            DEPLOY_REF=${{ inputs.ref }}
-          fi
+          DEPLOY_REF=${{ inputs.ref }}
           echo "DEPLOY_REF=${DEPLOY_REF}" >> $GITHUB_ENV
           echo "deploy_ref=${DEPLOY_REF}" >> $GITHUB_OUTPUT
       
       - name: Set environment
         id: set-env
         run: |
-          DEPLOY_ENV="dev"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            DEPLOY_ENV=${{ inputs.env }}
-          fi
+          DEPLOY_ENV=${{ inputs.env }}
           echo "DEPLOY_ENV=${DEPLOY_ENV}" >> $GITHUB_ENV
           echo "deploy_env=${DEPLOY_ENV}" >> $GITHUB_OUTPUT
 
       - name: Run Alembic Migrations
-        if: ${{ ((github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch') && (needs.changes.outputs.alembic == 'true' || github.event_name == 'workflow_dispatch') }}
+        if: ${{ needs.changes.outputs.alembic == 'true' || github.event_name == 'workflow_dispatch' }}
         run: |
           aws ecs run-task --cluster ${{ env.DEPLOY_ENV }}-chai-cluster \
                           --task-definition ${{ env.DEPLOY_ENV }}-chai-alembic-run \
