@@ -42,7 +42,7 @@ def process_csv(input_file, output_file, package_manager=None) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: script.py input.csv output.csv [package_manager]")
+        print(f"Usage: {sys.argv[0]} input.csv output.csv [package_manager]")
         sys.exit(1)
     
     package_manager = sys.argv[3] if len(sys.argv) > 3 else None
