@@ -36,9 +36,8 @@ def large_chai_graph() -> tuple[CHAI, dict[uuid.UUID, Decimal]]:
         uid: weight / total_weight
         for uid, weight in initial_personalization_raw.items()
     }
-    assert sum(personalization.values()) == pytest.approx(
-        Decimal(1.0)
-    ), "Initial personalization should sum to 1"
+    assert abs(sum(personalization.values()) - Decimal(1.0)) <= TOLERANCE, \
+        "Initial personalization should sum to 1 within tolerance"
 
     # Add random edges (potential cycles)
     node_indices = list(G.node_indices())
