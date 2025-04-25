@@ -139,7 +139,7 @@ services:
       - FETCH=${FETCH:-true}
       - FREQUENCY=${FREQUENCY:-24}
     volumes:
-      - ./logs/pkgx:/var/log
+      - ./data/pkgx:/data/pkgx
     depends_on:
       db:
         condition: service_healthy
