@@ -51,7 +51,13 @@ cd ../..
 PYTHONPATH=. copy_dependencies_no_thread.py
 ```
 
-4. Loading dependencies
+Or, if you have the legacy data already loaded locally...
+
+```bash
+psql "$LEGACY_CHAI_DATABASE_URL" -v package_manager='npm' -c "\copy (SELECT s.start_id, s.end_id, '81392e40-b4f2-4c06-9cd8-4fabff61e75e'::uuid AS dependency_type_id, NULL AS semver_range FROM public.sources s JOIN public.projects p ON s.start_id = p.id WHERE 'npm' = ANY(p.package_managers)) TO STDOUT" | psql "$CHAI_DATABASE_URL" -c "\copy legacy_dependencies (package_id, dependency_id, dependency_type_id, semver_range) FROM STDIN"
+```
+
+4. Loading URLs
 
    1. Run [urls.sql](sql/urls.sql), which generates a csv
    1. Run `add_urls.py path/to/csv` to load the data into CHAI
