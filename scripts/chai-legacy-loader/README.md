@@ -39,8 +39,8 @@ export CHAI_DATABASE_URL=postgresql://postgres:postgres@localhost:5435/chai
    1. Run `add_package_fields.py` to enrich it with additional fields
    1. `psql $CHAI_DATABASE_URL -c CREATE TABLE temp_import (LIKE packages)`
    1. `psql $CHAI_DATABASE_URL -c "\COPY temp_import (derived_id, name, import_id, id, package_manager_id, created_at, updated_at) FROM '/path/to/csv' WITH (FORMAT csv, HEADER true, DELIMITER ',')"`
-   1. `psql $CHAI_DATABASE_URL -c INSERT INTO packages SELECT * FROM temp_import ON CONFLICT DO NOTHING;`
-   1. `psql $CHAI_DATABASE_URL -c DROP TABLE temp_import`
+   1. `psql $CHAI_DATABASE_URL -c "INSERT INTO packages SELECT * FROM temp_import ON CONFLICT DO NOTHING";`
+   1. `psql $CHAI_DATABASE_URL -c "DROP TABLE temp_import"`
 
 3. Loading dependencies
 
