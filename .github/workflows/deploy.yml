@@ -106,7 +106,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/crates:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
-            ${{ steps.login-ecr.outputs.registry }}/chai-v2/crates:latest-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/crates:latest
       
       - name: Build and push Homebrew indexer image
         if: ${{ needs.changes.outputs.homebrew == 'true' || github.event_name == 'workflow_dispatch' }}
@@ -117,7 +117,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/homebrew:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
-            ${{ steps.login-ecr.outputs.registry }}/chai-v2/homebrew:latest-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/homebrew:latest
       
       - name: Build and push Debian indexer image
         if: ${{ needs.changes.outputs.debian == 'true' || github.event_name == 'workflow_dispatch' }}
@@ -128,7 +128,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/debian:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
-            ${{ steps.login-ecr.outputs.registry }}/chai-v2/debian:latest-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/debian:latest
       
       - name: Build and push Pkgx indexer image
         if: ${{ needs.changes.outputs.pkgx == 'true' || github.event_name == 'workflow_dispatch' }}
@@ -139,7 +139,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/pkgx:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
-            ${{ steps.login-ecr.outputs.registry }}/chai-v2/pkgx:latest-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/pkgx:latest
       
       - name: Build and push Alembic image
         if: ${{ needs.changes.outputs.alembic == 'true' || github.event_name == 'workflow_dispatch' }}
@@ -150,7 +150,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/alembic:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
-            ${{ steps.login-ecr.outputs.registry }}/chai-v2/alembic:latest-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/alembic:latest
   
   deploy:
     needs: [changes, build]
