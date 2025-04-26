@@ -154,6 +154,7 @@ services:
       - CHAI_DATABASE_URL=${CHAI_DATABASE_URL:-postgresql://postgres:s3cr3t@db:5432/chai}
       - PYTHONPATH=/
       - LOAD=1
+      - DEBUG=${DEBUG:-false}
     depends_on:
       db:
         condition: service_healthy

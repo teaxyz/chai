@@ -95,7 +95,8 @@ class GraphDB(DB):
 
     def load_canonical_package_mappings(self, data: List[CanonPackage]) -> None:
         """
-        Load canonical package mappings into the database in batches, updating on conflict.
+        Load canonical package mappings into the database in batches, updating on
+        conflict.
 
         Args:
             data: List of CanonPackage objects.
