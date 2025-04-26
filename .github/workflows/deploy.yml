@@ -173,7 +173,7 @@ jobs:
       - name: Run Alembic Migrations
         if: ${{ needs.changes.outputs.alembic == 'true' || github.event_name == 'workflow_dispatch' }}
         run: |
-          aws ecs run-task --cluster ${{ env.DEPLOY_ENV }}-chai-cluster \
+          aws ecs run-task --cluster ${{ env.DEPLOY_ENV }}-chai \
                           --task-definition ${{ env.DEPLOY_ENV }}-chai-alembic-run \
                           --launch-type FARGATE \
                           --network-configuration "awsvpcConfiguration={subnets=['${{ secrets.PRIVATE_SUBNET_ID }}'],securityGroups=['${{ secrets.ECS_SECURITY_GROUP_ID }}'],assignPublicIp=DISABLED}"
