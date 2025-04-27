@@ -1,5 +1,9 @@
 #!/usr/bin/env pkgx +python@3.11 uv run
 
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from core.config import Config, PackageManager
 from core.fetcher import GitFetcher
 from core.logger import Logger
