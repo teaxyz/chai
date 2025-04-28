@@ -122,7 +122,7 @@ class ChaiDB:
         # initialize package map
         self.package_map = self._get_package_map()
         self.logger.debug(
-            f"{len(self.package_map)} {self.config.pm_config.pm_enum} packages in CHAI"
+            f"{len(self.package_map)} {self.config.pm_config.package_manager} packages in CHAI"
         )
 
         # Load existing legacy dependencies to avoid duplicates
@@ -142,7 +142,7 @@ class ChaiDB:
         # check that we actually loaded packages for the specified manager
         if len(rows) == 0:
             raise ValueError(
-                f"{self.config.pm_config.pm_enum} packages not found in DB"
+                f"{self.config.pm_config.package_manager} packages not found in DB"
             )
 
         return {row[0]: row[1] for row in rows}

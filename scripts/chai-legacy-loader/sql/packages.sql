@@ -1,3 +1,4 @@
+-- TODO: swap npm for $1, and update the scripts
 select 
 	concat('npm', '/', project_name) as "derived_id",
 	project_name as "name", 
