@@ -104,7 +104,9 @@ jobs:
           context: .
           file: ./package_managers/crates/Dockerfile
           push: true
-          tags: ${{ steps.login-ecr.outputs.registry }}/chai-v2/crates:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/crates:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/crates:latest
       
       - name: Build and push Homebrew indexer image
         if: ${{ needs.changes.outputs.homebrew == 'true' || github.event_name == 'workflow_dispatch' }}
@@ -113,7 +115,9 @@ jobs:
           context: .
           file: ./package_managers/homebrew/Dockerfile
           push: true
-          tags: ${{ steps.login-ecr.outputs.registry }}/chai-v2/homebrew:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/homebrew:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/homebrew:latest
       
       - name: Build and push Debian indexer image
         if: ${{ needs.changes.outputs.debian == 'true' || github.event_name == 'workflow_dispatch' }}
@@ -122,7 +126,9 @@ jobs:
           context: .
           file: ./package_managers/debian/Dockerfile
           push: true
-          tags: ${{ steps.login-ecr.outputs.registry }}/chai-v2/debian:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/debian:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/debian:latest
       
       - name: Build and push Pkgx indexer image
         if: ${{ needs.changes.outputs.pkgx == 'true' || github.event_name == 'workflow_dispatch' }}
@@ -131,7 +137,9 @@ jobs:
           context: .
           file: ./package_managers/pkgx/Dockerfile
           push: true
-          tags: ${{ steps.login-ecr.outputs.registry }}/chai-v2/pkgx:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/pkgx:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/pkgx:latest
       
       - name: Build and push Alembic image
         if: ${{ needs.changes.outputs.alembic == 'true' || github.event_name == 'workflow_dispatch' }}
@@ -140,7 +148,9 @@ jobs:
           context: .
           file: ./alembic/Dockerfile
           push: true
-          tags: ${{ steps.login-ecr.outputs.registry }}/chai-v2/alembic:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/alembic:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/alembic:latest
   
   deploy:
     needs: [changes, build]
@@ -173,7 +183,7 @@ jobs:
       - name: Run Alembic Migrations
         if: ${{ needs.changes.outputs.alembic == 'true' || github.event_name == 'workflow_dispatch' }}
         run: |
-          aws ecs run-task --cluster ${{ env.DEPLOY_ENV }}-chai-cluster \
+          aws ecs run-task --cluster chai-${{ env.DEPLOY_ENV }} \
                           --task-definition ${{ env.DEPLOY_ENV }}-chai-alembic-run \
                           --launch-type FARGATE \
                           --network-configuration "awsvpcConfiguration={subnets=['${{ secrets.PRIVATE_SUBNET_ID }}'],securityGroups=['${{ secrets.ECS_SECURITY_GROUP_ID }}'],assignPublicIp=DISABLED}"

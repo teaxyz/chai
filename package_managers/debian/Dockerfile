@@ -11,5 +11,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 WORKDIR /package_managers/debian
 RUN pip install --no-cache-dir -r requirements.txt
 
+WORKDIR /
 # Run the main application
 CMD ["python", "/package_managers/debian/main.py"]
