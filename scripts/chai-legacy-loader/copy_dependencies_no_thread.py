@@ -102,9 +102,11 @@ class ChaiDB:
 
         # connect to the database
         self.conn = psycopg2.connect(CHAI_DATABASE_URL)
+        # Use autocommit=False for server-side cursors if needed within a transaction
+        # self.conn.set_session(autocommit=False)
         self.logger.debug("CHAI database connection established")
 
-        # create the cursor
+        # create the cursor for general operations
         self.cursor = self.conn.cursor()
         self.logger.debug("CHAI database cursor created")
 
@@ -120,11 +122,12 @@ class ChaiDB:
         # initialize package map
         self.package_map = self._get_package_map()
         self.logger.debug(
-            f"{len(self.package_map)} {self.config.pm_config.name} packages in CHAI"
+            f"{len(self.package_map)} {self.config.pm_config.pm_enum} packages in CHAI"
         )
 
-        # TODO: add the existing legacy dependencies to the processed pairs
+        # Load existing legacy dependencies to avoid duplicates
         self.processed_pairs = set()
+        self._load_existing_dependencies()
 
     def _get_package_map(self) -> Dict[str, uuid.UUID]:
         """Get a map of package import_ids to their UUIDs for the configured package
@@ -143,6 +146,38 @@ class ChaiDB:
             )
 
         return {row[0]: row[1] for row in rows}
+
+    def _load_existing_dependencies(self, batch_size: int = BATCH_SIZE) -> None:
+        """
+        Loads existing (package_id, dependency_id) pairs from the
+        legacy_dependencies table into self.processed_pairs using a
+        server-side cursor to handle potentially large datasets efficiently.
+        """
+        self.logger.log("Loading existing legacy dependencies...")
+        query = "SELECT package_id, dependency_id FROM legacy_dependencies"
+        cursor_name = "existing_deps_cursor"
+        total_loaded = 0
+
+        # Use a transaction context for the server-side cursor
+        with self.conn:
+            # Use a named cursor (server-side)
+            with self.conn.cursor(name=cursor_name) as named_cursor:
+                named_cursor.execute(query)
+                while True:
+                    batch = named_cursor.fetchmany(batch_size)
+                    if not batch:
+                        break
+                    # Convert batch of tuples to set for efficient update
+                    self.processed_pairs.update(batch)
+                    total_loaded += len(batch)
+                    if total_loaded % (batch_size * 20000) == 0:
+                        self.logger.debug(
+                            f"Loaded {total_loaded} existing dependency pairs..."
+                        )
+
+        self.logger.log(
+            f"Finished loading {total_loaded} existing dependency pairs into memory."
+        )
 
     def init_copy_expert(self) -> None:
         """Initialize a StringIO object to collect CSV data for copy operation"""
