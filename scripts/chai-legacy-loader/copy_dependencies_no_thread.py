@@ -1,7 +1,6 @@
 #!/usr/bin/env pkgx +python@3.11 uv run
 import argparse
 import io
-import json
 import os
 import uuid
 from typing import Dict, List
@@ -72,7 +71,7 @@ class LegacyDB:
         # create a cursor to execute the declare statement
         with self.conn.cursor() as cursor:
             cursor.execute(declare_stmt)
-            self.logger.log(
+            self.logger.debug(
                 f"Created server-side cursor '{cursor_name}' for {sql_file}"
             )
 
@@ -118,23 +117,30 @@ class ChaiDB:
             "dependency_type_id",
             "semver_range",
         ]
-        # TODO: should also be based on inputted package manager
-        self.npm_map = self.get_npm_map()
-        self.logger.debug(f"{len(self.npm_map)} NPM packages in CHAI")
+        # initialize package map
+        self.package_map = self._get_package_map()
+        self.logger.debug(
+            f"{len(self.package_map)} {self.config.pm_config.name} packages in CHAI"
+        )
+
+        # TODO: add the existing legacy dependencies to the processed pairs
         self.processed_pairs = set()
 
-    def get_npm_map(self) -> Dict[str, uuid.UUID]:
-        """Get a map of npm package names to their IDs."""
+    def _get_package_map(self) -> Dict[str, uuid.UUID]:
+        """Get a map of package import_ids to their UUIDs for the configured package
+        manager"""
         query = """SELECT import_id, id 
             FROM packages 
-            WHERE package_manager_id = %(npm_pm_id)s
+            WHERE package_manager_id = %(pm_id)s
             AND import_id IS NOT NULL"""
-        self.cursor.execute(query, {"npm_pm_id": self.config.pm_config.pm_id})
+        self.cursor.execute(query, {"pm_id": self.config.pm_config.pm_id})
         rows = self.cursor.fetchall()
 
-        # check that we actually loaded NPM
+        # check that we actually loaded packages for the specified manager
         if len(rows) == 0:
-            raise ValueError("NPM packages not found")
+            raise ValueError(
+                f"{self.config.pm_config.pm_enum} packages not found in DB"
+            )
 
         return {row[0]: row[1] for row in rows}
 
@@ -142,14 +148,14 @@ class ChaiDB:
         """Initialize a StringIO object to collect CSV data for copy operation"""
         self.csv_data = io.StringIO()
         self.columns_str = ", ".join(self.legacy_dependency_columns)
-        self.logger.log("Copy buffer initialized")
+        self.logger.debug("Copy buffer initialized")
 
     def add_rows_to_copy_expert(self, rows: List[tuple]) -> int:
         """Add rows to the StringIO buffer for later COPY operation"""
         rows_added = 0
         for row in rows:
-            package_id = self.npm_map.get(row[0])
-            dependency_id = self.npm_map.get(row[1])
+            package_id = self.package_map.get(row[0])
+            dependency_id = self.package_map.get(row[1])
 
             # if package or dependency are not found, skip the row
             if not package_id or not dependency_id:
@@ -182,6 +188,7 @@ class ChaiDB:
     def add_rows_with_flush(self, rows: List[tuple], max_buffer_size=100000) -> int:
         """Add rows to the StringIO buffer for later COPY operation"""
         rows_added = self.add_rows_to_copy_expert(rows)
+        self.logger.log(f"Added {rows_added} rows to the copy expert")
 
         # if the buffer is too large, flush it
         if self.csv_data.tell() > max_buffer_size:
@@ -203,7 +210,7 @@ class ChaiDB:
                 self.csv_data,
             )
             self.conn.commit()
-            self.logger.log("Data copied to database")
+            self.logger.log(f"{len(self.processed_pairs)} total rows copied")
         except psycopg2.errors.BadCopyFileFormat as e:
             self.logger.log(f"Error copying data to database: {e}")
             # write the csv data to a file
@@ -229,12 +236,11 @@ def main(
     cursor_name = "legacy_dependencies_cursor"
     legacy_db.create_server_cursor("dependencies.sql", cursor_name)
 
-    logger.log("Starting dependency copy")
+    logger.log("Starting dependency loop process")
+    total_rows = 0
     try:
-        total_rows = 0
         while True:
             rows = legacy_db.fetch_batch(cursor_name, BATCH_SIZE)
-            logger.debug(f"Fetched {len(rows)} rows: {rows[0]}")
 
             # break if we have no more rows
             if not rows:
@@ -242,7 +248,6 @@ def main(
 
             # keep adding the rows to the copy expert
             rows_added = chai_db.add_rows_with_flush(rows)
-            logger.log(f"Added {rows_added} rows to the copy expert")
 
             # update the total rows processed
             total_rows += rows_added
@@ -252,14 +257,21 @@ def main(
                 break
 
         # complete the copy expert
-        logger.log("Attempting to complete the copy expert")
+        logger.log("Completing copy expert for the last batch")
         chai_db.complete_copy_expert()
-        logger.log(f"Total rows processed: {total_rows}")
 
     except KeyboardInterrupt:
         logger.log("Keyboard interrupt detected")
         chai_db.complete_copy_expert()
         logger.log(f"Total rows processed: {total_rows}")
+
+    finally:
+        logger.log(f"Total rows processed: {total_rows}")
+        legacy_db.close_cursor(cursor_name)
+        legacy_db.conn.close()
+        chai_db.cursor.close()
+        chai_db.conn.close()
+        logger.log("Database connections closed")
 
 
 if __name__ == "__main__":
