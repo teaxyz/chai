@@ -1,39 +1,41 @@
 #!/usr/bin/env pkgx +python@3.11 uv run
+import argparse
 import io
 import os
 import uuid
 from typing import Dict, List
-import json
 
 import psycopg2
+import psycopg2.errors
 
 from core.config import Config, PackageManager
-from core.db import DB
 from core.logger import Logger
-import psycopg2.errors
 
 LEGACY_CHAI_DATABASE_URL = os.environ.get("LEGACY_CHAI_DATABASE_URL")
 CHAI_DATABASE_URL = os.environ.get("CHAI_DATABASE_URL")
-BATCH_SIZE = 20000  # Process this many records at a time
-DEPENDENCY_TYPES_MAP = {"dependency": "runtime", "dev_dependency": "development"}
-
-
-# just to get the package manager ID
-config_db = DB()
-config = Config(PackageManager.NPM, config_db)
-del config_db
+BATCH_SIZE = 20000
+LEGACY_CHAI_PACKAGE_MANAGER_MAP: Dict[PackageManager, str] = {
+    PackageManager.NPM: "npm",
+    PackageManager.CRATES: "crates",
+    PackageManager.HOMEBREW: "brew",
+    PackageManager.DEBIAN: "apt",
+    PackageManager.PKGX: "pkgx",
+}
 
 
 class LegacyDB:
     """Handles all interactions with the legacy CHAI database."""
 
-    def __init__(self):
+    def __init__(self, input_package_manager: PackageManager):
         """Initialize connection to the legacy database."""
         self.conn = psycopg2.connect(LEGACY_CHAI_DATABASE_URL)
         # Set autocommit to False for server-side cursors
         self.conn.set_session(autocommit=False)
         self.logger = Logger("legacy_db")
-        self.logger.log("Legacy database connection established")
+        self.logger.debug("Legacy database connection established")
+        self.package_manager_name = LEGACY_CHAI_PACKAGE_MANAGER_MAP[
+            input_package_manager
+        ]
 
     def __del__(self):
         """Close connection when object is destroyed."""
@@ -49,14 +51,29 @@ class LegacyDB:
             return f.read()
 
     def create_server_cursor(self, sql_file: str, cursor_name: str) -> None:
-        """Create a server-side cursor for efficient data fetching."""
+        """Create a server-side cursor for efficient data fetching.
+
+        Inputs:
+            sql_file: The name of the SQL file to load
+            cursor_name: The name of the cursor to create
+            package_manager_name: The name of the package manager whose legacy data we
+                are fetching
+        """
         query = self.get_sql_content(sql_file)
-        cursor = self.conn.cursor()
-        # Create a named server-side cursor
+
+        # substitute $1 with self.package_manager_name
+        query = query.replace("$1", f"'{self.package_manager_name}'")
+        self.logger.debug(f"Query: {query}")
+
+        # create a named server side cursor for retrieving data
         declare_stmt = f"DECLARE {cursor_name} CURSOR FOR {query}"
-        cursor.execute(declare_stmt)
-        self.logger.log(f"Created server-side cursor '{cursor_name}' for {sql_file}")
-        cursor.close()
+
+        # create a cursor to execute the declare statement
+        with self.conn.cursor() as cursor:
+            cursor.execute(declare_stmt)
+            self.logger.debug(
+                f"Created server-side cursor '{cursor_name}' for {sql_file}"
+            )
 
     def fetch_batch(self, cursor_name: str, batch_size: int) -> List[tuple]:
         """Fetch a batch of records using the server-side cursor."""
@@ -78,14 +95,20 @@ class LegacyDB:
 class ChaiDB:
     """Handles all interactions with the CHAI database."""
 
-    def __init__(self):
+    def __init__(self, config: Config):
         """Initialize connection to the CHAI database."""
         self.logger = Logger("chai_db")
-        self.conn = psycopg2.connect(CHAI_DATABASE_URL)
-        self.logger.log("CHAI database connection established")
+        self.config = config
 
-        # create the cursor
+        # connect to the database
+        self.conn = psycopg2.connect(CHAI_DATABASE_URL)
+        # Use autocommit=False for server-side cursors if needed within a transaction
+        # self.conn.set_session(autocommit=False)
+        self.logger.debug("CHAI database connection established")
+
+        # create the cursor for general operations
         self.cursor = self.conn.cursor()
+        self.logger.debug("CHAI database cursor created")
 
         # configure some variables
         self.legacy_dependency_columns = [
@@ -96,74 +119,84 @@ class ChaiDB:
             "dependency_type_id",
             "semver_range",
         ]
-        self.npm_map = self.get_npm_map()
-        self.logger.log("NPM map initialized")
-        self.processed_pairs = set()
+        # initialize package map
+        self.package_map = self._get_package_map()
+        self.logger.debug(
+            f"{len(self.package_map)} {self.config.pm_config.package_manager} packages in CHAI"
+        )
 
-    def get_npm_map(self) -> Dict[str, uuid.UUID]:
-        """Get a map of npm package names to their IDs."""
+        # Load existing legacy dependencies to avoid duplicates
+        self.processed_pairs = set()
+        self._load_existing_dependencies()
+
+    def _get_package_map(self) -> Dict[str, uuid.UUID]:
+        """Get a map of package import_ids to their UUIDs for the configured package
+        manager"""
         query = """SELECT import_id, id 
             FROM packages 
-            WHERE package_manager_id = %(npm_pm_id)s
+            WHERE package_manager_id = %(pm_id)s
             AND import_id IS NOT NULL"""
-        self.cursor.execute(query, {"npm_pm_id": config.pm_config.pm_id})
-        return {row[0]: row[1] for row in self.cursor.fetchall()}
+        self.cursor.execute(query, {"pm_id": self.config.pm_config.pm_id})
+        rows = self.cursor.fetchall()
+
+        # check that we actually loaded packages for the specified manager
+        if len(rows) == 0:
+            raise ValueError(
+                f"{self.config.pm_config.package_manager} packages not found in DB"
+            )
+
+        return {row[0]: row[1] for row in rows}
+
+    def _load_existing_dependencies(self, batch_size: int = BATCH_SIZE) -> None:
+        """
+        Loads existing (package_id, dependency_id) pairs from the
+        legacy_dependencies table into self.processed_pairs using a
+        server-side cursor to handle potentially large datasets efficiently.
+        """
+        self.logger.log("Loading existing legacy dependencies...")
+        query = "SELECT package_id, dependency_id FROM legacy_dependencies"
+        cursor_name = "existing_deps_cursor"
+        total_loaded = 0
+
+        # Use a transaction context for the server-side cursor
+        with self.conn:
+            # Use a named cursor (server-side)
+            with self.conn.cursor(name=cursor_name) as named_cursor:
+                named_cursor.execute(query)
+                while True:
+                    batch = named_cursor.fetchmany(batch_size)
+                    if not batch:
+                        break
+                    # Convert batch of tuples to set for efficient update
+                    self.processed_pairs.update(batch)
+                    total_loaded += len(batch)
+                    if total_loaded % (batch_size * 20000) == 0:
+                        self.logger.debug(
+                            f"Loaded {total_loaded} existing dependency pairs..."
+                        )
+
+        self.logger.log(
+            f"Finished loading {total_loaded} existing dependency pairs into memory."
+        )
 
     def init_copy_expert(self) -> None:
         """Initialize a StringIO object to collect CSV data for copy operation"""
         self.csv_data = io.StringIO()
         self.columns_str = ", ".join(self.legacy_dependency_columns)
-        self.logger.log("Copy buffer initialized")
-
-    def get_dependency_type(self, dependency_type: str):
-        match dependency_type:
-            case "dependency":
-                return config.dependency_types.runtime
-            case "dev_dependency":
-                return config.dependency_types.development
-            case _:
-                raise ValueError(f"Invalid dependency type: {dependency_type}")
-
-    def handle_semver(self, semver_range) -> str:
-        """Process semver range value to handle special cases.
-        
-        Handles two specific scenarios:
-        1. JSON strings: Extracts the 'version' field from JSON objects
-        2. CSV formatting: Properly quotes semver ranges containing commas
-        
-        Args:
-            semver_range: The raw semver range value from the database
-            
-        Returns:
-            Processed semver range ready for CSV inclusion
-        """
-        # Handle case where semver_range is a JSON string
-        if semver_range and isinstance(semver_range, str) and semver_range.startswith('{'):
-            try:
-                # Try to parse as JSON
-                semver_json = json.loads(semver_range)
-                # If it's a JSON object with a version field, use that
-                if isinstance(semver_json, dict) and 'version' in semver_json:
-                    semver_range = semver_json['version']
-            except json.JSONDecodeError:
-                # If it's not valid JSON, keep it as is
-                pass
-                
-        # Escape semver_range to ensure it works as a CSV field
-        if semver_range and ',' in str(semver_range):
-            semver_range = f'"{semver_range}"'
-            
-        return semver_range
+        self.logger.debug("Copy buffer initialized")
 
     def add_rows_to_copy_expert(self, rows: List[tuple]) -> int:
         """Add rows to the StringIO buffer for later COPY operation"""
         rows_added = 0
         for row in rows:
-            package_id = self.npm_map.get(row[0])
-            dependency_id = self.npm_map.get(row[1])
+            package_id = self.package_map.get(row[0])
+            dependency_id = self.package_map.get(row[1])
 
             # if package or dependency are not found, skip the row
             if not package_id or not dependency_id:
+                # skipping because maybe the package or dependency is
+                #  not in legacy chai
+                #  marked as spam
                 continue
 
             # if the pair has already been processed, skip the row
@@ -175,10 +208,8 @@ class ChaiDB:
 
             # get the dependency type and semver range
             # not available from the sources table in the legacy db
-            # assume everything is a runtime dependency
-            # dependency_type_id = self.get_dependency_type(row[2])
-            # semver_range = self.handle_semver(row[3])
-            dependency_type_id = config.dependency_types.runtime
+            # assume everything is a runtime dependency, and use the semver range *
+            dependency_type_id = self.config.dependency_types.runtime
             semver_range = "*"
 
             csv_line = (
@@ -192,6 +223,7 @@ class ChaiDB:
     def add_rows_with_flush(self, rows: List[tuple], max_buffer_size=100000) -> int:
         """Add rows to the StringIO buffer for later COPY operation"""
         rows_added = self.add_rows_to_copy_expert(rows)
+        self.logger.log(f"Added {rows_added} rows to the copy expert")
 
         # if the buffer is too large, flush it
         if self.csv_data.tell() > max_buffer_size:
@@ -213,7 +245,7 @@ class ChaiDB:
                 self.csv_data,
             )
             self.conn.commit()
-            self.logger.log("Data copied to database")
+            self.logger.log(f"{len(self.processed_pairs)} total rows copied")
         except psycopg2.errors.BadCopyFileFormat as e:
             self.logger.log(f"Error copying data to database: {e}")
             # write the csv data to a file
@@ -223,10 +255,14 @@ class ChaiDB:
             raise e
 
 
-if __name__ == "__main__":
-    logger = Logger("chai_legacy_loader")
-    legacy_db = LegacyDB()
-    chai_db = ChaiDB()
+def main(
+    logger: Logger,
+    config: Config,
+    input_package_manager: PackageManager,
+    stop: int | None,
+) -> None:
+    legacy_db = LegacyDB(input_package_manager)
+    chai_db = ChaiDB(config)
 
     # initialize the copy expert
     chai_db.init_copy_expert()
@@ -235,12 +271,9 @@ if __name__ == "__main__":
     cursor_name = "legacy_dependencies_cursor"
     legacy_db.create_server_cursor("dependencies.sql", cursor_name)
 
-    # stop mode
-    stop = None
-
-    logger.log("Starting dependency copy")
+    logger.log("Starting dependency loop process")
+    total_rows = 0
     try:
-        total_rows = 0
         while True:
             rows = legacy_db.fetch_batch(cursor_name, BATCH_SIZE)
 
@@ -250,7 +283,6 @@ if __name__ == "__main__":
 
             # keep adding the rows to the copy expert
             rows_added = chai_db.add_rows_with_flush(rows)
-            logger.log(f"Added {rows_added} rows to the copy expert")
 
             # update the total rows processed
             total_rows += rows_added
@@ -260,11 +292,48 @@ if __name__ == "__main__":
                 break
 
         # complete the copy expert
-        logger.log("Attempting to complete the copy expert")
+        logger.log("Completing copy expert for the last batch")
         chai_db.complete_copy_expert()
-        logger.log(f"Total rows processed: {total_rows}")
 
     except KeyboardInterrupt:
         logger.log("Keyboard interrupt detected")
         chai_db.complete_copy_expert()
         logger.log(f"Total rows processed: {total_rows}")
+
+    finally:
+        logger.log(f"Total rows processed: {total_rows}")
+        legacy_db.close_cursor(cursor_name)
+        legacy_db.conn.close()
+        chai_db.cursor.close()
+        chai_db.conn.close()
+        logger.log("Database connections closed")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--package-manager",
+        type=PackageManager,
+        choices=list(PackageManager),
+        required=True,
+    )
+    parser.add_argument(
+        "--stop",
+        type=int,
+        default=None,
+        help="Stop after processing a certain number of rows",
+    )
+    args = parser.parse_args()
+
+    input_package_manager: PackageManager = args.package_manager
+    stop: int | None = args.stop
+    logger = Logger("chai_legacy_loader")
+    config = Config(input_package_manager)
+
+    logger.log(f"Importing legacy dependencies for {args.package_manager}")
+    main(
+        logger,
+        config,
+        input_package_manager,
+        stop,
+    )

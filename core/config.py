@@ -52,10 +52,12 @@ class ExecConf:
 
 
 class PMConf:
+    package_manager: PackageManager
     pm_id: str
     source: str | list[str]
 
     def __init__(self, pm: PackageManager, db: ConfigDB):
+        self.package_manager = pm
         self.pm_id = db.select_package_manager_by_name(pm.value).id
         self.source = SOURCES[pm]
 

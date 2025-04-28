@@ -35,12 +35,13 @@ export CHAI_DATABASE_URL=postgresql://postgres:postgres@localhost:5435/chai
 
 2. Loading packages
 
-   1. Run [packages.sql](sql/packages.sql), which generates a csv
-   1. Run `add_package_fields.py` to enrich it with additional fields
-   1. `psql $CHAI_DATABASE_URL -c CREATE TABLE temp_import (LIKE packages)`
-   1. `psql $CHAI_DATABASE_URL -c "\COPY temp_import (derived_id, name, import_id, id, package_manager_id, created_at, updated_at) FROM '/path/to/csv' WITH (FORMAT csv, HEADER true, DELIMITER ',')"`
-   1. `psql $CHAI_DATABASE_URL -c INSERT INTO packages SELECT * FROM temp_import ON CONFLICT DO NOTHING;`
-   1. `psql $CHAI_DATABASE_URL -c DROP TABLE temp_import`
+   1. `psql $LEGACY_CHAI_DATABASE_URL -t -A -F',' -f sql/packages.sql -o /path/to/output.csv`
+   1. Run `add_package_fields.py /file/from/step/1.csv /path/to/output package_manager_id`
+   to enrich it with additional fields
+   1. `psql $CHAI_DATABASE_URL -c "CREATE TABLE temp_import (LIKE packages);"`
+   1. `psql $CHAI_DATABASE_URL -c "\COPY temp_import (id, derived_id, name, package_manager_id, import_id, created_at, updated_at) FROM '/path/to/csv/from/step/2' WITH (FORMAT csv, HEADER true, DELIMITER ',');"`
+   1. `psql $CHAI_DATABASE_URL -c "INSERT INTO packages SELECT * FROM temp_import ON CONFLICT DO NOTHING;"`
+   1. `psql $CHAI_DATABASE_URL -c "DROP TABLE temp_import;"`
 
 3. Loading dependencies
 
@@ -51,7 +52,7 @@ cd ../..
 PYTHONPATH=. copy_dependencies_no_thread.py
 ```
 
-4. Loading dependencies
+4. Loading URLs
 
    1. Run [urls.sql](sql/urls.sql), which generates a csv
    1. Run `add_urls.py path/to/csv` to load the data into CHAI
