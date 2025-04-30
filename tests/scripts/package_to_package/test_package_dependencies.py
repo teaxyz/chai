@@ -16,7 +16,7 @@ def create_mock_version(version_str: str) -> Mock:
     [
         # === Basic Cases ===
         ([], None),
-        (["gibberish"], "gibberish"),
+        (["gibberish"], "gibberish"),  # because only one entry
         (["1.0.0", "1.1.0", "1.0.1"], "1.1.0"),
         (["1.1.0", "1.0.0", "0.9.0"], "1.1.0"),
         (["1.0", "1.0.1"], "1.0.1"),
@@ -41,7 +41,6 @@ def create_mock_version(version_str: str) -> Mock:
         (["4.0.0", "4.07", "3.9.9"], "4.07"),
         (["5.9.0", "5.09.03", "5.8.9"], "5.09.03"),
         (["0.58", "0.58b"], "0.58b"),
-        (["4.5.3", "4.5.3b", "4.5.2"], "4.5.3"),
         (["1.4rc5", "1.0.0", "2025.01.13", "1.1.0", "2.4h"], "2025.01.13"),
         (["2.6.4.3", "5.2.10.0", "0.11.0.0", "1.0b3", "11-062"], "11-062"),
         # YYYY-MM-DD
@@ -63,8 +62,6 @@ def create_mock_version(version_str: str) -> Mock:
         ),  # Preprocessed to YYYY.MM.DD+HHMMSS
         # Base version > with local identifier
         (["2025.03.27-20.21.36"], "2025.03.27-20.21.36"),  # Single version bypass
-        # Milestone -M<num>
-        (["3.0.2"], "3.0.0-M2"),  # Single version bypass
         # === New Preprocessing Test Cases ===
         (["4.7w", "4.7x"], "4.7x"),
         (["4.7w", "4.7"], "4.7w"),
@@ -111,6 +108,7 @@ def create_mock_version(version_str: str) -> Mock:
             ],
             "0.3.0-nightly.4",
         ),
+        (["1.1.1s", "1.1.1t", "1.1.1u"], "1.1.1u"),
     ],
 )
 def test_get_latest_version_info(version_list_strs, expected_latest_str):

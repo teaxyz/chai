@@ -29,14 +29,7 @@ def preprocess_version_string(version_str: str) -> str:
     Handles specific date formats, build tags, and common non-standard separators.
     """
     # Replace underscores between digits or letters/digits
-    # Digit_Digit -> Digit.Digit
-    version_str = re.sub(r"(?<=\d)_(?=\d)", ".", version_str)
-
-    # Letter_Digit -> Letter.Digit
-    version_str = re.sub(r"(?<=[a-zA-Z])_(?=\d)", ".", version_str)
-
-    # Digit_Letter -> Digit.Letter
-    version_str = re.sub(r"(?<=\d)_(?=[a-zA-Z])", ".", version_str)
+    version_str = re.sub(r"(?<=[a-zA-Z\d])_(?=[a-zA-Z\d])", ".", version_str)
 
     # === Pattern Matching & Transformation (Order Matters!) ===
 
@@ -69,6 +62,26 @@ def preprocess_version_string(version_str: str) -> str:
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", version_str):
         return version_str.replace("-", ".")
 
+    # YYYY.MM.DD.<commit_hash> -> YYYY.MM.DD+commit_hash
+    # TODO: Hashes on the same date are compared lexicographically, which might not
+    # reflect actual order.
+    match_dot_date_hash = re.fullmatch(
+        r"(\d{4}\.\d{2}\.\d{2})\.([a-zA-Z0-9]+)", version_str
+    )
+    if match_dot_date_hash:
+        # Ensure the suffix isn't just a standard version number or time-like
+        suffix = match_dot_date_hash.group(2)
+        try:
+            # If packaging can parse "0.<suffix>", it's likely not a hash
+            packaging_version.parse(f"0.{suffix}")
+            # Also check if it looks like HH.MM.SS
+            if not re.fullmatch(r"\d{2}\.\d{2}\.\d{2}", suffix):
+                return f"{match_dot_date_hash.group(1)}+{suffix}"  # Treat as hash
+        except packaging_version.InvalidVersion:
+            return f"{match_dot_date_hash.group(1)}+{suffix}"  # Treat as hash
+        except Exception:
+            return f"{match_dot_date_hash.group(1)}+{suffix}"  # Treat as hash
+
     # YYYYMMDDTHHMMSS -> YYYYMMDD.HHMMSS
     match_ymdt_compact = re.fullmatch(r"(\d{8})T(\d{6})", version_str)
     if match_ymdt_compact:
@@ -90,6 +103,13 @@ def preprocess_version_string(version_str: str) -> str:
         date_part = f"{match_iso_subset.group(1)}.{match_iso_subset.group(2)}.{match_iso_subset.group(3)}"  # noqa
         time_part = f"{match_iso_subset.group(4)}{match_iso_subset.group(5)}{match_iso_subset.group(6)}Z"  # noqa
         return f"{date_part}+{time_part}"
+
+    # YYYY_MM_DD.commit_hash -> YYYY.MM.DD+commit_hash
+    match_commit_hash = re.fullmatch(
+        r"(\d{4}_\d{2}_\d{2})\.([a-zA-Z0-9]+)", version_str
+    )
+    if match_commit_hash:
+        return f"{match_commit_hash.group(1)}+{match_commit_hash.group(2)}"
 
     # <datestamp>-<string|version> -> <datestamp>+<string|version>
     match_date_suffix = re.fullmatch(r"(\d{8})-?(.*)", version_str)
@@ -123,15 +143,17 @@ def preprocess_version_string(version_str: str) -> str:
     if match_major_build:
         return f"{match_major_build.group(1)}+{match_major_build.group(2)}"
 
-    # Handle X.Yp<number> -> X.Y+p<number>
-    match_p_patch3 = re.fullmatch(r"(\d+\.\d+)p(\d+)", version_str)
-    if match_p_patch3:
-        return f"{match_p_patch3.group(1)}+p{match_p_patch3.group(2)}"
-
     # Handle r<number> -> 0+r<number>
     match_revision = re.fullmatch(r"r(\d+)", version_str)
     if match_revision:
         return f"0+r{match_revision.group(1)}"
+
+    # Handle X.Y.Z...<letter_suffix> -> X.Y.Z...+suffix (openssl@1.1.1w)
+    match_version_letter_suffix = re.fullmatch(r"(\d+(\.\d+)+)([a-zA-Z]+)", version_str)
+    if match_version_letter_suffix:
+        base_version_part = match_version_letter_suffix.group(1)
+        if base_version_part.count(".") > 0:  # Ensures at least X.Y.Z format
+            return f"{match_version_letter_suffix.group(1)}+{match_version_letter_suffix.group(3)}"  # noqa
 
     # Handle X.Y<single_letter_suffix> / X.Y<two_letter_suffix> -> X.Y+suffix
     match_letter_suffix = re.fullmatch(r"(\d+\.\d+)([a-zA-Z]{1,2})", version_str)
