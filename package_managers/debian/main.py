@@ -1,9 +1,10 @@
 #!/usr/bin/env pkgx +python@3.11 uv run --with alembic==1.13.2 --with certifi==2024.8.30 --with charset-normalizer==3.3.2 --with idna==3.8 --with mako==1.3.5 --with markupsafe==2.1.5 --with psycopg2==2.9.9 --with pyyaml==6.0.2 --with requests==2.32.3 --with ruff==0.6.5 --with schedule==1.2.0 --with sqlalchemy==2.0.34 --with typing-extensions==4.12.2 --with urllib3==2.2.2 #noqa
 
-import sys
 import os
+import sys
+import time
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from core.config import Config, PackageManager
 from core.fetcher import GZipFetcher
 from core.logger import Logger
@@ -12,6 +13,8 @@ from package_managers.debian.loader import DebianLoader
 from package_managers.debian.transformer import DebianTransformer
 
 logger = Logger("debian")
+
+SCHEDULER_ENABLED = os.getenv("ENABLE_SCHEDULER", "true").lower() == "true"
 
 
 def fetch(config: Config) -> None:
@@ -74,11 +77,25 @@ def main():
     config = Config(PackageManager.DEBIAN)
     logger.debug(f"Using config: {config}")
 
-    scheduler = Scheduler("debian")
-    scheduler.start(run_pipeline, config)
+    if SCHEDULER_ENABLED:
+        logger.log("Scheduler enabled. Starting schedule.")
+        scheduler = Scheduler("debian")
+        scheduler.start(run_pipeline, config)
 
-    # run immediately
-    run_pipeline(config)
+        # run immediately as well when scheduling
+        scheduler.run_now(run_pipeline, config)
+
+        # keep the main thread alive for scheduler
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            scheduler.stop()
+            logger.log("Scheduler stopped.")
+    else:
+        logger.log("Scheduler disabled. Running pipeline once.")
+        run_pipeline(config)
+        logger.log("Pipeline finished.")
 
 
 if __name__ == "__main__":

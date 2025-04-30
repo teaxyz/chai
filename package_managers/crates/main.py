@@ -1,9 +1,9 @@
 #!/usr/bin/env pkgx +python@3.11 uv run
-import time
-import sys
 import os
+import sys
+import time
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from core.config import Config, PackageManager
 from core.fetcher import TarballFetcher
@@ -13,6 +13,8 @@ from package_managers.crates.db import CratesDB
 from package_managers.crates.transformer import CratesTransformer
 
 logger = Logger("crates_orchestrator")
+
+SCHEDULER_ENABLED = os.getenv("ENABLE_SCHEDULER", "true").lower() == "true"
 
 
 def fetch(config: Config) -> TarballFetcher:
@@ -66,18 +68,25 @@ def main():
     config = Config(PackageManager.CRATES)
     logger.debug(config)
 
-    scheduler = Scheduler("crates")
-    scheduler.start(run_pipeline, db, config)
+    if SCHEDULER_ENABLED:
+        logger.log("Scheduler enabled. Starting schedule.")
+        scheduler = Scheduler("crates")
+        scheduler.start(run_pipeline, db, config)
 
-    # run immediately
-    scheduler.run_now(run_pipeline, db, config)
+        # run immediately as well when scheduling
+        scheduler.run_now(run_pipeline, db, config)
 
-    # keep the main thread alive so we can terminate the program with Ctrl+C
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        scheduler.stop()
+        # keep the main thread alive for scheduler
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            scheduler.stop()
+            logger.log("Scheduler stopped.")
+    else:
+        logger.log("Scheduler disabled. Running pipeline once.")
+        run_pipeline(db, config)
+        logger.log("Pipeline finished.")
 
 
 if __name__ == "__main__":

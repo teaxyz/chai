@@ -1,17 +1,21 @@
 #!/usr/bin/env pkgx +python@3.11 uv run
 
-import sys
 import os
+import sys
+import time
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from core.config import Config, PackageManager
 from core.fetcher import GitFetcher
 from core.logger import Logger
+from core.scheduler import Scheduler
 from package_managers.pkgx.loader import PkgxLoader
 from package_managers.pkgx.parser import PkgxParser
 from package_managers.pkgx.transformer import PkgxTransformer
 
 logger = Logger("pkgx")
+
+SCHEDULER_ENABLED = os.getenv("ENABLE_SCHEDULER", "true").lower() == "true"
 
 BATCH_SIZE = 500
 PROJECTS_DIR = "projects"
@@ -64,7 +68,25 @@ def main():
     config = Config(PackageManager.PKGX)
     logger.debug(f"Using config: {config}")
 
-    run_pipeline(config)
+    if SCHEDULER_ENABLED:
+        logger.log("Scheduler enabled. Starting schedule.")
+        scheduler = Scheduler("pkgx")
+        scheduler.start(run_pipeline, config)
+
+        # run immediately as well when scheduling
+        scheduler.run_now(run_pipeline, config)
+
+        # keep the main thread alive for scheduler
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            scheduler.stop()
+            logger.log("Scheduler stopped.")
+    else:
+        logger.log("Scheduler disabled. Running pipeline once.")
+        run_pipeline(config)
+        logger.log("Pipeline finished.")
 
 
 if __name__ == "__main__":

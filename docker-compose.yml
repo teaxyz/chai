@@ -39,6 +39,7 @@ services:
       - TEST=${TEST:-false}
       - FETCH=${FETCH:-true}
       - FREQUENCY=${FREQUENCY:-24}
+      - ENABLE_SCHEDULER=${ENABLE_SCHEDULER:-true}
     volumes:
       - ./data/crates:/data/crates
     depends_on:
@@ -57,6 +58,7 @@ services:
       - TEST=${TEST:-false}
       - FETCH=${FETCH:-true}
       - FREQUENCY=${FREQUENCY:-24}
+      - ENABLE_SCHEDULER=${ENABLE_SCHEDULER:-true}
       - SOURCE=https://formulae.brew.sh/api/formula.json
       - CODE_DIR=/package_managers/homebrew
       - DATA_DIR=/data/homebrew
@@ -118,6 +120,7 @@ services:
       - TEST=${TEST:-false}
       - FETCH=${FETCH:-true}
       - FREQUENCY=${FREQUENCY:-24}
+      - ENABLE_SCHEDULER=${ENABLE_SCHEDULER:-true}
     volumes:
       - ./data/debian:/data/debian
     depends_on:
@@ -138,6 +141,7 @@ services:
       - TEST=${TEST:-false}
       - FETCH=${FETCH:-true}
       - FREQUENCY=${FREQUENCY:-24}
+      - ENABLE_SCHEDULER=${ENABLE_SCHEDULER:-true}
     volumes:
       - ./data/pkgx:/data/pkgx
     depends_on:
