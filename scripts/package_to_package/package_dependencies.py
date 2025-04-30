@@ -28,7 +28,6 @@ def preprocess_version_string(version_str: str) -> str:
     Transforms known non-PEP440 version strings into a parseable format.
     Handles specific date formats, build tags, and common non-standard separators.
     """
-    # === General Cleanup / Normalization ===
     # Replace underscores between digits or letters/digits
     # Digit_Digit -> Digit.Digit
     version_str = re.sub(r"(?<=\d)_(?=\d)", ".", version_str)
@@ -161,9 +160,9 @@ def get_latest_version_info(versions: List[Version]) -> Optional[Version]:
         versions: A list of Version objects for a single package.
 
     Returns:
-        The single Version object if only one is provided.
-        Otherwise, the Version object corresponding to the latest parseable version.
-        Returns None if the list is empty or no versions could be parsed (when >1 version).
+        - None if the list is empty, or;
+        - The single Version object if only one is provided, or;
+        - The Version object corresponding to the latest parseable version.
     """
     # Handle empty list
     if not versions:
@@ -190,7 +189,7 @@ def get_latest_version_info(versions: List[Version]) -> Optional[Version]:
                 latest_version_obj = version_obj
         except packaging_version.InvalidVersion as e_invalid:
             logger.warn(
-                f"'{original_version_str}' -> '{preprocessed_str}') -> {e_invalid}"
+                f"Invalid version: '{original_version_str}' -> '{preprocessed_str}' -> {e_invalid}"  # noqa
             )
             continue
         except Exception as e_general:
@@ -248,9 +247,6 @@ def insert_legacy_dependencies(
         raise e
 
 
-# --- Main Processing Function ---
-
-
 def process_package_dependencies(config: Config, session: Session) -> None:
     legacy_deps_to_insert: List[Dict[str, Any]] = []
     total_packages_processed = 0
@@ -264,31 +260,39 @@ def process_package_dependencies(config: Config, session: Session) -> None:
     all_packages: List[Package] = (
         session.query(Package)
         .filter(Package.package_manager_id == config.pm_config.pm_id)
-        .all()  # Fetch all into memory
+        .all()
     )
     logger.log(f"Fetched {len(all_packages)} packages.")
 
     # --- Process all fetched packages ---
     for pkg in all_packages:
         total_packages_processed += 1
+
+        # debug
         if total_packages_processed % 1000 == 0:
             logger.debug(
                 f"Processed {total_packages_processed}/{len(all_packages)} packages..."
             )
 
         versions = session.query(Version).filter(Version.package_id == pkg.id).all()
+
+        # skip if no versions
         if not versions:
             continue
+
+        # grab the latest version
         latest_version = get_latest_version_info(versions)
         if latest_version is None:
             continue
 
+        # grab the dependencies for the latest version
         dependencies = (
             session.query(DependsOn)
             .filter(DependsOn.version_id == latest_version.id)
             .all()
         )
 
+        # construct the load object
         for dependency in dependencies:
             dep_data = {
                 "package_id": pkg.id,
@@ -300,11 +304,11 @@ def process_package_dependencies(config: Config, session: Session) -> None:
             legacy_deps_to_insert.append(dep_data)
             total_dependencies_found += 1
 
-        # --- Check insert batch size ---
+        # --- Insert if batch is full ---
         if len(legacy_deps_to_insert) >= INSERT_BATCH_SIZE:
             logger.log(f"Reached insert batch size ({INSERT_BATCH_SIZE}). Inserting...")
             insert_legacy_dependencies(session, legacy_deps_to_insert)
-            legacy_deps_to_insert = []  # Clear the batch
+            legacy_deps_to_insert = []
 
     # --- Final Insert ---
     if legacy_deps_to_insert:

@@ -131,11 +131,3 @@ def test_get_latest_version_info(version_list_strs, expected_latest_str):
             latest_version_obj is not None
         ), f"No latest version found for {version_list_strs}"  # noqa
         assert latest_version_obj.version == expected_latest_str
-
-
-# Example of a test specifically for a version structure if needed later
-# def test_get_latest_version_info_specific():
-#     versions = [create_mock_version("1.0.0-alpha"), create_mock_version("1.0.0")]
-#     latest = get_latest_version_info(versions)
-#     assert latest is not None
-#     assert latest.version == "1.0.0"
