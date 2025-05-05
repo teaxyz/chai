@@ -9,6 +9,7 @@ on:
         type: choice
         options:
           - dev
+          - sepolia
           - testnet
           - mainnet
         default: 'dev'
