@@ -94,6 +94,14 @@ There are many other potential use cases for this data:
    is used as `CHAI_DATABASE_URL` in the environment. `psql CHAI_DATABASE_URL`
    will connect you to the database.
 
+## Deployment
+
+```sh
+export CHAI_DATABASE_URL=postgresql://<user>:<pw>@host.docker.internal:<port>/chai
+export PGPASSWORD=<pw>
+docker compose up alembic
+```
+
 ## Tasks
 
 These are tasks that can be run using [xcfile.dev]. If you use `pkgx`, typing
