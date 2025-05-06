@@ -259,6 +259,7 @@ class DebianLoader(DB):
 
         # Extract all dependencies from the cache
         dependency_objects = []
+        missing = set()
 
         for key, cache in self.data.items():
             # Skip if package has no ID
@@ -291,7 +292,7 @@ class DebianLoader(DB):
                     if dependency_id is None:
                         # TODO: certain Debian packages don't have a `"Package:`
                         # in the Packages or Sources files, so we can't load them
-                        self.logger.warn(f"{temp_dep.dependency_name} not in cache")
+                        missing.add(temp_dep.dependency_name)
                         continue
 
                     # Create the DependsOn object
@@ -309,6 +310,12 @@ class DebianLoader(DB):
                     self.logger.warn(f"Unexpected dependency type: {type(temp_dep)}")
 
         self.logger.log(f"Found {len(dependency_objects)} dependencies to insert")
+
+        if missing:
+            self.logger.warn(
+                f"{len(missing)} pkgs are deps, but in Packages/Sources file"
+            )
+            self.logger.warn(f"Missing pkgs: {missing}")
 
         if not dependency_objects:
             self.logger.log("No dependencies to insert")

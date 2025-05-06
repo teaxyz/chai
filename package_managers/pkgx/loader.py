@@ -243,6 +243,7 @@ class PkgxLoader(DB):
         self.logger.log("Starting to load legacy dependencies")
 
         legacy_dependency_dicts = []
+        missing = set()
 
         for key, cache in self.data.items():
             # Ensure the main package has an ID
@@ -265,9 +266,7 @@ class PkgxLoader(DB):
                         # Find the dependency package in our cache
                         dep_cache = self.data.get(dep_name)
                         if not dep_cache:
-                            self.logger.warn(
-                                f"Skipping '{dep_name}' for '{key}': not in cache"
-                            )
+                            missing.add(dep_name)
                             continue
 
                         # Checks: has to have an ID
@@ -301,6 +300,10 @@ class PkgxLoader(DB):
         self.logger.log(
             f"Found {len(legacy_dependency_dicts)} legacy dependencies to insert"
         )
+
+        if missing:
+            self.logger.warn(f"{len(missing)} pkgs are deps, but have no pkgx.yaml")
+            self.logger.warn(f"Missing pkgs: {missing}")
 
         if not legacy_dependency_dicts:
             self.logger.log("No legacy dependencies to insert")
