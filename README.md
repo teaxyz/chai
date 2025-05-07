@@ -247,4 +247,4 @@ docker compose up $SERVICE
 ```
 
 [PostgreSQL]: https://www.postgresql.org
-[`pkgx`]: https://pkgx.sh
+[`pkgx`]: https://github.com/pkgxdev/pkgx#readme
