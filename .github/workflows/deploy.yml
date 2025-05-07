@@ -32,7 +32,7 @@ jobs:
       alembic: ${{ steps.filter.outputs.alembic }}
       any_changes: ${{ steps.filter.outputs.any_changes }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -72,7 +72,7 @@ jobs:
     environment: ${{ inputs.env || 'dev' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
@@ -159,7 +159,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.env || 'dev' }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
