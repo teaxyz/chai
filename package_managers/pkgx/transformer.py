@@ -46,6 +46,9 @@ class PkgxTransformer(Transformer):
 
     # The parser is yielding one package at a time
     def transform(self, project_path: str, data: PkgxPackage) -> None:
+        if project_path != "crates.io/semverator":
+            return
+
         item: Cache = Cache()
 
         import_id = project_path
@@ -110,7 +113,6 @@ class PkgxTransformer(Transformer):
                 url_type_id=self.url_types.repository,
             )
             urls.add(repository_url)
-        self.logger.log(f"***** {repository_url.url}")
 
         # Homepage URL
         # Homepage comes from the pkgxdev/www repo

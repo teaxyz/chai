@@ -54,6 +54,16 @@ def run_pipeline(config: Config):
 
     logger.log(f"Loaded {len(pkgx_transformer.cache_map)} packages")
 
+    print(pkgx_transformer.cache_map.values())
+    print(f"***** HOMEPAGE: {config.url_types.homepage}")
+    print(f"***** SOURCE: {config.url_types.source}")
+    print(f"***** REPO: {config.url_types.repository}")
+
+    for k, v in pkgx_transformer.cache_map.items():
+        print(k)
+        for url in v.urls:
+            print(url.url, url.url_type_id)
+
     pkgx_loader = PkgxLoader(config, pkgx_transformer.cache_map)
     pkgx_loader.load_packages()
     pkgx_loader.load_urls()
