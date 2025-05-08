@@ -230,16 +230,14 @@ def process_package_url_associations(
 
                 if not import_id:
                     main_logger.warn(
-                        f"Skipping row {current_csv_line} due to missing import_id: {row}"
+                        f"Skipping row {current_csv_line} due to missing import_id: {row}"  # noqa
                     )
                     continue
 
                 package_id = package_id_cache.get(import_id)
                 if not package_id:
-                    main_logger.warn(
-                        f"Package import_id '{import_id}' not found in cache (row {current_csv_line})."  # noqa
-                    )
-                    continue  # Assuming packages not in CHAI are skipped silently
+                    # We didn't load all the packages from ITN, so this is expected
+                    continue
 
                 urls_to_link = []
                 if source_url_str and source_url_str.lower() != "null":
@@ -281,7 +279,7 @@ def process_package_url_associations(
                     package_urls_to_insert = []
                     processed_pairs.clear()  # Clear after batch insert
                     main_logger.log(
-                        f"Processed batch. CSV rows: {processed_csv_rows}, Associations: {total_associations_prepared}"
+                        f"Processed batch. CSV rows: {processed_csv_rows}, Associations: {total_associations_prepared}"  # noqa
                     )
 
                 if stop_at and processed_csv_rows >= stop_at:
@@ -291,18 +289,18 @@ def process_package_url_associations(
         if package_urls_to_insert:  # Process remaining
             db_handler.batch_insert_package_urls(package_urls_to_insert)
             main_logger.log(
-                f"Processed final batch. CSV rows: {processed_csv_rows}, Associations: {total_associations_prepared}"
+                f"Processed final batch. CSV rows: {processed_csv_rows}, Associations: {total_associations_prepared}"  # noqa
             )
 
         main_logger.log(
-            f"Package-URL association processing complete. Total CSV rows: {processed_csv_rows}. Associations prepared: {total_associations_prepared}."
+            f"Package-URL association processing complete. Total CSV rows: {processed_csv_rows}. Associations prepared: {total_associations_prepared}."  # noqa
         )
 
     except FileNotFoundError:
         main_logger.error(f"Input CSV file not found: {input_csv_path}")
     except csv.Error as e:
         main_logger.error(
-            f"CSV reading error in {input_csv_path} near line {reader.line_num if 'reader' in locals() else 'unknown'}: {e}"
+            f"CSV reading error in {input_csv_path} near line {reader.line_num if 'reader' in locals() else 'unknown'}: {e}"  # noqa
         )
     except psycopg2.Error as e:
         main_logger.error(f"A database error occurred: {e}")
@@ -326,7 +324,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cache",
         metavar="URL_CACHE_CSV_PATH",
-        help="Optional path to the CSV file containing URL IDs (output of batch_insert_urls.py).",
+        help="Optional path to the CSV file containing URL IDs (output of batch_insert_urls.py).",  # noqa
     )
     parser.add_argument(
         "--batch-size",
