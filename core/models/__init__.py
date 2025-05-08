@@ -5,6 +5,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     MetaData,
     String,
@@ -261,7 +262,13 @@ class URL(Base):
         default=func.uuid_generate_v4(),
         server_default=func.uuid_generate_v4(),
     )
-    url = Column(String, nullable=False, index=True)
+    url_trgm_idx = Index(
+        "ix_urls_url_trgm",
+        "url",
+        postgresql_using="gin",
+        postgresql_ops={"url": "gin_trgm_ops"},
+    )
+    url = Column(String, nullable=False)
     url_type_id = Column(
         UUID(as_uuid=True), ForeignKey("url_types.id"), nullable=False, index=True
     )
@@ -451,7 +458,13 @@ class Canon(Base):
     id = Column(UUID(as_uuid=True), primary_key=True)
     url = Column(String, nullable=False, index=True, unique=True)  # the derived key
     # CanonNames should be its own table, so we collect all aliases of a package!
-    name = Column(String, nullable=False, index=True)
+    name_trgm_idx = Index(
+        "ix_canons_name_trgm",
+        "name",
+        postgresql_using="gin",
+        postgresql_ops={"name": "gin_trgm_ops"},
+    )
+    name = Column(String, nullable=False)
     created_at = Column(
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
