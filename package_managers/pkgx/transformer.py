@@ -16,7 +16,7 @@ from package_managers.pkgx.parser import PkgxPackage
 
 # we'd need a cache where we store the identifiers, to the package
 
-GITHUB_PATTERN = r"(https://github\.com/[^/]+/[^/]+)"
+GITHUB_PATTERN = r"github\.com/[^/]+/[^/]+"
 
 
 @dataclass
@@ -73,8 +73,11 @@ class PkgxTransformer(Transformer):
     def generate_chai_url(self, pkgx_package: PkgxPackage) -> List[URL]:
         urls: Set[URL] = set()
 
-        # Source URL comes from the distributable object, and a package
-        # can have multiple distributable objects
+        # Source URL for pkgx always comes from distributable.url
+        # Note that while the staking app can't register non-GitHub URLs, we can still
+        # clean and load them.
+        # For now, we're just returning the raw distributable URL as the source URL for
+        # Non-GitHub URLs.
         if isinstance(pkgx_package.distributable, list):
             for distributable in pkgx_package.distributable:
                 raw_source_url = distributable.url
@@ -145,18 +148,15 @@ class PkgxTransformer(Transformer):
         # if the URL matches a GitHub tarball, use the repo as the source URL
         if self.is_github(url):
             return self.extract_github_repo(url)
-
-        # TODO: implement distributable URL patterns
-        # if self.is_distributable_url(url):
-        #     return self.extract_distributable_url(url)
-
-        return None
+        else:
+            # TODO: implement different URL patterns
+            return url
 
     def is_github(self, url: str) -> bool:
-        return re.match(GITHUB_PATTERN, url) is not None
+        return re.search(GITHUB_PATTERN, url) is not None
 
     def extract_github_repo(self, url: str) -> str:
-        return re.match(GITHUB_PATTERN, url).group(1)
+        return re.search(GITHUB_PATTERN, url).group(0)
 
     def is_distributable_url(self, url: str) -> bool:
         # https://archive.mozilla.org/pub/nspr/releases/v{{version}}/src/nspr-{{version}}.tar.gz
