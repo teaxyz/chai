@@ -114,7 +114,6 @@ if __name__ == "__main__":
         import_id=import_id,
         readme=readme,
     )
-    print(pkg.to_dict())
 
     # URLs
     homepage, repository, source = get_urls(package_info)
@@ -123,29 +122,29 @@ if __name__ == "__main__":
     repository_url = URL(url=repository, url_type_id=config.url_types.repository)
     source_url = URL(url=source, url_type_id=config.url_types.source)
 
-    chai_db.load_package(pkg)
-    chai_db.load_url(homepage_url)
-    chai_db.load_url(repository_url)
-    chai_db.load_url(source_url)
+    pkg_id = chai_db.load_package(pkg)
+    homepage_url_id = chai_db.load_url(homepage_url)
+    repository_url_id = chai_db.load_url(repository_url)
+    source_url_id = chai_db.load_url(source_url)
 
     # Package <-> URLs
     homepage_relationship = PackageURL(
-        package_id=pkg.id,
-        url_id=homepage_url.id,
+        package_id=pkg_id,
+        url_id=homepage_url_id,
         url_type_id=config.url_types.homepage,
     )
     chai_db.load_package_url(homepage_relationship)
 
     repository_relationship = PackageURL(
-        package_id=pkg.id,
-        url_id=repository_url.id,
+        package_id=pkg_id,
+        url_id=repository_url_id,
         url_type_id=config.url_types.repository,
     )
     chai_db.load_package_url(repository_relationship)
 
     source_relationship = PackageURL(
-        package_id=pkg.id,
-        url_id=source_url.id,
+        package_id=pkg_id,
+        url_id=source_url_id,
         url_type_id=config.url_types.source,
     )
     chai_db.load_package_url(source_relationship)
