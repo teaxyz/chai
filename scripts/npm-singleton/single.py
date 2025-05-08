@@ -6,7 +6,7 @@ import requests
 
 from core.config import Config, PackageManager
 from core.db import DB
-from core.models import URL, Package
+from core.models import URL, LegacyDependency, Package, PackageURL
 
 NPM_API_URL = "https://registry.npmjs.org/{name}"
 
@@ -14,6 +14,13 @@ NPM_API_URL = "https://registry.npmjs.org/{name}"
 class ChaiDB(DB):
     def __init__(self):
         super().__init__("chai-singleton")
+
+    def check_package_exists(self, pkg_name: str) -> bool:
+        with self.session() as session:
+            return (
+                session.query(Package).filter(Package.name == pkg_name).first()
+                is not None
+            )
 
     def load_package(self, pkg: Package):
         with self.session() as session:
@@ -66,6 +73,10 @@ def get_urls(package_info: dict) -> Tuple[str, str, str]:
     return homepage, repository_url, source_url
 
 
+def get_dependencies(package_info: dict) -> list[LegacyDependency]:
+    pass
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Load a single NPM package by name into CHAI"
@@ -74,6 +85,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     config = Config(PackageManager.NPM)
+
+    chai_db = ChaiDB()
+    if chai_db.check_package_exists(args.name):
+        print(f"Package {args.name} already exists")
+        exit(1)
 
     # Get Package Info from NPM
     package_info = get_package_info(args.name)
@@ -105,7 +121,6 @@ if __name__ == "__main__":
     print(repository_url.to_dict())
     print(source_url.to_dict())
 
-    chai_db = ChaiDB()
     chai_db.load_package(pkg)
     chai_db.load_url(homepage_url)
     chai_db.load_url(repository_url)
