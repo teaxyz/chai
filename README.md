@@ -239,11 +239,10 @@ docker compose down --remove-orphans
 ### run-pipeline
 
 Inputs: SERVICE
-Requires: build
-Env: CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@localhost:5435/chai
+Env: CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@host.docker.internal:5435/chai
 
 ```sh
-docker compose up $SERVICE
+docker compose up $SERVICE --build
 ```
 
 [PostgreSQL]: https://www.postgresql.org
