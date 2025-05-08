@@ -1,5 +1,6 @@
 #!/usr/bin/env pkgx +python@3.11 uv run --with requests==2.31.0
 import argparse
+import uuid
 from typing import Any, Tuple
 
 import requests
@@ -22,15 +23,19 @@ class ChaiDB(DB):
                 is not None
             )
 
-    def load_package(self, pkg: Package):
+    def load_package(self, pkg: Package) -> uuid.UUID:
         with self.session() as session:
             session.add(pkg)
             session.commit()
+            id = pkg.id
+            return id
 
-    def load_url(self, url: URL):
+    def load_url(self, url: URL) -> uuid.UUID:
         with self.session() as session:
             session.add(url)
             session.commit()
+            id = url.id
+            return id
 
 
 def get_package_info(npm_package: str) -> dict[str, Any]:
@@ -73,6 +78,7 @@ def get_urls(package_info: dict) -> Tuple[str, str, str]:
     return homepage, repository_url, source_url
 
 
+# TODO: Implement this
 def get_dependencies(package_info: dict) -> list[LegacyDependency]:
     pass
 
@@ -117,11 +123,29 @@ if __name__ == "__main__":
     repository_url = URL(url=repository, url_type_id=config.url_types.repository)
     source_url = URL(url=source, url_type_id=config.url_types.source)
 
-    print(homepage_url.to_dict())
-    print(repository_url.to_dict())
-    print(source_url.to_dict())
-
     chai_db.load_package(pkg)
     chai_db.load_url(homepage_url)
     chai_db.load_url(repository_url)
     chai_db.load_url(source_url)
+
+    # Package <-> URLs
+    homepage_relationship = PackageURL(
+        package_id=pkg.id,
+        url_id=homepage_url.id,
+        url_type_id=config.url_types.homepage,
+    )
+    chai_db.load_package_url(homepage_relationship)
+
+    repository_relationship = PackageURL(
+        package_id=pkg.id,
+        url_id=repository_url.id,
+        url_type_id=config.url_types.repository,
+    )
+    chai_db.load_package_url(repository_relationship)
+
+    source_relationship = PackageURL(
+        package_id=pkg.id,
+        url_id=source_url.id,
+        url_type_id=config.url_types.source,
+    )
+    chai_db.load_package_url(source_relationship)
