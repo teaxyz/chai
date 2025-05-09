@@ -1,7 +1,6 @@
 #!/usr/bin/env pkgx +python@3.11 uv run --with requests==2.31.0
 import argparse
-import uuid
-from typing import Any, Tuple
+from typing import Any, List, Tuple
 
 import requests
 
@@ -23,19 +22,30 @@ class ChaiDB(DB):
                 is not None
             )
 
-    def load_package(self, pkg: Package) -> uuid.UUID:
-        with self.session() as session:
-            session.add(pkg)
-            session.commit()
-            id = pkg.id
-            return id
+    def load(self, pkg: Package, urls: List[URL]) -> None:
+        """Load a package and its URLs into the database. Uses the same session to avoid
+        transactional inconsistencies.
 
-    def load_url(self, url: URL) -> uuid.UUID:
+        Args:
+            pkg: The package to load.
+            urls: The URLs to load.
+        """
         with self.session() as session:
-            session.add(url)
+            # Load the package first
+            session.add(pkg)
+            session.flush()  # to create the id
+            pkg_id = pkg.id
+
+            # Load the URLs
+            for url in urls:
+                session.add(url)
+            session.flush()  # to create the id
+            url_ids = [url.id for url in urls]
+
+            # Create the package URL relationships
+            for url_id in url_ids:
+                session.add(PackageURL(package_id=pkg_id, url_id=url_id))
             session.commit()
-            id = url.id
-            return id
 
 
 def get_package_info(npm_package: str) -> dict[str, Any]:
@@ -122,29 +132,6 @@ if __name__ == "__main__":
     repository_url = URL(url=repository, url_type_id=config.url_types.repository)
     source_url = URL(url=source, url_type_id=config.url_types.source)
 
-    pkg_id = chai_db.load_package(pkg)
-    homepage_url_id = chai_db.load_url(homepage_url)
-    repository_url_id = chai_db.load_url(repository_url)
-    source_url_id = chai_db.load_url(source_url)
+    urls = [homepage_url, repository_url, source_url]
 
-    # Package <-> URLs
-    homepage_relationship = PackageURL(
-        package_id=pkg_id,
-        url_id=homepage_url_id,
-        url_type_id=config.url_types.homepage,
-    )
-    chai_db.load_package_url(homepage_relationship)
-
-    repository_relationship = PackageURL(
-        package_id=pkg_id,
-        url_id=repository_url_id,
-        url_type_id=config.url_types.repository,
-    )
-    chai_db.load_package_url(repository_relationship)
-
-    source_relationship = PackageURL(
-        package_id=pkg_id,
-        url_id=source_url_id,
-        url_type_id=config.url_types.source,
-    )
-    chai_db.load_package_url(source_relationship)
+    chai_db.load(pkg, urls)
