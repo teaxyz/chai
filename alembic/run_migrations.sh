@@ -4,11 +4,13 @@ set -uo pipefail
 
 # This script sets up the database, runs migrations, and loads initial values
 
-# Wait for database to be ready
-until pg_isready -h "$CHAI_DATABASE_URL" -p 5432 -U postgres; do
-  echo "waiting for database..."
-  sleep 2
-done
+# NOTE: we don't need to wait for the database to be ready explicitly because docker
+# compose already defines the dependency
+# Also, in infra, the database would already exist
+# until pg_isready -h "$CHAI_DATABASE_URL" -p 5432 -U postgres; do
+#   echo "waiting for database..."
+#   sleep 2
+# done
 
 # Check if the 'chai' database exists, create it if it doesn't
 if [ "$( psql -XtAc "SELECT 1 FROM pg_database WHERE datname='chai'" -h "$CHAI_DATABASE_URL" -U postgres)" = '1' ]
