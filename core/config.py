@@ -28,7 +28,7 @@ SOURCES = {
         "https://ftp.debian.org/debian/dists/stable/main/binary-amd64/Packages.gz",
         "https://ftp.debian.org/debian/dists/stable/main/source/Sources.gz",
     ],
-    PackageManager.NPM: "https://registry.npmjs.org/-/all",  # fake for now
+    PackageManager.NPM: "https://replicate.npmjs.com/registry/_all_docs",  # fake for now
     PackageManager.PKGX: "https://github.com/pkgxdev/pantry.git",
 }
 
