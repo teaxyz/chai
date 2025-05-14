@@ -126,7 +126,7 @@ class PkgxLoader(DB):
                     package_id_map[url.url] = []
                 package_id_map[url.url].append(package_id)
 
-        unique_urls = {url.url: url for url in url_objects}.values()
+        unique_urls = {(url.url, url.url_type_id): url for url in url_objects}.values()
         self.logger.log(f"Found {len(unique_urls)} unique URLs to insert")
 
         if not unique_urls:
@@ -134,7 +134,7 @@ class PkgxLoader(DB):
             return
 
         url_dicts = []
-        for url in unique_urls:
+        for url, url_type_id in unique_urls:
             try:
                 # Exclude 'id' if it exists but is None, else SQLAlchemy might complain
                 d = url.to_dict()
