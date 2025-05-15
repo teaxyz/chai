@@ -5,8 +5,8 @@ tea_rank
 
 ## Requirements
 
-1. [pkgx](pkgx.sh)
-2. [uv](astral.sh/uv)
+1. [pkgx](https://github.com/pkgxdev/pkgx)
+2. [uv](https://github.com/astral-sh/uv)
 
 ## Deduplication (`dedupe.py`)
 
