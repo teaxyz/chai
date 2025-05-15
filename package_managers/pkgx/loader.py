@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -23,7 +23,7 @@ class PkgxLoader(DB):
         self.config = config
         self.data = data
         self.debug = config.exec_config.test
-        self.logger.debug(f"Initialized PkgxLoader with {len(data)} cache entries")
+        self.logger.debug(f"Initialized PkgxLoader with {len(data)} packages")
 
     def load_packages(self) -> None:
         """
@@ -57,6 +57,9 @@ class PkgxLoader(DB):
         with self.session() as session:
             try:
                 stmt = pg_insert(Package).values(package_dicts).on_conflict_do_nothing()
+
+                # TODO: can just generate the UUID myself and provide it, so no need to
+                # return
                 stmt = stmt.returning(Package.id, Package.derived_id)
                 self.logger.log("About to execute insert statement for packages")
                 result = session.execute(stmt)
@@ -106,9 +109,12 @@ class PkgxLoader(DB):
         """
         self.logger.log("Starting to load URLs")
 
-        url_objects = []
-        package_id_map = {}  # Map URL string to list of package IDs that use it
+        url_objects: List[URL] = []
+        package_id_map: Dict[str, List[str]] = {}  # Map of URLs to List of package IDs
 
+        # for every package we've collected, grab the package ID
+        # then, for every URL in the package, add it to the list of URLs
+        # remember, we have to load package_urls, so we **always** need the package ID
         for key, cache in self.data.items():
             if not hasattr(cache.package, "id") or cache.package.id is None:
                 self.logger.warn(f"Package {key} has no ID when loading URLs, skipping")
@@ -126,6 +132,9 @@ class PkgxLoader(DB):
                     package_id_map[url.url] = []
                 package_id_map[url.url].append(package_id)
 
+        self.logger.log(f"Found {len(url_objects)} URLs to insert: {url_objects}")
+
+        # collect the unique URLs
         unique_urls = {(url.url, url.url_type_id): url for url in url_objects}.values()
         self.logger.log(f"Found {len(unique_urls)} unique URLs to insert")
 
@@ -134,7 +143,7 @@ class PkgxLoader(DB):
             return
 
         url_dicts = []
-        for url, url_type_id in unique_urls:
+        for url in unique_urls:
             try:
                 # Exclude 'id' if it exists but is None, else SQLAlchemy might complain
                 d = url.to_dict()
