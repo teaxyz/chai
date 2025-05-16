@@ -5,6 +5,7 @@ from typing import Dict
 from sqlalchemy import UUID
 
 from core.logger import Logger
+from permalint import normalize_url
 
 # this is a temporary fix, but sometimes the raw files have weird characters
 # and lots of data within certain fields
@@ -53,3 +54,6 @@ class Transformer:
 
     def dependencies(self):
         pass
+
+    def canonicalize(self, url: str) -> str:
+        return normalize_url(url)
