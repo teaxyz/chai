@@ -1,4 +1,5 @@
 import os
+from typing import List
 
 from sqlalchemy import create_engine
 from sqlalchemy.dialects import postgresql
@@ -6,9 +7,12 @@ from sqlalchemy.orm import sessionmaker
 
 from core.logger import Logger
 from core.models import (
+    URL,
     DependsOnType,
     LoadHistory,
+    Package,
     PackageManager,
+    PackageURL,
     Source,
     URLType,
 )
@@ -35,6 +39,21 @@ class DB:
             dialect=dialect, compile_kwargs={"literal_binds": True}
         )
         self.logger.log(str(compiled_stmt))
+
+    def search_names(self, package_names: List[str]) -> List[str]:
+        """Return Homepage URLs for packages with these names"""
+        with self.session() as session:
+            results = (
+                session.query(URL)
+                .join(PackageURL)
+                .join(Package)
+                .join(URLType)
+                .filter(URLType.name == "homepage")
+                .filter(Package.name.in_(package_names))
+                .all()
+            )
+
+            return [result.url for result in results]
 
 
 class ConfigDB(DB):
@@ -68,3 +87,19 @@ class ConfigDB(DB):
             return (
                 session.query(DependsOnType).filter(DependsOnType.name == name).first()
             )
+
+
+if __name__ == "__main__":
+    db = ConfigDB()
+    print(
+        db.search_names(
+            [
+                "taku910.github.io/mecab-ipadic",
+                "mecab-ipadic",
+                "mecab",
+                "ipadic",
+                "taku910.github.io",
+                "taku910.github.io/mecab",
+            ]
+        )
+    )
