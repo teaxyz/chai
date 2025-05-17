@@ -44,16 +44,27 @@ class DB:
         """Return Homepage URLs for packages with these names"""
         with self.session() as session:
             results = (
-                session.query(URL)
-                .join(PackageURL)
-                .join(Package)
-                .join(URLType)
+                session.query(Package, URL)
+                .join(PackageURL, PackageURL.package_id == Package.id)
+                .join(URL, PackageURL.url_id == URL.id)
+                .join(URLType, URL.url_type_id == URLType.id)
                 .filter(URLType.name == "homepage")
                 .filter(Package.name.in_(package_names))
                 .all()
             )
+            for result in results:
+                print(result.Package.name, result.URL.url)
 
-            return [result.url for result in results]
+            # build a mapping
+            name_to_url = {result.Package.name: result.URL.url for result in results}
+
+            # return in the order preserved by the input (bc its relevant)
+            # and account for the fact that some
+            return [
+                name_to_url.get(name, None)
+                for name in package_names
+                if name in name_to_url
+            ]
 
 
 class ConfigDB(DB):
@@ -96,10 +107,7 @@ if __name__ == "__main__":
             [
                 "taku910.github.io/mecab-ipadic",
                 "mecab-ipadic",
-                "mecab",
-                "ipadic",
                 "taku910.github.io",
-                "taku910.github.io/mecab",
             ]
         )
     )
