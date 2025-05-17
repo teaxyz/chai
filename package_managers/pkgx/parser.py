@@ -330,7 +330,7 @@ class PkgxParser:
             # Convert keys just before creating Distributable object
             return [Distributable(**convert_keys_to_snake_case(distributable_data))]
         elif distributable_data is None:
-            return Distributable(url="~")
+            return [Distributable(url="~")]
         else:
             distributable_type = type(distributable_data).__name__
             raise TypeError(f"Distributable in {file_path_str} is {distributable_type}")
