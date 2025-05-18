@@ -1,11 +1,12 @@
 import csv
 import os
-from typing import Dict
+from typing import Dict, List
 
+from permalint import normalize_url, possible_names
 from sqlalchemy import UUID
 
+from core.db import DB
 from core.logger import Logger
-from permalint import normalize_url
 
 # this is a temporary fix, but sometimes the raw files have weird characters
 # and lots of data within certain fields
@@ -57,3 +58,10 @@ class Transformer:
 
     def canonicalize(self, url: str) -> str:
         return normalize_url(url)
+
+    def guess(self, db_client: DB, url: str) -> List[str]:
+        names = possible_names(url)
+        self.logger.debug(f"{url}: guessed {names}")
+        urls = db_client.search_names(names)
+        self.logger.debug(f"{url}: found {urls}")
+        return urls

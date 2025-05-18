@@ -52,11 +52,11 @@ class DB:
                 .filter(Package.name.in_(package_names))
                 .all()
             )
-            for result in results:
-                print(result.Package.name, result.URL.url)
 
             # build a mapping
             name_to_url = {result.Package.name: result.URL.url for result in results}
+
+            self.logger.debug(f"name_to_url: {name_to_url}")
 
             # return in the order preserved by the input (bc its relevant)
             # and account for the fact that some
