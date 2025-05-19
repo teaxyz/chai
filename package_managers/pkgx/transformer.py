@@ -1,10 +1,13 @@
 #! /usr/bin/env pkgx +python@3.12 uv run
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
+
+from requests import Response, get
 
 from core.config import Config, URLTypes
-from core.models import URL, LegacyDependency, Package
+from core.db import DB
+from core.models import URL, Package
 from core.transformer import Transformer
 from package_managers.pkgx.parser import PkgxPackage
 
@@ -16,7 +19,8 @@ from package_managers.pkgx.parser import PkgxPackage
 
 # we'd need a cache where we store the identifiers, to the package
 
-GITHUB_PATTERN = r"(https://github\.com/[^/]+/[^/]+)"
+GITHUB_PATTERN = r"github\.com/[^/]+/[^/]+"
+HOMEPAGE_URL = "https://pkgx.dev/pkgs/{name}.json"
 
 
 @dataclass
@@ -34,20 +38,22 @@ class Cache:
 
 
 class PkgxTransformer(Transformer):
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, db: DB):
         super().__init__("pkgx_transformer")
         self.package_manager_id = config.pm_config.pm_id
         self.url_types: URLTypes = config.url_types
         self.depends_on_types = config.dependency_types
-        self.cache_map: Dict[str, Package] = {}
+        self.cache_map: Dict[str, Cache] = {}
+        self.db = db
+        self.package_managers = config.package_managers
 
     # The parser is yielding one package at a time
     def transform(self, project_path: str, data: PkgxPackage) -> None:
-        item = Cache()
+        item: Cache = Cache()
 
         import_id = project_path
         item.package = self.generate_chai_package(import_id)
-        item.urls = self.generate_chai_url(data)
+        item.urls = self.generate_chai_url(import_id, data)
         item.dependencies = self.generate_chai_dependency(data)
 
         # add it to the cache
@@ -70,67 +76,89 @@ class PkgxTransformer(Transformer):
 
         return package
 
-    def generate_chai_url(self, pkgx_package: PkgxPackage) -> List[URL]:
+    def ask_pkgx(self, import_id: str) -> Optional[str]:
+        """
+        ask max's scraping work for the homepage of a package
+        Homepage comes from the pkgxdev/www repo
+        The API https://pkgx.dev/pkgs/{name}.json returns a blob which may contain
+        the homepage field
+        """
+        response: Response = get(HOMEPAGE_URL.format(name=import_id))
+        if response.status_code == 200:
+            data: Dict[str, Any] = response.json()
+            if "homepage" in data:
+                return data["homepage"]
+
+    def special_case(self, import_id: str) -> Optional[str]:
+        homepage: Optional[str] = None
+
+        # if no slashes, then pkgx used the homepage as the name
+        # if two slashes, then probably github / gitlab
+        if not re.search(r"/", import_id) or re.search(r"/.+/", import_id):
+            homepage = import_id
+
+        # if it's a crates.io package, then we can use the crates URL
+        elif re.search(r"^crates.io", import_id):
+            homepage = f"https://crates.io/crates/{import_id}"
+
+        # if it's part of the x.org family
+        elif re.search(r"^x.org", import_id):
+            homepage = "https://x.org"
+
+        # if it's part of the pkgx family
+        elif re.search("^pkgx.sh", import_id):
+            tool = import_id.split("/")[1]
+            homepage = f"https://github.com/pkgxdev/{tool}"
+
+        else:
+            self.logger.warn(f"no homepage in pkgx for {import_id}")
+
+        return homepage
+
+    def generate_chai_url(self, import_id: str, pkgx_package: PkgxPackage) -> List[URL]:
         urls: Set[URL] = set()
 
-        # Source URL comes from the distributable object, and a package
-        # can have multiple distributable objects
-        if isinstance(pkgx_package.distributable, list):
-            for distributable in pkgx_package.distributable:
-                raw_source_url = distributable.url
-                clean_source_url = self.clean_distributable_url(raw_source_url)
-                if clean_source_url:
-                    source_url = URL(
-                        url=clean_source_url,
-                        url_type_id=self.url_types.source,
-                    )
-                    urls.add(source_url)
+        # handle homepage first
+
+        # get possible homepage URLs
+        maybe: List[str] = self.guess(
+            self.db,
+            import_id,
+            [self.package_managers.homebrew, self.package_managers.debian],
+        )
+
+        # if we have a canonical URL, we can proceed with that!
+        if maybe:
+            # NOTE: why am I using the first one?
+            # well, permalint arranges the URLs in order of preference, so i'm relying
+            # on that for now
+            homepage = maybe[0]
         else:
-            raw_source_url = pkgx_package.distributable.url
+            # otherwise, we can ask pkgx
+            homepage = self.ask_pkgx(import_id)
 
-        clean_source_url = self.clean_distributable_url(raw_source_url)
-        if clean_source_url:
-            source_url = URL(
-                url=clean_source_url,
-                url_type_id=self.url_types.source,
-            )
-            urls.add(source_url)
+            # but if that fails, we're in special case territory
+            if not homepage:
+                homepage = self.special_case(import_id)
 
-        # Repository URL
-        if self.is_github(raw_source_url):
-            raw_repository_url = self.extract_github_repo(raw_source_url)
-            repository_url = URL(
-                url=raw_repository_url,
-                url_type_id=self.url_types.repository,
-            )
-            urls.add(repository_url)
+        if homepage:
+            # finally, canonicalize it
+            homepage = self.canonicalize(homepage)
+            urls.add(URL(url=homepage, url_type_id=self.url_types.homepage))
 
-        # Homepage URL
-        # Homepage comes from the versions object
-        versions = pkgx_package.versions
-        if versions.github:
-            owner_repo = self.remove_tags_releases(versions.github)
-            raw_homepage_url = f"https://github.com/{owner_repo}"
-            homepage_url = URL(
-                url=raw_homepage_url,
-                url_type_id=self.url_types.homepage,
-            )
-            urls.add(homepage_url)
-        if versions.gitlab:
-            owner_repo = self.remove_tags_releases(versions.gitlab)
-            raw_homepage_url = f"https://gitlab.com/{owner_repo}"
-            homepage_url = URL(
-                url=raw_homepage_url,
-                url_type_id=self.url_types.homepage,
-            )
-            urls.add(homepage_url)
-        if versions.url:
-            raw_homepage_url = versions.url
-            homepage_url = URL(
-                url=raw_homepage_url,
-                url_type_id=self.url_types.homepage,
-            )
-            urls.add(homepage_url)
+        # Source URL for pkgx always comes from distributable.url
+        # which our parser returns in list form
+        # we'll clean and load em all
+        for raw_distributable in pkgx_package.distributable:
+            clean = self.canonicalize(raw_distributable.url)
+            if clean:
+                source = URL(url=clean, url_type_id=self.url_types.source)
+                urls.add(source)
+
+            # if the source URL is a GitHub URL, we can also populate the repository URL
+            if self.is_github(clean):
+                repository = URL(url=clean, url_type_id=self.url_types.repository)
+                urls.add(repository)
 
         return list(urls)
 
@@ -141,35 +169,5 @@ class PkgxTransformer(Transformer):
             dependencies=pkgx_package.dependencies,
         )
 
-    def clean_distributable_url(self, url: str) -> str:
-        # if the URL matches a GitHub tarball, use the repo as the source URL
-        if self.is_github(url):
-            return self.extract_github_repo(url)
-
-        # TODO: implement distributable URL patterns
-        # if self.is_distributable_url(url):
-        #     return self.extract_distributable_url(url)
-
-        return None
-
     def is_github(self, url: str) -> bool:
-        return re.match(GITHUB_PATTERN, url) is not None
-
-    def extract_github_repo(self, url: str) -> str:
-        return re.match(GITHUB_PATTERN, url).group(1)
-
-    def is_distributable_url(self, url: str) -> bool:
-        # https://archive.mozilla.org/pub/nspr/releases/v{{version}}/src/nspr-{{version}}.tar.gz
-        return re.match(r"https://(.*)/?v{{version}}", url) is not None
-
-    def extract_distributable_url(self, url: str) -> str:
-        return re.match(r"https://(.*)/?v{{version}}", url).group(1)
-
-    def remove_tags_releases(self, url: str) -> str:
-        """Sometimes, the versions object is owner/repo/tags or owner/repo/releases
-        This functions removes tags or releases from the URL"""
-        if "tags" in url:
-            return re.sub(r"/tags$", "", url)
-        if "releases" in url:
-            return re.sub(r"/releases$", "", url)
-        return url
+        return re.search(GITHUB_PATTERN, url) is not None

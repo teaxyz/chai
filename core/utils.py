@@ -28,7 +28,7 @@ def env_vars(env_var: str, default: str) -> bool:
 
 
 # convert keys to snake case
-def convert_keys_to_snake_case(data: Any) -> Any:
+def convert_keys_to_snake_case(data: Dict[str, Any]) -> Dict[str, Any]:
     """Recursively converts dictionary keys from hyphen-case to snake_case."""
     if isinstance(data, dict):
         new_dict = {}

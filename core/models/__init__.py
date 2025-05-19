@@ -23,7 +23,19 @@ naming_convention = {
     "pk": "pk_%(table_name)s",
 }
 metadata = MetaData(naming_convention=naming_convention)
-Base = declarative_base(metadata=metadata)
+
+
+class BaseModel:
+    def to_dict_v2(self):
+        """Return a dictionary of all non-None attributes."""
+        return {
+            attr: getattr(self, attr)
+            for attr in self.__table__.columns.keys()
+            if getattr(self, attr) is not None
+        }
+
+
+Base = declarative_base(metadata=metadata, cls=BaseModel)
 
 
 class Package(Base):
@@ -419,6 +431,7 @@ class PackageURL(Base):
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
 
+    # TODO: deprecated
     def to_dict(self):
         return {
             "package_id": self.package_id,

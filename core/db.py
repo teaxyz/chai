@@ -1,4 +1,6 @@
 import os
+from typing import List
+from uuid import UUID
 
 from sqlalchemy import create_engine
 from sqlalchemy.dialects import postgresql
@@ -6,9 +8,12 @@ from sqlalchemy.orm import sessionmaker
 
 from core.logger import Logger
 from core.models import (
+    URL,
     DependsOnType,
     LoadHistory,
+    Package,
     PackageManager,
+    PackageURL,
     Source,
     URLType,
 )
@@ -35,6 +40,34 @@ class DB:
             dialect=dialect, compile_kwargs={"literal_binds": True}
         )
         self.logger.log(str(compiled_stmt))
+
+    def search_names(
+        self, package_names: List[str], package_managers: List[UUID]
+    ) -> List[str]:
+        """Return Homepage URLs for packages with these names"""
+
+        with self.session() as session:
+            results = (
+                session.query(Package, URL)
+                .join(PackageURL, PackageURL.package_id == Package.id)
+                .join(URL, PackageURL.url_id == URL.id)
+                .join(URLType, URL.url_type_id == URLType.id)
+                .filter(URLType.name == "homepage")
+                .filter(Package.name.in_(package_names))
+                .filter(Package.package_manager_id.in_(package_managers))
+                .all()
+            )
+
+            # build a mapping
+            name_to_url = {result.Package.name: result.URL.url for result in results}
+
+            # return in the order preserved by the input (bc its relevant)
+            # and account for the fact that some
+            return [
+                name_to_url.get(name, None)
+                for name in package_names
+                if name in name_to_url
+            ]
 
 
 class ConfigDB(DB):
@@ -68,3 +101,8 @@ class ConfigDB(DB):
             return (
                 session.query(DependsOnType).filter(DependsOnType.name == name).first()
             )
+
+
+if __name__ == "__main__":
+    db = ConfigDB()
+    print(db.search_names(["elfutils.org", "elfutils"]))

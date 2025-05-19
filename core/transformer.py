@@ -1,9 +1,11 @@
 import csv
 import os
-from typing import Dict
+from typing import Dict, List
 
+from permalint import normalize_url, possible_names
 from sqlalchemy import UUID
 
+from core.db import DB
 from core.logger import Logger
 
 # this is a temporary fix, but sometimes the raw files have weird characters
@@ -53,3 +55,16 @@ class Transformer:
 
     def dependencies(self):
         pass
+
+    def canonicalize(self, url: str) -> str:
+        return normalize_url(url)
+
+    def guess(self, db_client: DB, url: str, package_managers: List[UUID]) -> List[str]:
+        names = possible_names(url)
+        urls = db_client.search_names(names, package_managers)
+        return urls
+
+
+if __name__ == "__main__":
+    t = Transformer("pkgx")
+    print(t.guess(DB("transformer_db_logger"), "elfutils.org"))
