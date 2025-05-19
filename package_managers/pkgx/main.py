@@ -64,8 +64,8 @@ def run_pipeline(config: Config, db: DB):
 
     pkgx_loader = PkgxLoader(config, pkgx_transformer.cache_map)
     pkgx_loader.load_packages()
-    pkgx_loader.load_urls_v2()
-    # pkgx_loader.load_dependencies()
+    pkgx_loader.load_urls()
+    pkgx_loader.load_dependencies()
 
     if config.exec_config.no_cache:
         fetcher.cleanup()

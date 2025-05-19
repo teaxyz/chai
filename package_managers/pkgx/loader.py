@@ -20,12 +20,6 @@ from package_managers.pkgx.transformer import Cache
 BATCH_SIZE = 10000
 
 
-@dataclass
-class CurrentURLs:
-    url_map: Dict[Tuple[str, UUID], URL]  # URL and URL Type ID to URL object
-    package_urls: Dict[UUID, PackageURL]  # Package ID to PackageURL records
-
-
 # NOTE: this is a separate instance of the db that is used in main
 class PkgxLoader(DB):
     def __init__(self, config: Config, data: Dict[str, Cache]):
@@ -112,37 +106,51 @@ class PkgxLoader(DB):
                 self.logger.error(f"Error type: {type(e)}")
                 raise
 
-    def get_current_urls(self, urls: Set[str]) -> CurrentURLs:
-        stmt = (
-            select(Package, PackageURL, URL)
-            .select_from(URL)
-            .join(PackageURL, PackageURL.url_id == URL.id, isouter=True)
-            .join(Package, Package.id == PackageURL.package_id, isouter=True)
-            .where(URL.url.in_(urls))
-        )
-
-        with self.session() as session:
-            result = session.execute(stmt)
-
-            url_map: Dict[Tuple[str, UUID], URL] = {}
-            package_urls: Dict[UUID, Set[PackageURL]] = {}
-
-            for pkg, pkg_url, url in result:
-                url_map[(url.url, url.url_type_id)] = url
-
-                # since it's a left join, we need to check if pkg is None
-                if pkg is not None:
-                    if pkg.id not in package_urls:
-                        package_urls[pkg.id] = set()
-                    package_urls[pkg.id].add(pkg_url)
-
-            return CurrentURLs(url_map=url_map, package_urls=package_urls)
-
-    def load_urls_v2(self) -> None:
+    # NOTE: this is the cleanest function of the bunch. All the others, should follow
+    # a similar approach of figuring out what updates need to be made, and only applying
+    # those, rather than relying on the on_conflict_do_nothing.
+    def load_urls(self) -> None:
         """
         Refactored load URLs to use a diff on the current / desired state to find new
         URLs and existing relationships to update.
         """
+
+        @dataclass
+        class CurrentURLs:
+            url_map: Dict[Tuple[str, UUID], URL]  # URL and URL Type ID to URL object
+            package_urls: Dict[UUID, Set[PackageURL]]  # Package ID to PackageURL rows
+
+        @dataclass
+        class DiffResult:
+            new_urls: List[URL]
+            new_package_urls: List[PackageURL]
+            urls_to_update: List[PackageURL]
+
+        def get_current_urls(urls: Set[str]) -> CurrentURLs:
+            stmt = (
+                select(Package, PackageURL, URL)
+                .select_from(URL)
+                .join(PackageURL, PackageURL.url_id == URL.id, isouter=True)
+                .join(Package, Package.id == PackageURL.package_id, isouter=True)
+                .where(URL.url.in_(urls))
+            )
+
+            with self.session() as session:
+                result = session.execute(stmt)
+
+                url_map: Dict[Tuple[str, UUID], URL] = {}
+                package_urls: Dict[UUID, Set[PackageURL]] = {}
+
+                for pkg, pkg_url, url in result:
+                    url_map[(url.url, url.url_type_id)] = url
+
+                    # since it's a left join, we need to check if pkg is None
+                    if pkg is not None:
+                        if pkg.id not in package_urls:
+                            package_urls[pkg.id] = set()
+                        package_urls[pkg.id].add(pkg_url)
+
+                return CurrentURLs(url_map=url_map, package_urls=package_urls)
 
         def get_desired_state(self) -> Dict[UUID, Set[URL]]:
             """Based on the cache, return the map of package ID to URLs"""
@@ -164,20 +172,12 @@ class PkgxLoader(DB):
 
             return desired_state
 
-        desired_state = get_desired_state(self)
-
-        # check if the URL strings from the above exist in the current state
-        desired_urls = set(url.url for urls in desired_state.values() for url in urls)
-        current_state = self.get_current_urls(desired_urls)
-
         def diff(
             current_state: CurrentURLs, desired_state: Dict[UUID, Set[URL]]
-        ) -> Tuple[List[URL], List[PackageURL], List[PackageURL]]:
+        ) -> DiffResult:
             """
-            Returns:
-              - new_urls: List[URL]
-              - new_package_urls: List[PackageURL]
-              - urls_to_update: List[PackageURL]
+            Returns a DiffResult object with the new URLs, new package-URL links,
+            and package-URL links to update.
             """
             new_urls: List[URL] = []
             new_package_urls: Dict[Tuple[UUID, UUID], PackageURL] = {}
@@ -235,39 +235,49 @@ class PkgxLoader(DB):
                         if (pkg_id, url_id) not in urls_to_update:
                             urls_to_update[(pkg_id, url_id)] = to_update
 
-            return (
-                new_urls,
-                list(new_package_urls.values()),
-                list(urls_to_update.values()),
+            result = DiffResult(
+                new_urls=new_urls,
+                new_package_urls=list(new_package_urls.values()),
+                urls_to_update=list(urls_to_update.values()),
             )
+            return result
+
+        # first, get the desired state of all the URL relationships
+        desired_state = get_desired_state(self)
+
+        # check if the URL strings from the above exist in the current state
+        desired_urls = set(url.url for urls in desired_state.values() for url in urls)
+        current_state = get_current_urls(desired_urls)
 
         # now, let's do the diff
-        new_urls, new_package_urls, urls_to_update = diff(current_state, desired_state)
+        result = diff(current_state, desired_state)
 
-        self.logger.debug(f"{len(new_urls)} new URLs")
-        self.logger.debug(f"{len(new_package_urls)} new package-URL links")
-        self.logger.debug(f"{len(urls_to_update)} package-URL links to update")
+        self.logger.debug(f"{len(result.new_urls)} new URLs")
+        self.logger.debug(f"{len(result.new_package_urls)} new package-URL links")
+        self.logger.debug(f"{len(result.urls_to_update)} package-URL links to update")
 
         with self.session() as session:
             try:
                 # don't anticpate errors bc we're doing the logic now
-                if new_urls:
+                if result.new_urls:
                     self.logger.debug("Inserting new URLs")
-                    values = [url.to_dict_v2() for url in new_urls]
+                    values = [url.to_dict_v2() for url in result.new_urls]
                     stmt = pg_insert(URL).values(values)
                     session.execute(stmt)
 
-                if new_package_urls:
+                if result.new_package_urls:
                     self.logger.debug("Inserting new package-URL links")
-                    values = [pkg_url.to_dict_v2() for pkg_url in new_package_urls]
+                    values = [
+                        pkg_url.to_dict_v2() for pkg_url in result.new_package_urls
+                    ]
                     stmt = pg_insert(PackageURL).values(values)
                     session.execute(stmt)
 
-                if urls_to_update:
+                if result.urls_to_update:
                     self.logger.debug("Updating package-URL links")
                     values = [
                         {"id": pkg_url.id, "updated_at": pkg_url.updated_at}
-                        for pkg_url in urls_to_update
+                        for pkg_url in result.urls_to_update
                     ]
                     # values has the primary key, so per
                     # https://docs.sqlalchemy.org/en/20/orm/queryguide/dml.html#orm-queryguide-bulk-update
@@ -279,159 +289,6 @@ class PkgxLoader(DB):
 
             except Exception as e:
                 self.logger.error(f"Error inserting URLs or PackageURLs: {str(e)}")
-
-    def load_urls(self) -> None:
-        """
-        Load all URLs in the cache map into the database.
-        URLs have their own table and are linked to packages through a join table.
-        This method should be called after load_packages to ensure packages have IDs.
-        """
-        self.logger.log("Starting to load URLs")
-
-        url_objects: List[URL] = []
-        package_id_map: Dict[str, Set[str]] = {}  # Map of URLs to List of package IDs
-
-        # for every package we've collected, grab the package ID
-        # then, for every URL in the package, add it to the list of URLs
-        # remember, we have to load package_urls, so we **always** need the package ID
-        for key, cache in self.data.items():
-            if not hasattr(cache.package, "id") or cache.package.id is None:
-                self.logger.warn(f"Package {key} has no ID when loading URLs, skipping")
-                continue
-
-            package_id = cache.package.id
-
-            for url in cache.urls:
-                if not isinstance(url, URL):
-                    self.logger.warn(f"Invalid URL object type: {type(url)}, skipping")
-                    continue
-
-                url_objects.append(url)
-                if url.url not in package_id_map:
-                    package_id_map[url.url] = set()
-                package_id_map[url.url].add(package_id)
-
-        # collect the unique URLs
-        unique_urls = {(url.url, url.url_type_id): url for url in url_objects}.values()
-        self.logger.log(f"Found {len(unique_urls)} unique URLs to insert")
-
-        if not unique_urls:
-            self.logger.log("No URLs to insert")
-            return
-
-        url_dicts = []
-        for url in unique_urls:
-            try:
-                # Exclude 'id' if it exists but is None, else SQLAlchemy might complain
-                d = url.to_dict()
-                if "id" in d and d["id"] is None:
-                    del d["id"]
-                url_dicts.append(d)
-            except Exception as e:
-                self.logger.error(f"Error converting URL to dict: {str(e)}")
-
-        if not url_dicts:
-            self.logger.log("No valid URL dicts to insert")
-            return
-
-        self.logger.log(f"Using batch size of {BATCH_SIZE} for URL insertion")
-        url_id_map: Dict[str, str] = {}  # Maps URL string to URL id
-
-        with self.session() as session:
-            try:
-                for i in range(0, len(url_dicts), BATCH_SIZE):
-                    batch = url_dicts[i : i + BATCH_SIZE]
-                    self.logger.log(
-                        f"Processing URL batch {i//BATCH_SIZE + 1}/{(len(url_dicts)-1)//BATCH_SIZE + 1} ({len(batch)} URLs)"  # noqa
-                    )
-
-                    stmt = (
-                        pg_insert(URL)
-                        .values(batch)
-                        .on_conflict_do_nothing()
-                        .returning(URL.id, URL.url)
-                    )
-                    result = session.execute(stmt)
-                    for row in result:
-                        url_id_map[row.url] = row.id
-                    # Get the actual count of inserted rows
-                    inserted_count = len(result.fetchall())
-                    self.logger.log(f"Inserted {inserted_count} URLs in current batch")
-
-                session.commit()
-
-                missing_urls = [
-                    u["url"] for u in url_dicts if u["url"] not in url_id_map
-                ]
-
-                if missing_urls:
-                    self.logger.log(
-                        f"Fetching IDs for {len(missing_urls)} existing URLs"
-                    )
-                    for i in range(0, len(missing_urls), BATCH_SIZE):
-                        batch_urls = missing_urls[i : i + BATCH_SIZE]
-                        stmt = select(URL.id, URL.url).where(URL.url.in_(batch_urls))
-                        result = session.execute(stmt)
-                        for row in result:
-                            url_id_map[row.url] = row.id
-
-                package_url_dicts = []
-                check = set()
-                for url_str, pkgs in package_id_map.items():
-                    self.logger.debug(
-                        f"***** Processing package-URL links for {url_str}: {pkgs}"
-                    )
-                    if url_str in url_id_map:
-                        url_id = url_id_map[url_str]
-                        for package_id in pkgs:
-                            # I suspect that I can just make this a set and force
-                            # uniqueness
-                            self.logger.debug(f"***** Looking at {package_id}")
-                            if (url_str, package_id) in check:
-                                raise Exception(
-                                    f"Duplicate package-URL link: {url_str} -> {package_id}"
-                                )
-                            check.add((url_str, package_id))
-                            package_url_dicts.append(
-                                {"package_id": package_id, "url_id": url_id}
-                            )
-
-                self.logger.log(
-                    f"Found {len(package_url_dicts)} package-URL links to insert"
-                )
-
-                if package_url_dicts:
-                    for i in range(0, len(package_url_dicts), BATCH_SIZE):
-                        batch = package_url_dicts[i : i + BATCH_SIZE]
-                        self.logger.log(
-                            f"Processing PackageURL batch {i//BATCH_SIZE + 1}/{(len(package_url_dicts)-1)//BATCH_SIZE + 1} ({len(batch)} links)"  # noqa
-                        )
-                        stmt = (
-                            pg_insert(PackageURL)
-                            .values(batch)
-                            .on_conflict_do_update(
-                                constraint="uq_package_url",
-                                set_=dict(updated_at=self.now),
-                            )
-                        )
-                        session.execute(stmt)
-                    session.commit()
-                    self.logger.log("Successfully inserted all package-URL links")
-
-                updated_count = 0
-                for cache in self.data.values():
-                    for url in cache.urls:
-                        if url.url in url_id_map:
-                            url.id = url_id_map[url.url]
-                            updated_count += 1
-                self.logger.log(
-                    f"Updated cache with IDs for {updated_count} URL instances"
-                )
-
-            except Exception as e:
-                self.logger.error(f"Error inserting URLs or PackageURLs: {str(e)}")
-                self.logger.error(f"Error type: {type(e)}")
-                raise
 
     def load_dependencies(self) -> None:
         """
