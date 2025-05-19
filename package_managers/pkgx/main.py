@@ -51,15 +51,21 @@ def run_pipeline(config: Config, db: DB):
     pkgx_parser = PkgxParser(output_dir)
     pkgx_transformer = PkgxTransformer(config, db)
 
-    for data, id in pkgx_parser.parse_packages():
-        pkgx_transformer.transform(id, data)
+    if config.exec_config.test:
+        for i, (data, id) in enumerate(pkgx_parser.parse_packages()):
+            pkgx_transformer.transform(id, data)
+            if i > 10:
+                break
+    else:
+        for data, id in pkgx_parser.parse_packages():
+            pkgx_transformer.transform(id, data)
 
     logger.log(f"Loaded {len(pkgx_transformer.cache_map)} packages")
 
     pkgx_loader = PkgxLoader(config, pkgx_transformer.cache_map)
     pkgx_loader.load_packages()
-    pkgx_loader.load_urls()
-    pkgx_loader.load_dependencies()
+    pkgx_loader.load_urls_v2()
+    # pkgx_loader.load_dependencies()
 
     if config.exec_config.no_cache:
         fetcher.cleanup()
