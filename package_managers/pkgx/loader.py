@@ -132,8 +132,6 @@ class PkgxLoader(DB):
                     package_id_map[url.url] = []
                 package_id_map[url.url].append(package_id)
 
-        self.logger.log(f"Found {len(url_objects)} URLs to insert: {url_objects}")
-
         # collect the unique URLs
         unique_urls = {(url.url, url.url_type_id): url for url in url_objects}.values()
         self.logger.log(f"Found {len(unique_urls)} unique URLs to insert")
