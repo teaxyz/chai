@@ -61,7 +61,10 @@ class Transformer:
 
     def guess(self, db_client: DB, url: str) -> List[str]:
         names = possible_names(url)
-        self.logger.debug(f"{url}: guessed {names}")
         urls = db_client.search_names(names)
-        self.logger.debug(f"{url}: found {urls}")
         return urls
+
+
+if __name__ == "__main__":
+    t = Transformer("pkgx")
+    print(t.guess(DB("transformer_db_logger"), "elfutils.org"))

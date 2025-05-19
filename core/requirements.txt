@@ -4,7 +4,7 @@ requests==2.32.3
 certifi==2024.8.30
 charset-normalizer==3.3.2
 idna==3.8
-permalint==0.1.4
+permalint==0.1.8
 psycopg2==2.9.9
 schedule==1.2.0
 sqlalchemy==2.0.34

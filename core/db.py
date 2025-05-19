@@ -42,6 +42,13 @@ class DB:
 
     def search_names(self, package_names: List[str]) -> List[str]:
         """Return Homepage URLs for packages with these names"""
+
+        # NOTE: this is dumbe, and a simple hack for now
+        # we should probably delete it when we deploy this
+        debian_and_homebrew = [
+            "34d996e7-f892-4fd5-a4d5-6eb8405e32bc",
+            "d1d8680b-1c7e-4a13-9dc2-28036e9735dd",
+        ]
         with self.session() as session:
             results = (
                 session.query(Package, URL)
@@ -50,13 +57,12 @@ class DB:
                 .join(URLType, URL.url_type_id == URLType.id)
                 .filter(URLType.name == "homepage")
                 .filter(Package.name.in_(package_names))
+                .filter(Package.package_manager_id.in_(debian_and_homebrew))
                 .all()
             )
 
             # build a mapping
             name_to_url = {result.Package.name: result.URL.url for result in results}
-
-            self.logger.debug(f"name_to_url: {name_to_url}")
 
             # return in the order preserved by the input (bc its relevant)
             # and account for the fact that some
@@ -102,12 +108,4 @@ class ConfigDB(DB):
 
 if __name__ == "__main__":
     db = ConfigDB()
-    print(
-        db.search_names(
-            [
-                "taku910.github.io/mecab-ipadic",
-                "mecab-ipadic",
-                "taku910.github.io",
-            ]
-        )
-    )
+    print(db.search_names(["elfutils.org", "elfutils"]))
