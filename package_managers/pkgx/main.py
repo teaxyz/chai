@@ -4,6 +4,8 @@ import os
 import sys
 import time
 
+from core.db import DB
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from core.config import Config, PackageManager
 from core.fetcher import GitFetcher
@@ -42,12 +44,14 @@ def fetch(config: Config) -> GitFetcher:
 
 
 def run_pipeline(config: Config):
+    db = DB("pkgx_transformer_db_logger")
+
     fetcher = fetch(config)
     output_dir = f"{fetcher.output}/latest"
 
     # now, we'll parse the package.yml files
     pkgx_parser = PkgxParser(output_dir)
-    pkgx_transformer = PkgxTransformer(config)
+    pkgx_transformer = PkgxTransformer(config, db)
 
     for data, id in pkgx_parser.parse_packages():
         pkgx_transformer.transform(id, data)

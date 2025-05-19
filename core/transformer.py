@@ -59,9 +59,9 @@ class Transformer:
     def canonicalize(self, url: str) -> str:
         return normalize_url(url)
 
-    def guess(self, db_client: DB, url: str) -> List[str]:
+    def guess(self, db_client: DB, url: str, package_managers: List[UUID]) -> List[str]:
         names = possible_names(url)
-        urls = db_client.search_names(names)
+        urls = db_client.search_names(names, package_managers)
         return urls
 
 

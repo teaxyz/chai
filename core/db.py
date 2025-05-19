@@ -1,5 +1,6 @@
 import os
 from typing import List
+from uuid import UUID
 
 from sqlalchemy import create_engine
 from sqlalchemy.dialects import postgresql
@@ -40,15 +41,11 @@ class DB:
         )
         self.logger.log(str(compiled_stmt))
 
-    def search_names(self, package_names: List[str]) -> List[str]:
+    def search_names(
+        self, package_names: List[str], package_managers: List[UUID]
+    ) -> List[str]:
         """Return Homepage URLs for packages with these names"""
 
-        # NOTE: this is dumbe, and a simple hack for now
-        # we should probably delete it when we deploy this
-        debian_and_homebrew = [
-            "34d996e7-f892-4fd5-a4d5-6eb8405e32bc",
-            "d1d8680b-1c7e-4a13-9dc2-28036e9735dd",
-        ]
         with self.session() as session:
             results = (
                 session.query(Package, URL)
@@ -57,7 +54,7 @@ class DB:
                 .join(URLType, URL.url_type_id == URLType.id)
                 .filter(URLType.name == "homepage")
                 .filter(Package.name.in_(package_names))
-                .filter(Package.package_manager_id.in_(debian_and_homebrew))
+                .filter(Package.package_manager_id.in_(package_managers))
                 .all()
             )
 
