@@ -1,8 +1,9 @@
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Dict, List, Set, Tuple
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from core.config import Config
@@ -33,7 +34,7 @@ class PkgxLoader(DB):
         self.data = data
         self.debug = config.exec_config.test
         self.logger.debug(f"Initialized PkgxLoader with {len(data)} packages")
-        self.now = func.now()
+        self.now = datetime.now()
 
     def load_packages(self) -> None:
         """
@@ -112,17 +113,11 @@ class PkgxLoader(DB):
                 raise
 
     def get_current_urls(self, urls: Set[str]) -> CurrentURLs:
-        self.logger.debug(f"Getting current URLs for: {urls}")
-
-        # the problem is that this join is too good
-        # so, the raw URL which exists, isn't actually joined to the package
-        # in the package URL
-        # so, my later code doesn't see that it exists
-        # really, this should be two separate queries, or a left join
         stmt = (
             select(Package, PackageURL, URL)
-            .join(PackageURL, Package.id == PackageURL.package_id)
-            .join(URL, PackageURL.url_id == URL.id)
+            .select_from(URL)
+            .join(PackageURL, PackageURL.url_id == URL.id, isouter=True)
+            .join(Package, Package.id == PackageURL.package_id, isouter=True)
             .where(URL.url.in_(urls))
         )
 
@@ -135,12 +130,11 @@ class PkgxLoader(DB):
             for pkg, pkg_url, url in result:
                 url_map[(url.url, url.url_type_id)] = url
 
-                if pkg.id not in package_urls:
-                    package_urls[pkg.id] = set()
-                package_urls[pkg.id].add(pkg_url)
-
-            self.logger.debug(f"URL Map: {url_map}")
-            # self.logger.debug(f"Package URLs: {package_urls}")
+                # since it's a left join, we need to check if pkg is None
+                if pkg is not None:
+                    if pkg.id not in package_urls:
+                        package_urls[pkg.id] = set()
+                    package_urls[pkg.id].add(pkg_url)
 
             return CurrentURLs(url_map=url_map, package_urls=package_urls)
 
@@ -186,8 +180,8 @@ class PkgxLoader(DB):
               - urls_to_update: List[PackageURL]
             """
             new_urls: List[URL] = []
-            new_package_urls: List[PackageURL] = []
-            urls_to_update: List[PackageURL] = []
+            new_package_urls: Dict[Tuple[UUID, UUID], PackageURL] = {}
+            urls_to_update: Dict[Tuple[UUID, UUID], PackageURL] = {}
 
             for pkg_id, urls in desired_state.items():
                 # what are the current URLs for this package?
@@ -223,57 +217,63 @@ class PkgxLoader(DB):
                     # now, let's do the diff to check if this URL is already linked to
                     # this package
                     if url_id not in current_urls:
-                        new_package_url = PackageURL(
-                            id=uuid4(),
-                            package_id=pkg_id,
-                            url_id=url_id,
-                            updated_at=self.now,
-                        )
-                        new_package_urls.append(new_package_url)
+                        if (pkg_id, url_id) not in new_package_urls:
+                            new_package_url = PackageURL(
+                                id=uuid4(),
+                                package_id=pkg_id,
+                                url_id=url_id,
+                                created_at=self.now,
+                                updated_at=self.now,
+                            )
+                            new_package_urls[(pkg_id, url_id)] = new_package_url
                     else:
                         # if it's already linked, just update the updated_at for now
                         # TODO: I think this we should have a latest tag in this table
                         # so we don't need to constantly ensure we're doing this update
                         to_update = current_urls[url_id]
                         to_update.updated_at = self.now
-                        urls_to_update.append(to_update)
+                        if (pkg_id, url_id) not in urls_to_update:
+                            urls_to_update[(pkg_id, url_id)] = to_update
 
-            return new_urls, new_package_urls, urls_to_update
+            return (
+                new_urls,
+                list(new_package_urls.values()),
+                list(urls_to_update.values()),
+            )
 
         # now, let's do the diff
         new_urls, new_package_urls, urls_to_update = diff(current_state, desired_state)
 
-        self.logger.log(f"Found {len(new_urls)} new URLs to insert")
-        for url in new_urls:
-            self.logger.debug(f"New URL: {url.id} -> {url.url} / {url.url_type_id}")
-        self.logger.log(
-            f"Found {len(new_package_urls)} new package-URL links to insert"
-        )
-        for pkg_url in new_package_urls:
-            self.logger.debug(
-                f"New package-URL link: {pkg_url.id} -> {pkg_url.package_id} -> {pkg_url.url_id}"
-            )
-        self.logger.log(f"Found {len(urls_to_update)} package-URL links to update")
-        for pkg_url in urls_to_update:
-            self.logger.debug(
-                f"URL to update: {pkg_url.id} -> {pkg_url.package_id} -> {pkg_url.url_id}"
-            )
-        return
+        self.logger.debug(f"{len(new_urls)} new URLs")
+        self.logger.debug(f"{len(new_package_urls)} new package-URL links")
+        self.logger.debug(f"{len(urls_to_update)} package-URL links to update")
 
         with self.session() as session:
             try:
                 # don't anticpate errors bc we're doing the logic now
-                self.logger.debug("Inserting new URLs")
-                stmt = pg_insert(URL).values(new_urls)
-                session.execute(stmt)
+                if new_urls:
+                    self.logger.debug("Inserting new URLs")
+                    values = [url.to_dict_v2() for url in new_urls]
+                    stmt = pg_insert(URL).values(values)
+                    session.execute(stmt)
 
-                self.logger.debug("Inserting new package-URL links")
-                stmt = pg_insert(PackageURL).values(new_package_urls)
-                session.execute(stmt)
+                if new_package_urls:
+                    self.logger.debug("Inserting new package-URL links")
+                    values = [pkg_url.to_dict_v2() for pkg_url in new_package_urls]
+                    stmt = pg_insert(PackageURL).values(values)
+                    session.execute(stmt)
 
-                self.logger.debug("Updating package-URL links")
-                stmt = update(PackageURL).values(urls_to_update)
-                session.execute(stmt)
+                if urls_to_update:
+                    self.logger.debug("Updating package-URL links")
+                    values = [
+                        {"id": pkg_url.id, "updated_at": pkg_url.updated_at}
+                        for pkg_url in urls_to_update
+                    ]
+                    # values has the primary key, so per
+                    # https://docs.sqlalchemy.org/en/20/orm/queryguide/dml.html#orm-queryguide-bulk-update
+                    # I should be able to just use the values directly
+                    stmt = update(PackageURL)
+                    session.execute(stmt, values)
 
                 session.commit()
 
