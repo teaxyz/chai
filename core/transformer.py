@@ -47,15 +47,6 @@ class Transformer:
         with open(file_path, "r") as file:
             return file.read()
 
-    def packages(self):
-        pass
-
-    def versions(self):
-        pass
-
-    def dependencies(self):
-        pass
-
     def canonicalize(self, url: str) -> str:
         return normalize_url(url)
 
@@ -63,8 +54,3 @@ class Transformer:
         names = possible_names(url)
         urls = db_client.search_names(names, package_managers)
         return urls
-
-
-if __name__ == "__main__":
-    t = Transformer("pkgx")
-    print(t.guess(DB("transformer_db_logger"), "elfutils.org"))

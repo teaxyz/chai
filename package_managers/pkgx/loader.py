@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Dict, List, Set, Tuple
 from uuid import UUID, uuid4
 
@@ -28,7 +27,6 @@ class PkgxLoader(DB):
         self.data = data
         self.debug = config.exec_config.test
         self.logger.debug(f"Initialized PkgxLoader with {len(data)} packages")
-        self.now = datetime.now()
 
     def load_packages(self) -> None:
         """
@@ -152,7 +150,7 @@ class PkgxLoader(DB):
 
                 return CurrentURLs(url_map=url_map, package_urls=package_urls)
 
-        def get_desired_state(self) -> Dict[UUID, Set[URL]]:
+        def get_desired_state() -> Dict[UUID, Set[URL]]:
             """Based on the cache, return the map of package ID to URLs"""
             desired_state: Dict[UUID, Set[URL]] = {}
             for cache in self.data.values():
@@ -243,7 +241,7 @@ class PkgxLoader(DB):
             return result
 
         # first, get the desired state of all the URL relationships
-        desired_state = get_desired_state(self)
+        desired_state = get_desired_state()
 
         # check if the URL strings from the above exist in the current state
         desired_urls = set(url.url for urls in desired_state.values() for url in urls)

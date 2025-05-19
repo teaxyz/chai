@@ -13,7 +13,7 @@ from package_managers.debian.parser import DebianData, DebianParser
 class Cache:
     package: Package
     versions: list[Version] = field(default_factory=list)
-    url: list[URL] = field(default_factory=list)
+    urls: list[URL] = field(default_factory=list)
     dependency: list[DependsOn] = field(default_factory=list)
 
 
@@ -86,7 +86,7 @@ class DebianTransformer(Transformer):
             # sources file has the homepage url type
             homepage_url_type = self.url_types.homepage
             homepage_url = self.generate_chai_url(source, homepage_url_type)
-            item.url.append(homepage_url)
+            item.urls.append(homepage_url)
 
             # now, manage the versions
             version = self.generate_chai_version(source)
