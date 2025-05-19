@@ -10,7 +10,7 @@ import testing.postgresql
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session
 
-from core.config import URLTypes, UserTypes
+from core.config import Config, URLTypes, UserTypes
 from core.db import ConfigDB
 from core.models import Base, PackageManager, Source, URLType
 
@@ -146,3 +146,17 @@ def mock_csv_reader():
         return mock_reader
 
     return create_mock_reader
+
+
+@pytest.fixture
+def mock_config():
+    """
+    Fixture to mock Config object for tests.
+    """
+    config = MagicMock(spec=Config)
+
+    config.exec_config = MagicMock()
+    config.exec_config.test = True
+    config.exec_config.no_cache = True
+
+    return config
