@@ -1,6 +1,6 @@
 from typing import Dict, List
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from core.config import Config
@@ -25,6 +25,7 @@ class PkgxLoader(DB):
         self.data = data
         self.debug = config.exec_config.test
         self.logger.debug(f"Initialized PkgxLoader with {len(data)} packages")
+        self.now = func.now()
 
     def load_packages(self) -> None:
         """
@@ -217,7 +218,12 @@ class PkgxLoader(DB):
                             f"Processing PackageURL batch {i//BATCH_SIZE + 1}/{(len(package_url_dicts)-1)//BATCH_SIZE + 1} ({len(batch)} links)"  # noqa
                         )
                         stmt = (
-                            pg_insert(PackageURL).values(batch).on_conflict_do_nothing()
+                            pg_insert(PackageURL)
+                            .values(batch)
+                            .on_conflict_do_update(
+                                constraint="uq_package_url",
+                                set_=dict(updated_at=self.now),
+                            )
                         )
                         session.execute(stmt)
                     session.commit()
