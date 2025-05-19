@@ -71,28 +71,25 @@ def main():
     db = DB("pkgx_main_db_logger")
     logger.debug(f"Using config: {config}")
 
-    try:
-        if SCHEDULER_ENABLED:
-            logger.log("Scheduler enabled. Starting schedule.")
-            scheduler = Scheduler("pkgx")
-            scheduler.start(run_pipeline, config)
+    if SCHEDULER_ENABLED:
+        logger.log("Scheduler enabled. Starting schedule.")
+        scheduler = Scheduler("pkgx")
+        scheduler.start(run_pipeline, config)
 
-            # run immediately as well when scheduling
-            scheduler.run_now(run_pipeline, config, db)
+        # run immediately as well when scheduling
+        scheduler.run_now(run_pipeline, config, db)
 
-            # keep the main thread alive for scheduler
-            try:
-                while True:
-                    time.sleep(3600)
-            except KeyboardInterrupt:
-                scheduler.stop()
-                logger.log("Scheduler stopped.")
-        else:
-            logger.log("Scheduler disabled. Running pipeline once.")
-            run_pipeline(config, db)
-            logger.log("Pipeline finished.")
-    finally:
-        db.close()
+        # keep the main thread alive for scheduler
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            scheduler.stop()
+            logger.log("Scheduler stopped.")
+    else:
+        logger.log("Scheduler disabled. Running pipeline once.")
+        run_pipeline(config, db)
+        logger.log("Pipeline finished.")
 
 
 if __name__ == "__main__":
