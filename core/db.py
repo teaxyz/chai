@@ -253,7 +253,15 @@ class DB:
                 self.load(session, result.new_package_urls, pg_insert(PackageURL))
 
                 self.logger.debug("Updating package-URL links")
-                self.load(session, result.urls_to_update, update(PackageURL))
+                if result.urls_to_update:
+                    # values for batch updates needs to be explicitly specified on pkeys
+                    # https://docs.sqlalchemy.org/en/20/orm/queryguide/dml.html#orm-queryguide-bulk-update
+                    values = [
+                        {"id": pkg_url.id, "updated_at": pkg_url.updated_at}
+                        for pkg_url in result.urls_to_update
+                    ]
+                    stmt = update(PackageURL)
+                    session.execute(stmt, values)
 
                 session.commit()
 
