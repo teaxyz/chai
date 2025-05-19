@@ -181,9 +181,6 @@ class PkgxLoader(DB):
                     self.logger.log(f"Inserted {inserted_count} URLs in current batch")
 
                 session.commit()
-                self.logger.log(
-                    f"Successfully inserted unique URLs, got {len(url_id_map)} total IDs map"
-                )
 
                 missing_urls = [
                     u["url"] for u in url_dicts if u["url"] not in url_id_map
