@@ -116,12 +116,28 @@ class DependencyTypes:
         return f"DependencyTypes(build={self.build},development={self.development},runtime={self.runtime},test={self.test},optional={self.optional},recommended={self.recommended})"  # noqa
 
 
+class PackageManagers:
+    crates: UUID
+    homebrew: UUID
+    debian: UUID
+    npm: UUID
+    pkgx: UUID
+
+    def __init__(self, db: ConfigDB):
+        self.crates = db.select_package_manager_by_name("crates").id
+        self.homebrew = db.select_package_manager_by_name("homebrew").id
+        self.debian = db.select_package_manager_by_name("debian").id
+        self.npm = db.select_package_manager_by_name("npm").id
+        self.pkgx = db.select_package_manager_by_name("pkgx").id
+
+
 class Config:
     exec_config: ExecConf
     pm_config: PMConf
     url_types: URLTypes
     user_types: UserTypes
     dependency_types: DependencyTypes
+    package_managers: PackageManagers
 
     def __init__(self, pm: PackageManager) -> None:
         db = ConfigDB()
@@ -130,6 +146,7 @@ class Config:
         self.url_types = URLTypes(db)
         self.user_types = UserTypes(db)
         self.dependency_types = DependencyTypes(db)
+        self.package_managers = PackageManagers(db)
 
     def __str__(self):
-        return f"Config(exec_config={self.exec_config}, pm_config={self.pm_config}, url_types={self.url_types}, user_types={self.user_types}, dependency_types={self.dependency_types})"  # noqa
+        return f"Config(exec_config={self.exec_config}, pm_config={self.pm_config}, url_types={self.url_types}, user_types={self.user_types}, dependency_types={self.dependency_types}, package_managers={self.package_managers})"  # noqa
