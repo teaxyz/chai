@@ -45,6 +45,7 @@ class PkgxTransformer(Transformer):
         self.depends_on_types = config.dependency_types
         self.cache_map: Dict[str, Cache] = {}
         self.db = db
+        self.package_managers = config.package_managers
 
     # The parser is yielding one package at a time
     def transform(self, project_path: str, data: PkgxPackage) -> None:
@@ -82,76 +83,82 @@ class PkgxTransformer(Transformer):
         The API https://pkgx.dev/pkgs/{name}.json returns a blob which may contain
         the homepage field
         """
-        homepage_url: str = ""
         response: Response = get(HOMEPAGE_URL.format(name=import_id))
         if response.status_code == 200:
             data: Dict[str, Any] = response.json()
             if "homepage" in data:
-                homepage_url = self.canonicalize(data["homepage"])
-                return homepage_url
+                return data["homepage"]
+
+    def special_case(self, import_id: str) -> Optional[str]:
+        homepage: Optional[str] = None
+
+        # if no slashes, then pkgx used the homepage as the name
+        # if two slashes, then probably github / gitlab
+        if not re.search(r"/", import_id) or re.search(r"/.+/", import_id):
+            homepage = import_id
+
+        # if it's a crates.io package, then we can use the crates URL
+        elif re.search(r"^crates.io", import_id):
+            homepage = f"https://crates.io/crates/{import_id}"
+
+        # if it's part of the x.org family
+        elif re.search(r"^x.org", import_id):
+            homepage = "https://x.org"
+
+        # if it's part of the pkgx family
+        elif re.search("^pkgx.sh", import_id):
+            tool = import_id.split("/")[1]
+            homepage = f"https://github.com/pkgxdev/{tool}"
+
+        else:
+            self.logger.warn(f"no homepage in pkgx for {import_id}")
+
+        return homepage
 
     def generate_chai_url(self, import_id: str, pkgx_package: PkgxPackage) -> List[URL]:
         urls: Set[URL] = set()
 
-        # first, check the database to see if we have a canonical URL for this import_id
+        # handle homepage first
 
         # get possible homepage URLs
-        maybe: List[str] = self.guess(self.db, import_id)
+        maybe: List[str] = self.guess(
+            self.db,
+            import_id,
+            [self.package_managers.homebrew, self.package_managers.debian],
+        )
 
         # if we have a canonical URL, we can proceed with that!
         if maybe:
-            homepage = self.canonicalize(maybe[0])  # use the first one for now
+            # NOTE: why am I using the first one?
+            # well, permalint arranges the URLs in order of preference, so i'm relying
+            # on that for now
+            homepage = maybe[0]
         else:
+            # otherwise, we can ask pkgx
             homepage = self.ask_pkgx(import_id)
+
+            # but if that fails, we're in special case territory
             if not homepage:
-                # and here are the special cases
-                # if no slashes, then pkgx used the homepage as the name
-                # if two slashes, then probably github / gitlab
-                if not re.search(r"/", import_id) or re.search(r"/.+/", import_id):
-                    homepage = import_id
-
-                # if it's a crates.io package, then we can use the crates URL
-                elif re.search(r"^crates.io", import_id):
-                    homepage = f"https://crates.io/crates/{import_id}"
-
-                # if it's part of the x.org family
-                elif re.search(r"^x.org", import_id):
-                    homepage = "https://x.org"
-
-                # if it's oart of the pkgx family
-                elif re.search("^pkgx.sh", import_id):
-                    tool = import_id.split("/")[1]
-                    homepage = f"https://github.com/pkgxdev/pkgm/{tool}"
-
-                else:
-                    self.logger.warn(f"no homepage in pkgx for {import_id}")
+                homepage = self.special_case(import_id)
 
         if homepage:
+            # finally, canonicalize it
+            homepage = self.canonicalize(homepage)
             urls.add(URL(url=homepage, url_type_id=self.url_types.homepage))
 
         # Source URL for pkgx always comes from distributable.url
-        # note that while the staking app can't register non-GitHub URLs, we can still
-        # clean and load them.
-        # for now, we're just returning the raw distributable URL as the source URL for
-        # Non-GitHub URLs.
-        raw_source_urls = pkgx_package.distributable
-        for raw_distributable in raw_source_urls:
-            clean_source_url = self.canonicalize(raw_distributable.url)
-            if clean_source_url:
-                source_url = URL(
-                    url=clean_source_url,
-                    url_type_id=self.url_types.source,
-                )
-                urls.add(source_url)
+        # which our parser returns in list form
+        # we'll clean and load em all
+        for raw_distributable in pkgx_package.distributable:
+            clean = self.canonicalize(raw_distributable.url)
+            if clean:
+                source = URL(url=clean, url_type_id=self.url_types.source)
+                urls.add(source)
 
             # if the source URL is a GitHub URL, we can also populate the repository URL
-            if self.is_github(clean_source_url):
-                clean_repository_url = clean_source_url  # already clean
-                repository_url = URL(
-                    url=clean_repository_url,
-                    url_type_id=self.url_types.repository,
-                )
-                urls.add(repository_url)
+            if self.is_github(clean):
+                repository = URL(url=clean, url_type_id=self.url_types.repository)
+                urls.add(repository)
 
         return list(urls)
 
@@ -164,8 +171,3 @@ class PkgxTransformer(Transformer):
 
     def is_github(self, url: str) -> bool:
         return re.search(GITHUB_PATTERN, url) is not None
-
-
-if __name__ == "__main__":
-    test = "elementsproject.org"
-    print(not re.search(r"/", test))
