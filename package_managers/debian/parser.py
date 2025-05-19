@@ -78,13 +78,17 @@ class DebianData:
 
 
 class DebianParser:
-    def __init__(self, content: str):
+    def __init__(self, content: str, test: bool = False):
         # content is the Packages or Sources file
         self.content = content
+        self.test = test
 
     def parse(self) -> Iterator[DebianData]:
         """Yield packages and sources from the Packages and Sources files."""
         paragraphs = self.content.split("\n\n")
+
+        if self.test:
+            paragraphs = paragraphs[:10]
 
         # iterate over the lines
         for paragraph in paragraphs:
