@@ -29,6 +29,9 @@ class DB:
         self.session = sessionmaker(self.engine)
         self.logger.debug("connected")
 
+    def close(self):
+        self.session.close()
+
     def insert_load_history(self, package_manager_id: str):
         with self.session() as session:
             session.add(LoadHistory(package_manager_id=package_manager_id))

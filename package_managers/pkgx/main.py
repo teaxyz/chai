@@ -43,9 +43,7 @@ def fetch(config: Config) -> GitFetcher:
     return fetcher
 
 
-def run_pipeline(config: Config):
-    db = DB("pkgx_transformer_db_logger")
-
+def run_pipeline(config: Config, db: DB):
     fetcher = fetch(config)
     output_dir = f"{fetcher.output}/latest"
 
@@ -70,27 +68,31 @@ def run_pipeline(config: Config):
 def main():
     logger.log("Initializing Pkgx package manager")
     config = Config(PackageManager.PKGX)
+    db = DB("pkgx_main_db_logger")
     logger.debug(f"Using config: {config}")
 
-    if SCHEDULER_ENABLED:
-        logger.log("Scheduler enabled. Starting schedule.")
-        scheduler = Scheduler("pkgx")
-        scheduler.start(run_pipeline, config)
+    try:
+        if SCHEDULER_ENABLED:
+            logger.log("Scheduler enabled. Starting schedule.")
+            scheduler = Scheduler("pkgx")
+            scheduler.start(run_pipeline, config)
 
-        # run immediately as well when scheduling
-        scheduler.run_now(run_pipeline, config)
+            # run immediately as well when scheduling
+            scheduler.run_now(run_pipeline, config, db)
 
-        # keep the main thread alive for scheduler
-        try:
-            while True:
-                time.sleep(3600)
-        except KeyboardInterrupt:
-            scheduler.stop()
-            logger.log("Scheduler stopped.")
-    else:
-        logger.log("Scheduler disabled. Running pipeline once.")
-        run_pipeline(config)
-        logger.log("Pipeline finished.")
+            # keep the main thread alive for scheduler
+            try:
+                while True:
+                    time.sleep(3600)
+            except KeyboardInterrupt:
+                scheduler.stop()
+                logger.log("Scheduler stopped.")
+        else:
+            logger.log("Scheduler disabled. Running pipeline once.")
+            run_pipeline(config, db)
+            logger.log("Pipeline finished.")
+    finally:
+        db.close()
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ from package_managers.pkgx.transformer import Cache
 BATCH_SIZE = 10000
 
 
+# NOTE: this is a separate instance of the db that is used in main
 class PkgxLoader(DB):
     def __init__(self, config: Config, data: Dict[str, Cache]):
         super().__init__("pkgx_db")
