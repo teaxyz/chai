@@ -110,9 +110,48 @@ class Diff:
                 # existing package, no change
                 return pkg_id, None, None
 
-    def diff_url(self, url: str, url_type: UUID) -> Dict[UUID, UUID]:
-        """Placeholder for diffing a single URL"""
-        pass
+    def diff_url(
+        self, pkg: Actual, new_urls: Dict[Tuple[str, UUID], URL]
+    ) -> Dict[UUID, UUID]:
+        """Given a package's URLs, returns the resolved URL or this specific formula"""
+        resolved_urls: Dict[UUID, UUID] = {}
+
+        # we need to check if these URLs are in our cache, or if we've already handled
+        # them before
+        urls = (
+            (pkg.homepage, self.config.url_types.homepage),
+            (pkg.source, self.config.url_types.source),
+            (pkg.repository, self.config.url_types.repository),
+        )
+
+        for url, url_type in urls:
+            if not url:
+                continue
+
+            url_key = (url, url_type)
+            resolved_url_id: UUID
+            if url_key in new_urls:
+                resolved_url_id = new_urls[url_key].id
+            elif url_key in self.caches.url_cache:
+                resolved_url_id = self.caches.url_cache[url_key].id
+            else:
+                self.logger.debug(f"URL {url} for {url_type} is entirely new")
+                new_url = URL(
+                    id=uuid4(),
+                    url=url,
+                    url_type_id=url_type,
+                    created_at=self.now,
+                    updated_at=self.now,
+                )
+                resolved_url_id = new_url.id
+
+                # NOTE: THIS IS SUPER IMPORTANT
+                # we're not just borrowing this value, we're mutating it as well
+                new_urls[url_key] = new_url
+
+            resolved_urls[url_type] = resolved_url_id
+
+        return resolved_urls
 
     def diff_pkg_url(
         self, pkg_id: UUID, url: str, url_type: UUID
@@ -466,7 +505,7 @@ def main(config: Config, db: HomebrewDB) -> None:
 
     # total set of updates we'll make are:
     new_packages: List[Package] = []
-    new_urls: List[URL] = []
+    new_urls: Dict[Tuple[str, UUID], URL] = {}  # we'll convert this later
     new_package_urls: List[PackageURL] = []
     updated_packages: List[Dict[str, Union[UUID, str, datetime]]] = []
     updated_package_urls: List[Dict[str, Union[UUID, datetime]]] = []
@@ -480,6 +519,10 @@ def main(config: Config, db: HomebrewDB) -> None:
         if update_payload:
             logger.debug(f"Updated package: {update_payload['id']}")
             updated_packages.append(update_payload)
+
+        # note that resolved_urls now has the correct URL map for this particular
+        # package
+        resolved_urls = diff.diff_url(pkg, new_urls)
 
         if config.exec_config.test and i > 10:
             break
