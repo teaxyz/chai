@@ -26,6 +26,12 @@ CHAI_DATABASE_URL = os.getenv("CHAI_DATABASE_URL")
 DEFAULT_BATCH_SIZE = 10000
 
 
+@dataclass
+class CurrentURLs:
+    url_map: Dict[Tuple[str, UUID], URL]  # URL and URL Type ID to URL object
+    package_urls: Dict[UUID, Set[PackageURL]]  # Package ID to PackageURL rows
+
+
 class DB:
     def __init__(self, logger_name: str):
         self.logger = Logger(logger_name)
@@ -90,44 +96,10 @@ class DB:
         """
 
         @dataclass
-        class CurrentURLs:
-            url_map: Dict[Tuple[str, UUID], URL]  # URL and URL Type ID to URL object
-            package_urls: Dict[UUID, Set[PackageURL]]  # Package ID to PackageURL rows
-
-        @dataclass
         class DiffResult:
             new_urls: List[URL]
             new_package_urls: List[PackageURL]
             urls_to_update: List[PackageURL]
-
-        def get_current_urls(urls: Set[str]) -> CurrentURLs:
-            stmt = (
-                select(Package, PackageURL, URL)
-                .select_from(URL)
-                .join(PackageURL, PackageURL.url_id == URL.id, isouter=True)
-                .join(Package, Package.id == PackageURL.package_id, isouter=True)
-                .where(URL.url.in_(urls))
-            )
-
-            with self.session() as session:
-                result = session.execute(stmt)
-
-                url_map: Dict[Tuple[str, UUID], URL] = {}
-                package_urls: Dict[UUID, Set[PackageURL]] = {}
-
-                for pkg, pkg_url, url in result:
-                    url_map[(url.url, url.url_type_id)] = url
-
-                    # since it's a left join, we need to check if pkg is None
-                    if pkg is not None:
-                        if pkg.id not in package_urls:
-                            package_urls[pkg.id] = set()
-                        package_urls[pkg.id].add(pkg_url)
-
-                self.logger.debug(f"Length of url_map: {len(url_map)}")
-                self.logger.debug(f"Length of package_urls: {len(package_urls)}")
-
-                return CurrentURLs(url_map=url_map, package_urls=package_urls)
 
         def get_desired_state() -> Dict[UUID, Set[URL]]:
             """Based on the cache, return the map of package ID to URLs"""
@@ -234,7 +206,7 @@ class DB:
 
         # check if the URL strings from the above exist in the current state
         desired_urls = set(url.url for urls in desired_state.values() for url in urls)
-        current_state = get_current_urls(desired_urls)
+        current_state = self.get_current_urls(desired_urls)
 
         # now, let's do the diff
         result = diff(current_state, desired_state)
@@ -301,6 +273,35 @@ class DB:
             )
             value_stmt = stmt.values(batch)
             session.execute(value_stmt)
+
+    def get_current_urls(self, urls: Set[str]) -> CurrentURLs:
+        stmt = (
+            select(Package, PackageURL, URL)
+            .select_from(URL)
+            .join(PackageURL, PackageURL.url_id == URL.id, isouter=True)
+            .join(Package, Package.id == PackageURL.package_id, isouter=True)
+            .where(URL.url.in_(urls))
+        )
+
+        with self.session() as session:
+            result = session.execute(stmt)
+
+            url_map: Dict[Tuple[str, UUID], URL] = {}
+            package_urls: Dict[UUID, Set[PackageURL]] = {}
+
+            for pkg, pkg_url, url in result:
+                url_map[(url.url, url.url_type_id)] = url
+
+                # since it's a left join, we need to check if pkg is None
+                if pkg is not None:
+                    if pkg.id not in package_urls:
+                        package_urls[pkg.id] = set()
+                    package_urls[pkg.id].add(pkg_url)
+
+            self.logger.debug(f"Length of url_map: {len(url_map)}")
+            self.logger.debug(f"Length of package_urls: {len(package_urls)}")
+
+            return CurrentURLs(url_map=url_map, package_urls=package_urls)
 
 
 class ConfigDB(DB):
