@@ -22,7 +22,7 @@ FETCH = env_vars("FETCH", "true")
 NO_CACHE = env_vars("NO_CACHE", "true")
 SOURCES = {
     PackageManager.CRATES: "https://static.crates.io/db-dump.tar.gz",
-    PackageManager.HOMEBREW: "https://github.com/Homebrew/homebrew-core/tree/master/Formula",  # noqa
+    PackageManager.HOMEBREW: "https://formulae.brew.sh/api/formula.json",  # noqa
     # for debian, sources contains the urls, packages is tied to the linux distribution
     PackageManager.DEBIAN: [
         "https://ftp.debian.org/debian/dists/stable/main/binary-amd64/Packages.gz",

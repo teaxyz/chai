@@ -2,10 +2,10 @@
 
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 from uuid import UUID, uuid4
 
-from permalint import canonicalize
+from permalint import normalize_url
 from requests import get
 from sqlalchemy import select
 
@@ -45,6 +45,7 @@ class Diff:
     new_dependencies: Optional[Set[LegacyDependency]]
     new_package_urls: Optional[Set[PackageURL]]
     removed_dependencies: Optional[Set[LegacyDependency]]
+    updated_package: Optional[Package]
     updated_package_urls: Optional[Set[PackageURL]]
 
 
@@ -93,94 +94,106 @@ class HomebrewDB(DB):
         """Wrapper for setting current urls"""
         self.current_urls: CurrentURLs = self.get_current_urls(urls)
 
-    def diff_pkg(self, pkg: Actual) -> List[Diff]:
+    def diff_pkg(self, pkg: Actual) -> Diff:
         """Wrapper for getting diffs"""
-        # new package?
-        new_package: Optional[Package] = None
-        if pkg.name not in self.cache.package_map:
-            new_package = Package(
-                id=uuid4(),
-                derived_id=f"homebrew/{pkg.name}",
-                name=pkg.name,
-                readme=pkg.description,
-                import_id=pkg.name,
+        self.logger.debug(f"Diffing {pkg.formula}")
+
+        diff_result = Diff(
+            new_package=None,
+            new_urls=set(),
+            new_dependencies=set(),
+            new_package_urls=set(),
+            removed_dependencies=set(),
+            updated_package=None,
+            updated_package_urls=set(),
+        )
+
+        # first, is this a new package or existing?
+        current = self.cache.package_map.get(pkg.formula)
+        pkg_id: UUID
+        if current:
+            # ok, it exists
+            self.logger.debug(f"Package {pkg.formula} already exists")
+            pkg_id = current.id
+
+            # check if any changes on the current obj
+            # for example, let's keep this
+            if current.readme != pkg.description:
+                current.readme = pkg.description
+                diff_result.updated_package = current
+                self.logger.debug(f"Description changed for {pkg.formula}")
+        else:
+            self.logger.debug(f"Package {pkg.formula} is new")
+            new = Package(
+                name=pkg.formula,
                 package_manager_id=self.config.pm_config.pm_id,
             )
-            pkg_id = new_package.id
-        else:
-            pkg_id = self.cache.package_map[pkg.name].id
+            diff_result.new_package = new
+            pkg_id = new.id
 
-        # so, we have a package ID.
-        # we can also use new_package to denote if it is new or not
-
-        # any new URLs?
-        new_urls: Dict[str, URL] = {}
-
-        # check if in the url map
-        # if not, add it, and then also grab the ID
-        # if it is, just grab the ID
-        if pkg.homepage not in self.current_urls.url_map:
-            new_urls[pkg.homepage] = URL(
-                id=uuid4(), url=pkg.homepage, url_type_id=config.url_types.homepage
-            )
-            homepage_url_id = new_urls[pkg.homepage].id
-        else:
-            homepage_url_id = self.current_urls.url_map[pkg.homepage].id
-
-        if pkg.source not in self.current_urls.url_map:
-            new_urls[pkg.source] = URL(
-                id=uuid4(), url=pkg.source, url_type_id=config.url_types.source
-            )
-            source_url_id = new_urls[pkg.source].id
-        else:
-            source_url_id = self.current_urls.url_map[pkg.source].id
-
-        if pkg.repository not in self.current_urls.url_map:
-            new_urls[pkg.repository] = URL(
-                id=uuid4(),
-                url=pkg.repository,
-                url_type_id=config.url_types.repository,
-            )
-            repository_url_id = new_urls[pkg.repository].id
-        else:
-            repository_url_id = self.current_urls.url_map[pkg.repository].id
-
-        actual_linked_urls: Set[UUID] = set(
-            [homepage_url_id, source_url_id, repository_url_id]
+        # second, let's work on the URLs
+        urls: Tuple[str, UUID] = (
+            (pkg.homepage, self.config.url_types.homepage),
+            (pkg.source, self.config.url_types.source),
+            (pkg.repository, self.config.url_types.repository),
         )
+        # above are the actual URLs we need
+        # let's see if they exist in the current URLs
 
-        # any new Package-URLs?
-        new_package_urls: Set[PackageURL] = set()
+        # ok, so these are the package url records for that package
+        package_urls: Set[PackageURL] = self.current_urls.package_urls.get(
+            pkg_id, set()
+        )
+        # and here are the actual URL IDs linked to that package
+        linked_urls: Set[UUID] = set(pu.url_id for pu in package_urls)
 
-        # if it's new, then everything will be new
-        if new_package:
-            for url in new_urls.values():
-                new_package_urls.add(
-                    PackageURL(
-                        id=uuid4(),
-                        package_id=new_package.id,
-                        url_id=url.id,
-                    )
+        for url, url_type in urls:
+            if not url:  # skip None
+                continue
+
+            url_map_key = (url, url_type)
+            existing_url = self.current_urls.url_map.get(url_map_key)
+            url_id: UUID
+
+            if existing_url:
+                url_id = existing_url.id
+                self.logger.debug(f"URL {url} for {url_type} already exists")
+            else:
+                # ok, so the url / url_type combo is new
+                # to avoid duplicates, wanna make sure I avoid creating this URL in
+                # *this diff_pkg run*
+                already_tracked = next(
+                    (
+                        u
+                        for u in diff_result.new_urls
+                        if u.url == url and u.url_type_id == url_type
+                    ),
+                    None,
                 )
-        else:
-            current_package_urls = self.current_urls.package_urls[pkg_id]
-            current_linked_urls: Set[UUID] = set(
-                [item.url_id for item in current_package_urls]
-            )
-            url_diff = actual_linked_urls - current_linked_urls
-            if url_diff:
-                for url in url_diff:
-                    new_package_urls.add(
-                        PackageURL(id=uuid4(), package_id=pkg_id, url_id=url)
-                    )
+                if already_tracked:
+                    url_id = already_tracked.id
+                    self.logger.debug(f"URL {url} for {url_type} already tracked")
+                else:
+                    self.logger.debug(f"URL {url} for {url_type} is entirely new")
+                    # ok, so this is a new URL that I've never seen before
+                    new_url = URL(url=url, url_type_id=url_type)
+                    diff_result.new_urls.add(new_url)
+                    url_id = new_url.id
 
-        # dependencies
-        current_deps: Optional[Set[LegacyDependency]] = self.cache.dependencies.get(
-            pkg.id, None
-        )
-        if current_deps:
-            current_deps = {(dep.package_id, dep.dependency_id) for dep in current_deps}
+            # now, check if the pkg_id is linked to url_id
+            if url_id not in linked_urls:
+                new_pkg_url = PackageURL(id=uuid4(), package_id=pkg_id, url_id=url_id)
+                diff_result.new_package_urls.add(new_pkg_url)
+                self.logger.debug(f"New package URL {url} for {url_type}")
+            else:
+                # the link exists. let's update it!
+                existing_pkg_url = next(
+                    pu for pu in package_urls if pu.url_id == url_id
+                )
+                diff_result.updated_package_urls.add(existing_pkg_url)
+                self.logger.debug(f"Updated package URL {url} for {url_type}")
 
+        # TODO; dependencies
         # any new dependencies?
         # this would depend on whether it's new (all would be new)
         # or not, only ones that changed would be new / remove
@@ -207,8 +220,8 @@ def homebrew(config: Config) -> List[Actual]:
 
     for formula in data:
         # create temp vars for stuff we transform...basically URL
-        homepage = canonicalize(formula["homepage"])
-        source = canonicalize(formula["urls"]["stable"])
+        homepage = normalize_url(formula["homepage"])
+        source = normalize_url(formula["urls"]["stable"]["url"])
 
         # collect github / gitlab repos
         if re.search(r"^github.com", source) or re.search(r"^gitlab.com", source):
@@ -251,9 +264,20 @@ def main(config: Config, db: HomebrewDB) -> None:
     logger.log("Retrieved Homebrew")
 
     # get the URLs & set that
-    brew_urls = set(brew.source for brew in brew) + set(brew.homepage for brew in brew)
-    current_urls = db.set_current_urls(brew_urls)
+    brew_urls = set(brew.source for brew in brew) | set(brew.homepage for brew in brew)
+    db.set_current_urls(brew_urls)
     logger.log("Set current URLs")
+
+    # get the diffs
+    diffs = []
+    for i, actual in enumerate(brew):
+        diffs.append(db.diff_pkg(actual))
+
+        if config.exec_config.test and i > 10:
+            break
+
+    # send to loader
+    # db.load(diffs)
 
 
 if __name__ == "__main__":
