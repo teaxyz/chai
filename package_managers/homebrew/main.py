@@ -1,8 +1,8 @@
 #! /usr/bin/env pkgx +python@3.11 uv run
 
-from datetime import datetime
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Dict, List, Optional, Set, Tuple, Union
 from uuid import UUID, uuid4
 
@@ -328,9 +328,20 @@ def homebrew(config: Config) -> List[Actual]:
     results: List[Actual] = []
 
     for formula in data:
+        # check if deprecated
+        # TODO; should we do anything about these?
+        deprecated = formula.get("deprecated", False)
+        if deprecated:
+            continue
+
         # create temp vars for stuff we transform...basically URL
         homepage = normalize_url(formula["homepage"])
-        source = normalize_url(formula["urls"]["stable"]["url"])
+
+        # try urls.head.url, because that generally points to GitHub / git
+        # use urls.stable.url as a backstop
+        source = normalize_url(
+            formula["urls"].get("head", formula["urls"]["stable"]).get("url", "")
+        )
 
         # collect github / gitlab repos
         if re.search(r"^github.com", source) or re.search(r"^gitlab.com", source):
