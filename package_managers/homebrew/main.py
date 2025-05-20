@@ -91,11 +91,12 @@ class HomebrewDB(DB):
 
     def set_current_urls(self, urls: CurrentURLs) -> None:
         """Wrapper for setting current urls"""
-        self.current_urls = self.get_current_urls(urls)
+        self.current_urls: CurrentURLs = self.get_current_urls(urls)
 
     def diff_pkg(self, pkg: Actual) -> List[Diff]:
         """Wrapper for getting diffs"""
         # new package?
+        new_package: Optional[Package] = None
         if pkg.name not in self.cache.package_map:
             new_package = Package(
                 id=uuid4(),
@@ -105,27 +106,73 @@ class HomebrewDB(DB):
                 import_id=pkg.name,
                 package_manager_id=self.config.pm_config.pm_id,
             )
+            pkg_id = new_package.id
+        else:
+            pkg_id = self.cache.package_map[pkg.name].id
+
+        # so, we have a package ID.
+        # we can also use new_package to denote if it is new or not
 
         # any new URLs?
-        new_urls: Set[URL] = set()
+        new_urls: Dict[str, URL] = {}
+
+        # check if in the url map
+        # if not, add it, and then also grab the ID
+        # if it is, just grab the ID
         if pkg.homepage not in self.current_urls.url_map:
-            new_urls.add(
-                URL(id=uuid4(), url=pkg.homepage, url_type_id=config.url_types.homepage)
+            new_urls[pkg.homepage] = URL(
+                id=uuid4(), url=pkg.homepage, url_type_id=config.url_types.homepage
             )
+            homepage_url_id = new_urls[pkg.homepage].id
+        else:
+            homepage_url_id = self.current_urls.url_map[pkg.homepage].id
 
         if pkg.source not in self.current_urls.url_map:
-            new_urls.add(
-                URL(id=uuid4(), url=pkg.source, url_type_id=config.url_types.source)
+            new_urls[pkg.source] = URL(
+                id=uuid4(), url=pkg.source, url_type_id=config.url_types.source
             )
+            source_url_id = new_urls[pkg.source].id
+        else:
+            source_url_id = self.current_urls.url_map[pkg.source].id
 
         if pkg.repository not in self.current_urls.url_map:
-            new_urls.add(
-                URL(
-                    id=uuid4(),
-                    url=pkg.repository,
-                    url_type_id=config.url_types.repository,
-                )
+            new_urls[pkg.repository] = URL(
+                id=uuid4(),
+                url=pkg.repository,
+                url_type_id=config.url_types.repository,
             )
+            repository_url_id = new_urls[pkg.repository].id
+        else:
+            repository_url_id = self.current_urls.url_map[pkg.repository].id
+
+        actual_linked_urls: Set[UUID] = set(
+            [homepage_url_id, source_url_id, repository_url_id]
+        )
+
+        # any new Package-URLs?
+        new_package_urls: Set[PackageURL] = set()
+
+        # if it's new, then everything will be new
+        if new_package:
+            for url in new_urls.values():
+                new_package_urls.add(
+                    PackageURL(
+                        id=uuid4(),
+                        package_id=new_package.id,
+                        url_id=url.id,
+                    )
+                )
+        else:
+            current_package_urls = self.current_urls.package_urls[pkg_id]
+            current_linked_urls: Set[UUID] = set(
+                [item.url_id for item in current_package_urls]
+            )
+            url_diff = actual_linked_urls - current_linked_urls
+            if url_diff:
+                for url in url_diff:
+                    new_package_urls.add(
+                        PackageURL(id=uuid4(), package_id=pkg_id, url_id=url)
+                    )
 
         # dependencies
         current_deps: Optional[Set[LegacyDependency]] = self.cache.dependencies.get(
