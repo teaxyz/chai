@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 
 from permalint import normalize_url
 from requests import get
-from sqlalchemy import select, update
+from sqlalchemy import Result, select, update
 
 from core.config import Config, PackageManager
 from core.db import DB, CurrentURLs
@@ -57,6 +57,7 @@ class Diff:
           - package: If new, returns a new package object. If existing, returns None
           - changes: a dictionary of changes
         """
+        self.logger.debug(f"Diffing package: {pkg.formula}")
         pkg_id: UUID
         if pkg.formula not in self.caches.package_cache:
             # new package
@@ -216,9 +217,10 @@ class Diff:
                 if not name:
                     continue
 
+                # means one dependency is build and test, for example
+                # see https://formulae.brew.sh/api/formula/abook.json for example
+                # gettext is both a build and runtime dependency
                 if name in processed:
-                    self.logger.warn(f"Duplicate dependency {name} for {pkg.formula}")
-                    self.logger.warn("Using first encountered type")
                     continue
 
                 dependency = self.caches.package_cache.get(name)
@@ -233,10 +235,10 @@ class Diff:
                 processed.add(name)
 
         # alright, let's do it
-        if hasattr(pkg, "build_dependencies"):
-            process(pkg.build_dependencies, self.config.dependency_types.build)
         if hasattr(pkg, "dependencies"):
             process(pkg.dependencies, self.config.dependency_types.runtime)
+        if hasattr(pkg, "build_dependencies"):
+            process(pkg.build_dependencies, self.config.dependency_types.build)
         if hasattr(pkg, "test_dependencies"):
             process(pkg.test_dependencies, self.config.dependency_types.test)
         if hasattr(pkg, "recommended_dependencies"):
@@ -263,6 +265,10 @@ class Diff:
         legacy_links: Set[LegacyDependency] = self.caches.dependency_cache.get(
             pkg_id, set()
         )
+        self.logger.debug(f"Legacy links for {pkg.formula}: {len(legacy_links)}")
+        for l in legacy_links:
+            self.logger.debug(f"  {l.dependency_id} {l.dependency_type_id}")
+
         # existing_legacy_map: look up to get to legacy_links
         existing_legacy_map: Dict[Tuple[UUID, UUID], LegacyDependency] = {}
 
@@ -318,7 +324,7 @@ class HomebrewDB(DB):
         )
 
         with self.session() as session:
-            result = session.execute(stmt)
+            result: Result[Tuple[Package, LegacyDependency]] = session.execute(stmt)
 
             for pkg, dep in result:
                 # add to the package map
@@ -537,7 +543,7 @@ def main(config: Config, db: HomebrewDB) -> None:
             logger.debug(f"Removed dependencies: {len(removed_dependencies)}")
             removed_deps.extend(removed_dependencies)
 
-        if config.exec_config.test and i > 10:
+        if config.exec_config.test and i > 100:
             break
 
     # cool, all done.
@@ -559,4 +565,14 @@ def main(config: Config, db: HomebrewDB) -> None:
 if __name__ == "__main__":
     config = Config(PackageManager.HOMEBREW)
     db = HomebrewDB("homebrew_db_main", config)
+    aicommit = db.package_map.get("aicommit")
+    if aicommit:
+        print(
+            [
+                (i.package_id, i.dependency_id, i.dependency_type_id)
+                for i in db.dependencies.get(aicommit.id)
+            ]
+        )
+    else:
+        raise Exception("aicommit not found")
     main(config, db)
