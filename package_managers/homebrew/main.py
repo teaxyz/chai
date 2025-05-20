@@ -33,14 +33,6 @@ class Actual:
     conflicts_with: Optional[List[str]]
 
 
-# TODO: we **could** move these to the core folder, but we're trying this out with
-# Homebrew first
-@dataclass
-class CurrentGraph:
-    package_map: Dict[str, Package]
-    dependencies: Dict[UUID, Set[LegacyDependency]]
-
-
 @dataclass
 class Cache:
     package_cache: Dict[str, Package]
@@ -194,13 +186,13 @@ class HomebrewDB(DB):
     def __init__(self, logger_name: str, config: Config):
         super().__init__(logger_name)
         self.config = config
-        self.cache: CurrentGraph = self.current_graph()
-        self.logger.log(f"{len(self.cache.package_map)} packages from Homebrew")
+        self.current_graph()
+        self.logger.log(f"{len(self.package_map)} packages from Homebrew")
 
-    def current_graph(self) -> CurrentGraph:
+    def current_graph(self) -> None:
         """Get the Homebrew packages and dependencies"""
-        package_map: Dict[str, Package] = {}  # name to package
-        dependencies: Dict[UUID, Set[LegacyDependency]] = {}
+        self.package_map: Dict[str, Package] = {}  # name to package
+        self.dependencies: Dict[UUID, Set[LegacyDependency]] = {}
 
         stmt = (
             select(Package, LegacyDependency)
@@ -218,16 +210,14 @@ class HomebrewDB(DB):
 
             for pkg, dep in result:
                 # add to the package map
-                if pkg.name not in package_map:
-                    package_map[pkg.name] = pkg
+                if pkg.name not in self.package_map:
+                    self.package_map[pkg.name] = pkg
 
                 # and add to the dependencies map as well
                 if dep:  # check because it's an outer join
-                    if pkg.id not in dependencies:
-                        dependencies[pkg.id] = set()
-                    dependencies[pkg.id].add(dep)
-
-        return CurrentGraph(package_map=package_map, dependencies=dependencies)
+                    if pkg.id not in self.dependencies:
+                        self.dependencies[pkg.id] = set()
+                    self.dependencies[pkg.id].add(dep)
 
     def set_current_urls(self, urls: CurrentURLs) -> None:
         """Wrapper for setting current urls"""
@@ -373,7 +363,7 @@ def main(config: Config, db: HomebrewDB) -> None:
     logger.log("Set current URLs")
 
     # get the caches here
-    package_cache: Dict[str, Package] = db.cache.package_map
+    package_cache: Dict[str, Package] = db.package_map
     url_cache: Dict[Tuple[str, UUID], UUID] = db.current_urls.url_map
     package_url_cache: Dict[UUID, Set[PackageURL]] = db.current_urls.package_urls
     # TODO: dependency cache
