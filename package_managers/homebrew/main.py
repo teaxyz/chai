@@ -1,13 +1,14 @@
 #! /usr/bin/env pkgx +python@3.11 uv run
 
+from datetime import datetime
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Union
 from uuid import UUID, uuid4
 
 from permalint import normalize_url
 from requests import get
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from core.config import Config, PackageManager
 from core.db import DB, CurrentURLs
@@ -32,6 +33,8 @@ class Actual:
     conflicts_with: Optional[List[str]]
 
 
+# TODO: we **could** move these to the core folder, but we're trying this out with
+# Homebrew first
 @dataclass
 class CurrentGraph:
     package_map: Dict[str, Package]
@@ -54,6 +57,7 @@ class HomebrewDB(DB):
         super().__init__(logger_name)
         self.config = config
         self.cache: CurrentGraph = self.current_graph()
+        self.logger.log(f"{len(self.cache.package_map)} packages from Homebrew")
 
     def current_graph(self) -> CurrentGraph:
         """Get the Homebrew packages and dependencies"""
@@ -85,19 +89,27 @@ class HomebrewDB(DB):
                         dependencies[pkg.id] = set()
                     dependencies[pkg.id].add(dep)
 
-        self.logger.debug(f"{len(package_map)} packages")
-        self.logger.debug(f"{len(dependencies)} dependencies")
-
         return CurrentGraph(package_map=package_map, dependencies=dependencies)
 
     def set_current_urls(self, urls: CurrentURLs) -> None:
         """Wrapper for setting current urls"""
         self.current_urls: CurrentURLs = self.get_current_urls(urls)
+        self.logger.debug(f"Found {len(self.current_urls.url_map)} Homebrew URLs")
 
     def diff_pkg(self, pkg: Actual) -> Diff:
-        """Wrapper for getting diffs"""
+        """
+        Constructs a diff object for a given package, so we can see what's change
+        and accordingly proceed with the ingestion.
+
+        Inputs:
+          - pkg: the formula from Homebrew's API
+
+        Outputs:
+          - diff_result: a Diff object
+        """
         self.logger.debug(f"Diffing {pkg.formula}")
 
+        # initialize the diff result
         diff_result = Diff(
             new_package=None,
             new_urls=set(),
@@ -108,7 +120,7 @@ class HomebrewDB(DB):
             updated_package_urls=set(),
         )
 
-        # first, is this a new package or existing?
+        # FIRST, is this a new package or existing?
         current = self.cache.package_map.get(pkg.formula)
         pkg_id: UUID
         if current:
@@ -121,36 +133,42 @@ class HomebrewDB(DB):
             if current.readme != pkg.description:
                 current.readme = pkg.description
                 diff_result.updated_package = current
+                diff_result.updated_package.updated_at = self.now
                 self.logger.debug(f"Description changed for {pkg.formula}")
         else:
             self.logger.debug(f"Package {pkg.formula} is new")
             new = Package(
+                id=uuid4(),
+                derived_id=f"homebrew/{pkg.formula}",
                 name=pkg.formula,
                 package_manager_id=self.config.pm_config.pm_id,
+                import_id=pkg.formula,
+                readme=pkg.description,
+                created_at=self.now,
+                updated_at=self.now,
             )
             diff_result.new_package = new
             pkg_id = new.id
 
-        # second, let's work on the URLs
+        # SECOND, let's work on the URLs
         urls: Tuple[str, UUID] = (
             (pkg.homepage, self.config.url_types.homepage),
             (pkg.source, self.config.url_types.source),
             (pkg.repository, self.config.url_types.repository),
         )
-        # above are the actual URLs we need
-        # let's see if they exist in the current URLs
+        # let's see if they either exist in CHAI and / or are linked to the package
 
-        # ok, so these are the package url records for that package
+        # grab the current package URL records, and corresponding url_id for this pkg
         package_urls: Set[PackageURL] = self.current_urls.package_urls.get(
             pkg_id, set()
         )
-        # and here are the actual URL IDs linked to that package
         linked_urls: Set[UUID] = set(pu.url_id for pu in package_urls)
 
         for url, url_type in urls:
             if not url:  # skip None
                 continue
 
+            # check if the URL exists in CHAI
             url_map_key = (url, url_type)
             existing_url = self.current_urls.url_map.get(url_map_key)
             url_id: UUID
@@ -158,40 +176,44 @@ class HomebrewDB(DB):
             if existing_url:
                 url_id = existing_url.id
                 self.logger.debug(f"URL {url} for {url_type} already exists")
+                # we're ending here because we don't need to modify anything for URLs
             else:
-                # ok, so the url / url_type combo is new
-                # to avoid duplicates, wanna make sure I avoid creating this URL in
-                # *this diff_pkg run*
-                already_tracked = next(
-                    (
-                        u
-                        for u in diff_result.new_urls
-                        if u.url == url and u.url_type_id == url_type
-                    ),
-                    None,
+                # so the url / url_type combo is new
+                # don't need to check if this combo was added to new_urls because the
+                # URL Types we're iterating through are always different
+                self.logger.debug(f"URL {url} for {url_type} is entirely new")
+                new_url = URL(
+                    id=uuid4(),
+                    url=url,
+                    url_type_id=url_type,
+                    created_at=self.now,
+                    updated_at=self.now,
                 )
-                if already_tracked:
-                    url_id = already_tracked.id
-                    self.logger.debug(f"URL {url} for {url_type} already tracked")
-                else:
-                    self.logger.debug(f"URL {url} for {url_type} is entirely new")
-                    # ok, so this is a new URL that I've never seen before
-                    new_url = URL(url=url, url_type_id=url_type)
-                    diff_result.new_urls.add(new_url)
-                    url_id = new_url.id
+                diff_result.new_urls.add(new_url)
+                url_id = new_url.id  # and here's our ID!
 
-            # now, check if the pkg_id is linked to url_id
+            # THIRD check if the pkg_id is linked to url_id in Package URLs
             if url_id not in linked_urls:
-                new_pkg_url = PackageURL(id=uuid4(), package_id=pkg_id, url_id=url_id)
+                new_pkg_url = PackageURL(
+                    id=uuid4(),
+                    package_id=pkg_id,
+                    url_id=url_id,
+                    created_at=self.now,
+                    updated_at=self.now,
+                )
                 diff_result.new_package_urls.add(new_pkg_url)
                 self.logger.debug(f"New package URL {url} for {url_type}")
             else:
-                # the link exists. let's update it!
+                # the link exists. let's say that we updated it now
+                # TODO: we should only do this for `latest` URLs
                 existing_pkg_url = next(
                     pu for pu in package_urls if pu.url_id == url_id
                 )
+                existing_pkg_url.updated_at = self.now
                 diff_result.updated_package_urls.add(existing_pkg_url)
                 self.logger.debug(f"Updated package URL {url} for {url_type}")
+
+        return diff_result
 
         # TODO; dependencies
         # any new dependencies?
@@ -201,6 +223,93 @@ class HomebrewDB(DB):
         # also, if it's a new package depending on a new package, it might
         # be a situation, since the new dependency package won't be in the cache
         # but, we can always have a thing that either gets a package id or makes one
+
+    def ingest(self, diffs: List[Diff]) -> None:
+        """
+        Ingest the diffs by first adding all new entities, then updating existing ones.
+
+        Inputs:
+          - diffs: a list of Diff objects
+
+        Outputs:
+          - None
+        """
+        # init the lists
+        new_packages: List[Package] = []
+        new_urls: List[URL] = []
+        new_package_urls: List[PackageURL] = []
+
+        # for updates, store as (id, readme)
+        updated_packages: List[Dict[str, Union[UUID, str, datetime]]] = []
+        updated_package_urls: List[Dict[str, Union[UUID, datetime]]] = []
+
+        for diff in diffs:
+            if diff.new_package:
+                new_packages.append(diff.new_package)
+
+            if diff.new_urls:
+                new_urls.extend(list(diff.new_urls))
+
+            if diff.new_package_urls:
+                new_package_urls.extend(list(diff.new_package_urls))
+
+            if diff.updated_package:
+                updated_packages.append(
+                    {
+                        "id": diff.updated_package.id,
+                        "readme": diff.updated_package.readme,
+                        "updated_at": diff.updated_package.updated_at,
+                    }
+                )
+
+            if diff.updated_package_urls:
+                updated_package_urls.extend(
+                    [
+                        {"id": pu.id, "updated_at": self.now}
+                        for pu in diff.updated_package_urls
+                    ]
+                )
+
+        self.logger.log("-" * 100)
+        self.logger.log("Going to load")
+        self.logger.log(f"New packages: {len(new_packages)}")
+        self.logger.log(f"New URLs: {len(new_urls)}")
+        self.logger.log(f"New package URLs: {len(new_package_urls)}")
+        self.logger.log(f"Updated packages: {len(updated_packages)}")
+        self.logger.log(f"Updated package URLs: {len(updated_package_urls)}")
+        self.logger.log("-" * 100)
+
+        with self.session() as session:
+            try:
+                # 1. Add all new objects with granular flushes
+                if new_packages:
+                    session.add_all(new_packages)
+                    session.flush()
+
+                if new_urls:
+                    session.add_all(new_urls)
+                    session.flush()
+
+                if new_package_urls:
+                    session.add_all(new_package_urls)
+                    session.flush()
+
+                # 2. Perform updates (these will now operate on a flushed state)
+                if updated_packages:
+                    session.execute(update(Package), updated_packages)
+
+                if updated_package_urls:
+                    session.execute(update(PackageURL), updated_package_urls)
+
+                # 3. Commit all changes
+                session.commit()
+                self.logger.log(
+                    f"Successfully ingested {len(diffs)} diffs using batched approach."
+                )
+            except Exception as e:
+                self.logger.error(f"Error during batched ingest: {e}")
+                session.rollback()
+                # raise # Commented out to allow processing to continue after an error
 
 
 def homebrew(config: Config) -> List[Actual]:
@@ -261,7 +370,6 @@ def main(config: Config, db: HomebrewDB) -> None:
     """
     logger = Logger("homebrew_main")
     brew = homebrew(config)
-    logger.log("Retrieved Homebrew")
 
     # get the URLs & set that
     brew_urls = set(brew.source for brew in brew) | set(brew.homepage for brew in brew)
@@ -277,7 +385,7 @@ def main(config: Config, db: HomebrewDB) -> None:
             break
 
     # send to loader
-    # db.load(diffs)
+    db.ingest(diffs)
 
 
 if __name__ == "__main__":
