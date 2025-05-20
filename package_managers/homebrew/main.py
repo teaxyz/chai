@@ -202,14 +202,6 @@ class Diff:
         new_deps: List[LegacyDependency] = []
         removed_deps: List[LegacyDependency] = []
 
-        # get the package ID for what we are working with
-        package = self.caches.package_cache.get(pkg.formula)
-        if not package:
-            self.logger.warn(f"Unsupported: New package {pkg.formula}")
-            # TODO: handle this case
-            return [], []
-        pkg_id: UUID = package.id
-
         # serialize the actual dependencies into a set of tuples
         actual: Set[Tuple[UUID, UUID]] = set()
         processed: Set[str] = set()
@@ -233,8 +225,8 @@ class Diff:
 
                 # guard: no dependency
                 if not dependency:
-                    # TODO: handle this case
-                    self.logger.warn(f"{name} is new too?!")
+                    # TODO: handle this case, though it fixes itself on the next run
+                    self.logger.warn(f"{name}, dep of {pkg.formula} is new")
                     continue
 
                 actual.add((dependency.id, dep_type))
@@ -253,6 +245,15 @@ class Diff:
             )
         if hasattr(pkg, "optional_dependencies"):
             process(pkg.optional_dependencies, self.config.dependency_types.optional)
+
+        # get the package ID for what we are working with
+        package = self.caches.package_cache.get(pkg.formula)
+        if not package:
+            # TODO: handle this case, though it fixes itself on the next run
+            self.logger.warn(f"New package {pkg.formula}, will grab its deps next time")
+            return [], []
+
+        pkg_id: UUID = package.id
 
         # now, we need to figure out what's new / removed
         # making three objects to help:
