@@ -91,7 +91,7 @@ class Diff:
                 created_at=self.now,
                 updated_at=self.now,
             )
-            pkg_id = p.id
+            pkg_id: UUID = p.id
             # no update payload, so that's empty
             return pkg_id, p, {}
         else:
@@ -172,9 +172,10 @@ class Diff:
 
         # what are the existing links?
         existing: Set[UUID] = {
-            pu.url_id for pu in self.caches.package_url_cache[pkg_id]
+            pu.url_id for pu in self.caches.package_url_cache.get(pkg_id, set())
         }
 
+        # for the correct URL type / URL for this package:
         for url_type, url_id in resolved_urls.items():
             if url_id not in existing:
                 # new link!
@@ -189,13 +190,15 @@ class Diff:
                 )
             else:
                 # TODO: this should only happen for `latest` URLs
+                # here is an existing link between this URL and this package
+                # let's find it
                 existing_pu = next(
                     pu
                     for pu in self.caches.package_url_cache[pkg_id]
                     if pu.url_id == url_id
                 )
                 existing_pu.updated_at = self.now
-                updates.append(existing_pu)
+                updates.append({"id": existing_pu.id, "updated_at": self.now})
 
         return new_links, updates
 
@@ -375,8 +378,9 @@ class HomebrewDB(DB):
 
     def ingest(
         self,
-        new: List[Union[Package, URL, PackageURL]],
-        updates: List[Dict],
+        new_packages: List[Package],
+        new_urls: List[URL],
+        new_package_urls: List[PackageURL],
         updated_packages: List[Dict[str, Union[UUID, str, datetime]]],
         updated_package_urls: List[Dict[str, Union[UUID, datetime]]],
     ) -> None:
@@ -409,22 +413,30 @@ class HomebrewDB(DB):
                     session.add_all(new_urls)
                     session.flush()
 
-                if new_package_urls:
-                    session.add_all(new_package_urls)
-                    session.flush()
+                try:
+                    if new_package_urls:
+                        session.add_all(new_package_urls)
+                        session.flush()
+                except Exception as e:
+                    self.logger.error(f"Error during new package URL ingestion: {e}")
+                    session.rollback()
 
                 # 2. Perform updates (these will now operate on a flushed state)
                 if updated_packages:
                     session.execute(update(Package), updated_packages)
 
-                if updated_package_urls:
-                    session.execute(update(PackageURL), updated_package_urls)
+                try:
+                    if updated_package_urls:
+                        session.execute(update(PackageURL), updated_package_urls)
+                except Exception as e:
+                    self.logger.error(
+                        f"Error during updated package URL ingestion: {e}"
+                    )
+                    session.rollback()
 
                 # 3. Commit all changes
                 session.commit()
-                self.logger.log(
-                    f"Successfully ingested {len(diffs)} diffs using batched approach."
-                )
+                self.logger.log("✅ Successfully ingested")
             except Exception as e:
                 self.logger.error(f"Error during batched ingest: {e}")
                 session.rollback()
@@ -536,15 +548,13 @@ def main(config: Config, db: HomebrewDB) -> None:
         resolved_urls = diff.diff_url(pkg, new_urls)
 
         # now, new package urls
-        new_package_urls, updated_package_urls = diff.diff_pkg_url(
-            pkg_id, resolved_urls
-        )
-        if new_package_urls:
-            logger.debug(f"New package URLs: {len(new_package_urls)}")
-            new_package_urls.extend(new_package_urls)
-        if updated_package_urls:
-            logger.debug(f"Updated package URLs: {len(updated_package_urls)}")
-            updated_package_urls.extend(updated_package_urls)
+        new_links, updated_links = diff.diff_pkg_url(pkg_id, resolved_urls)
+        if new_links:
+            logger.debug(f"New package URLs: {len(new_links)}")
+            new_package_urls.extend(new_links)
+        if updated_links:
+            logger.debug(f"Updated package URLs: {len(updated_links)}")
+            updated_package_urls.extend(updated_links)
 
         if config.exec_config.test and i > 10:
             break
@@ -554,7 +564,13 @@ def main(config: Config, db: HomebrewDB) -> None:
     final_new_urls = list(new_urls.values())
 
     # send to loader
-    # db.ingest(diffs)
+    db.ingest(
+        new_packages,
+        final_new_urls,
+        new_package_urls,
+        updated_packages,
+        updated_package_urls,
+    )
 
 
 if __name__ == "__main__":
