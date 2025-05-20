@@ -265,10 +265,6 @@ class Diff:
         legacy_links: Set[LegacyDependency] = self.caches.dependency_cache.get(
             pkg_id, set()
         )
-        self.logger.debug(f"Legacy links for {pkg.formula}: {len(legacy_links)}")
-        for l in legacy_links:
-            self.logger.debug(f"  {l.dependency_id} {l.dependency_type_id}")
-
         # existing_legacy_map: look up to get to legacy_links
         existing_legacy_map: Dict[Tuple[UUID, UUID], LegacyDependency] = {}
 
@@ -387,13 +383,15 @@ class HomebrewDB(DB):
                     session.add_all(new_package_urls)
                     session.flush()
 
-                if new_deps:
-                    session.add_all(new_deps)
-                    session.flush()
-
+                # updates are removes and adds
+                # we should remove first
                 if removed_deps:
                     for dep in removed_deps:  # helper doesn't exist?
                         session.delete(dep)
+                    session.flush()
+
+                if new_deps:
+                    session.add_all(new_deps)
                     session.flush()
 
                 # 2. Perform updates (these will now operate on a flushed state)
@@ -549,7 +547,6 @@ def main(config: Config, db: HomebrewDB) -> None:
     # cool, all done.
     # final cleanup is to replace the new_urls map with a list
     final_new_urls = list(new_urls.values())
-
     # send to loader
     db.ingest(
         new_packages,
@@ -565,14 +562,4 @@ def main(config: Config, db: HomebrewDB) -> None:
 if __name__ == "__main__":
     config = Config(PackageManager.HOMEBREW)
     db = HomebrewDB("homebrew_db_main", config)
-    aicommit = db.package_map.get("aicommit")
-    if aicommit:
-        print(
-            [
-                (i.package_id, i.dependency_id, i.dependency_type_id)
-                for i in db.dependencies.get(aicommit.id)
-            ]
-        )
-    else:
-        raise Exception("aicommit not found")
     main(config, db)
