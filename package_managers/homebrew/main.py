@@ -413,13 +413,9 @@ class HomebrewDB(DB):
                     session.add_all(new_urls)
                     session.flush()
 
-                try:
-                    if new_package_urls:
-                        session.add_all(new_package_urls)
-                        session.flush()
-                except Exception as e:
-                    self.logger.error(f"Error during new package URL ingestion: {e}")
-                    session.rollback()
+                if new_package_urls:
+                    session.add_all(new_package_urls)
+                    session.flush()
 
                 # 2. Perform updates (these will now operate on a flushed state)
                 if updated_packages:
