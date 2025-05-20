@@ -383,14 +383,26 @@ def main(config: Config, db: HomebrewDB) -> None:
     brew = homebrew(config)
 
     # get the URLs & set that
-    brew_urls = set(brew.source for brew in brew) | set(brew.homepage for brew in brew)
+    brew_urls = set(b.source for b in brew) | set(b.homepage for b in brew)
     db.set_current_urls(brew_urls)
     logger.log("Set current URLs")
 
     # get the diffs
-    diffs = []
+    diffs: List[Diff] = []
+    url_integrity: Set[Tuple[str, UUID]] = set()
     for i, actual in enumerate(brew):
-        diffs.append(db.diff_pkg(actual))
+        diff_result = db.diff_pkg(actual)
+
+        # some guards here to ensure we don't break our integrity checks on the db
+        for url in diff_result.new_urls:
+            if (url.url, url.url_type_id) in url_integrity:
+                logger.log(f"URL {url.url} for {url.url_type_id} already exists")
+                # remove it from this diff result
+                diff_result.new_urls.remove(url)
+                continue
+            url_integrity.add((url.url, url.url_type_id))
+
+        diffs.append(diff_result)
 
         if config.exec_config.test and i > 10:
             break
