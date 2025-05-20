@@ -6,7 +6,6 @@ from datetime import datetime
 from typing import Dict, List, Optional, Set, Tuple, Union
 from uuid import UUID, uuid4
 
-from deprecated import deprecated
 from permalint import normalize_url
 from requests import get
 from sqlalchemy import select, update
@@ -40,18 +39,6 @@ class Actual:
 class CurrentGraph:
     package_map: Dict[str, Package]
     dependencies: Dict[UUID, Set[LegacyDependency]]
-
-
-@deprecated(reason="Monolithic for per package diffs, use individual diffs instead")
-@dataclass
-class DiffLegacy:
-    new_package: Optional[Package]
-    new_urls: Optional[Set[URL]]
-    new_dependencies: Optional[Set[LegacyDependency]]
-    new_package_urls: Optional[Set[PackageURL]]
-    removed_dependencies: Optional[Set[LegacyDependency]]
-    updated_package: Optional[Package]
-    updated_package_urls: Optional[Set[PackageURL]]
 
 
 @dataclass
@@ -246,135 +233,6 @@ class HomebrewDB(DB):
         """Wrapper for setting current urls"""
         self.current_urls: CurrentURLs = self.get_current_urls(urls)
         self.logger.debug(f"Found {len(self.current_urls.url_map)} Homebrew URLs")
-
-    @deprecated(reason="Monolithic for per package diffs, use individual diffs instead")
-    def diff(self, pkg: Actual) -> DiffLegacy:
-        """
-        Constructs a diff object for a given package, so we can see what's change
-        and accordingly proceed with the ingestion.
-
-        Inputs:
-          - pkg: the formula from Homebrew's API
-
-        Outputs:
-          - diff_result: a Diff object
-        """
-        self.logger.debug(f"Diffing {pkg.formula}")
-
-        # initialize the diff result
-        diff_result = Diff(
-            new_package=None,
-            new_urls=set(),
-            new_dependencies=set(),
-            new_package_urls=set(),
-            removed_dependencies=set(),
-            updated_package=None,
-            updated_package_urls=set(),
-        )
-
-        # FIRST, is this a new package or existing?
-        current = self.cache.package_map.get(pkg.formula)
-        pkg_id: UUID
-        if current:
-            # ok, it exists
-            self.logger.debug(f"Package {pkg.formula} already exists")
-            pkg_id = current.id
-
-            # check if any changes on the current obj
-            # for example, let's keep this
-            if current.readme != pkg.description:
-                current.readme = pkg.description
-                diff_result.updated_package = current
-                diff_result.updated_package.updated_at = self.now
-                self.logger.debug(f"Description changed for {pkg.formula}")
-        else:
-            self.logger.debug(f"Package {pkg.formula} is new")
-            new = Package(
-                id=uuid4(),
-                derived_id=f"homebrew/{pkg.formula}",
-                name=pkg.formula,
-                package_manager_id=self.config.pm_config.pm_id,
-                import_id=pkg.formula,
-                readme=pkg.description,
-                created_at=self.now,
-                updated_at=self.now,
-            )
-            diff_result.new_package = new
-            pkg_id = new.id
-
-        # SECOND, let's work on the URLs
-        urls: Tuple[str, UUID] = (
-            (pkg.homepage, self.config.url_types.homepage),
-            (pkg.source, self.config.url_types.source),
-            (pkg.repository, self.config.url_types.repository),
-        )
-        # let's see if they either exist in CHAI and / or are linked to the package
-
-        # grab the current package URL records, and corresponding url_id for this pkg
-        package_urls: Set[PackageURL] = self.current_urls.package_urls.get(
-            pkg_id, set()
-        )
-        linked_urls: Set[UUID] = set(pu.url_id for pu in package_urls)
-
-        for url, url_type in urls:
-            if not url:  # skip None
-                continue
-
-            # check if the URL exists in CHAI
-            url_map_key = (url, url_type)
-            existing_url = self.current_urls.url_map.get(url_map_key)
-            url_id: UUID
-
-            if existing_url:
-                url_id = existing_url.id
-                self.logger.debug(f"URL {url} for {url_type} already exists")
-                # we're ending here because we don't need to modify anything for URLs
-            else:
-                # so the url / url_type combo is new
-                # don't need to check if this combo was added to new_urls because the
-                # URL Types we're iterating through are always different
-                self.logger.debug(f"URL {url} for {url_type} is entirely new")
-                new_url = URL(
-                    id=uuid4(),
-                    url=url,
-                    url_type_id=url_type,
-                    created_at=self.now,
-                    updated_at=self.now,
-                )
-                diff_result.new_urls.add(new_url)
-                url_id = new_url.id  # and here's our ID!
-
-            # THIRD check if the pkg_id is linked to url_id in Package URLs
-            if url_id not in linked_urls:
-                new_pkg_url = PackageURL(
-                    id=uuid4(),
-                    package_id=pkg_id,
-                    url_id=url_id,
-                    created_at=self.now,
-                    updated_at=self.now,
-                )
-                diff_result.new_package_urls.add(new_pkg_url)
-                self.logger.debug(f"New package URL {url} for {url_type}")
-            else:
-                # the link exists. let's say that we updated it now
-                # TODO: we should only do this for `latest` URLs
-                existing_pkg_url = next(
-                    pu for pu in package_urls if pu.url_id == url_id
-                )
-                existing_pkg_url.updated_at = self.now
-                diff_result.updated_package_urls.add(existing_pkg_url)
-                self.logger.debug(f"Updated package URL {url} for {url_type}")
-
-        return diff_result
-
-        # TODO; dependencies
-        # any new dependencies?
-        # this would depend on whether it's new (all would be new)
-        # or not, only ones that changed would be new / remove
-        # also, we need to look at all the dependency types
-        # also, if it's a new package depending on a new package, it might
-        # be a situation, since the new dependency package won't be in the cache
-        # but, we can always have a thing that either gets a package id or makes one
 
     def ingest(
         self,
