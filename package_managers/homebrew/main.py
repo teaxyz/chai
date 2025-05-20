@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Set, Tuple, Union
 from uuid import UUID, uuid4
 
+from deprecated import deprecated
 from permalint import normalize_url
 from requests import get
 from sqlalchemy import select, update
@@ -41,8 +42,9 @@ class CurrentGraph:
     dependencies: Dict[UUID, Set[LegacyDependency]]
 
 
+@deprecated(reason="Monolithic for per package diffs, use individual diffs instead")
 @dataclass
-class Diff:
+class DiffLegacy:
     new_package: Optional[Package]
     new_urls: Optional[Set[URL]]
     new_dependencies: Optional[Set[LegacyDependency]]
@@ -50,6 +52,73 @@ class Diff:
     removed_dependencies: Optional[Set[LegacyDependency]]
     updated_package: Optional[Package]
     updated_package_urls: Optional[Set[PackageURL]]
+
+
+@dataclass
+class Cache:
+    package_cache: Dict[str, Package]
+    url_cache: Dict[Tuple[str, UUID], UUID]
+    package_url_cache: Dict[UUID, Set[PackageURL]]
+    dependency_cache: Dict[UUID, Set[LegacyDependency]]
+
+
+class Diff:
+    def __init__(self, config: Config, caches: Cache):
+        self.config = config
+        self.now = datetime.now()
+        self.caches = caches
+        self.logger = Logger("homebrew_diff")
+
+    def diff_pkg(self, pkg: Actual) -> Tuple[UUID, Optional[Package], Optional[Dict]]:
+        """
+        Checks if the given pkg is in the package_cache.
+
+        Returns:
+          - pkg_id: the id of the package
+          - package: If new, returns a new package object. If existing, returns None
+          - changes: a dictionary of changes
+        """
+        pkg_id: UUID
+        if pkg.formula not in self.caches.package_cache:
+            # new package
+            p = Package(
+                id=uuid4(),
+                derived_id=f"homebrew/{pkg.formula}",
+                name=pkg.formula,
+                package_manager_id=self.config.pm_config.pm_id,
+                import_id=pkg.formula,
+                readme=pkg.description,
+                created_at=self.now,
+                updated_at=self.now,
+            )
+            pkg_id = p.id
+            # no update payload, so that's empty
+            return pkg_id, p, {}
+        else:
+            p = self.caches.package_cache[pkg.formula]
+            pkg_id = p.id
+            # check for changes
+            # right now, that's just the readme
+            if p.readme != pkg.description:
+                self.logger.debug(f"Description changed for {pkg.formula}")
+                return (
+                    pkg_id,
+                    None,
+                    {"id": p.id, "readme": pkg.description, "updated_at": self.now},
+                )
+            else:
+                # existing package, no change
+                return pkg_id, None, None
+
+    def diff_url(self, url: str, url_type: UUID) -> Dict[UUID, UUID]:
+        """Placeholder for diffing a single URL"""
+        pass
+
+    def diff_pkg_url(
+        self, pkg_id: UUID, url: str, url_type: UUID
+    ) -> Tuple[UUID, Optional[PackageURL]]:
+        """Placeholder for diffing a single package URL"""
+        pass
 
 
 class HomebrewDB(DB):
@@ -96,7 +165,8 @@ class HomebrewDB(DB):
         self.current_urls: CurrentURLs = self.get_current_urls(urls)
         self.logger.debug(f"Found {len(self.current_urls.url_map)} Homebrew URLs")
 
-    def diff_pkg(self, pkg: Actual) -> Diff:
+    @deprecated(reason="Monolithic for per package diffs, use individual diffs instead")
+    def diff(self, pkg: Actual) -> DiffLegacy:
         """
         Constructs a diff object for a given package, so we can see what's change
         and accordingly proceed with the ingestion.
@@ -387,28 +457,35 @@ def main(config: Config, db: HomebrewDB) -> None:
     db.set_current_urls(brew_urls)
     logger.log("Set current URLs")
 
-    # get the diffs
-    diffs: List[Diff] = []
-    url_integrity: Set[Tuple[str, UUID]] = set()
-    for i, actual in enumerate(brew):
-        diff_result = db.diff_pkg(actual)
+    # get the caches here
+    package_cache: Dict[str, Package] = db.cache.package_map
+    url_cache: Dict[Tuple[str, UUID], UUID] = db.current_urls.url_map
+    package_url_cache: Dict[UUID, Set[PackageURL]] = db.current_urls.package_urls
+    # TODO: dependency cache
+    cache = Cache(package_cache, url_cache, package_url_cache, {})
 
-        # some guards here to ensure we don't break our integrity checks on the db
-        for url in diff_result.new_urls:
-            if (url.url, url.url_type_id) in url_integrity:
-                logger.log(f"URL {url.url} for {url.url_type_id} already exists")
-                # remove it from this diff result
-                diff_result.new_urls.remove(url)
-                continue
-            url_integrity.add((url.url, url.url_type_id))
+    # total set of updates we'll make are:
+    new_packages: List[Package] = []
+    new_urls: List[URL] = []
+    new_package_urls: List[PackageURL] = []
+    updated_packages: List[Dict[str, Union[UUID, str, datetime]]] = []
+    updated_package_urls: List[Dict[str, Union[UUID, datetime]]] = []
 
-        diffs.append(diff_result)
+    diff = Diff(config, cache)
+    for i, pkg in enumerate(brew):
+        pkg_id, pkg_obj, update_payload = diff.diff_pkg(pkg)
+        if pkg_obj:
+            logger.debug(f"New package: {pkg_obj.name}")
+            new_packages.append(pkg_obj)
+        if update_payload:
+            logger.debug(f"Updated package: {update_payload['id']}")
+            updated_packages.append(update_payload)
 
         if config.exec_config.test and i > 10:
             break
 
     # send to loader
-    db.ingest(diffs)
+    # db.ingest(diffs)
 
 
 if __name__ == "__main__":
