@@ -181,6 +181,118 @@ class Diff:
 
         return new_links, updates
 
+    def diff_deps(
+        self, pkg: Actual
+    ) -> Tuple[List[LegacyDependency], List[LegacyDependency]]:
+        """
+        Takes in a Homebrew formula and figures out what dependencies have changed. Also
+        uses the LegacyDependency table, because that is package to package.
+
+        Warnings:
+          - Updates show up as removed + new
+          - This is Homebrew specific, since LegacyDependency mandates uniqueness
+            from package_id -> dependency_id, but Homebrew allows duplicate
+            dependencies across multiple dependency types. So we've got a process helper
+            that handles this.
+
+        Returns:
+          - new_deps: a list of new dependencies
+          - removed_deps: a list of removed dependencies
+        """
+        new_deps: List[LegacyDependency] = []
+        removed_deps: List[LegacyDependency] = []
+
+        # get the package ID for what we are working with
+        package = self.caches.package_cache.get(pkg.formula)
+        if not package:
+            self.logger.warn(f"Unsupported: New package {pkg.formula}")
+            # TODO: handle this case
+            return [], []
+        pkg_id: UUID = package.id
+
+        # serialize the actual dependencies into a set of tuples
+        actual: Set[Tuple[UUID, UUID]] = set()
+        processed: Set[str] = set()
+
+        def process(dep_names: Optional[List[str]], dep_type: UUID) -> None:
+            # guard: no dependencies
+            if not dep_names:
+                return
+
+            for name in dep_names:
+                # guard: no dependency name / empty name
+                if not name:
+                    continue
+
+                if name in processed:
+                    self.logger.warn(f"Duplicate dependency {name} for {pkg.formula}")
+                    self.logger.warn("Using first encountered type")
+                    continue
+
+                dependency = self.caches.package_cache.get(name)
+
+                # guard: no dependency
+                if not dependency:
+                    # TODO: handle this case
+                    self.logger.warn(f"{name} is new too?!")
+                    continue
+
+                actual.add((dependency.id, dep_type))
+                processed.add(name)
+
+        # alright, let's do it
+        if hasattr(pkg, "build_dependencies"):
+            process(pkg.build_dependencies, self.config.dependency_types.build)
+        if hasattr(pkg, "dependencies"):
+            process(pkg.dependencies, self.config.dependency_types.runtime)
+        if hasattr(pkg, "test_dependencies"):
+            process(pkg.test_dependencies, self.config.dependency_types.test)
+        if hasattr(pkg, "recommended_dependencies"):
+            process(
+                pkg.recommended_dependencies, self.config.dependency_types.recommended
+            )
+        if hasattr(pkg, "optional_dependencies"):
+            process(pkg.optional_dependencies, self.config.dependency_types.optional)
+
+        # now, we need to figure out what's new / removed
+        # making three objects to help:
+        # existing: whatever's in the DB in the same struct as actual
+        existing: Set[Tuple[UUID, UUID]] = set()
+        # legacy_links: set of LegacyDependency objects
+        legacy_links: Set[LegacyDependency] = self.caches.dependency_cache.get(
+            pkg_id, set()
+        )
+        # existing_legacy_map: look up to get to legacy_links
+        existing_legacy_map: Dict[Tuple[UUID, UUID], LegacyDependency] = {}
+
+        for legacy in legacy_links:
+            key = (legacy.dependency_id, legacy.dependency_type_id)
+            existing_legacy_map[key] = legacy
+            existing.add(key)
+
+        # alright, no let's calculate our diffs
+        added_tuples: Set[Tuple[UUID, UUID]] = actual - existing
+        removed_tuples: Set[Tuple[UUID, UUID]] = existing - actual
+
+        # now, we need to convert these to LegacyDependency objects
+        for dep_id, type_id in added_tuples:
+            new_dep = LegacyDependency(
+                id=uuid4(),
+                package_id=pkg_id,
+                dependency_id=dep_id,
+                dependency_type_id=type_id,
+                created_at=self.now,
+                updated_at=self.now,
+            )
+            new_deps.append(new_dep)
+
+        for dep_id, type_id in removed_tuples:
+            removed_dep = existing_legacy_map.get((dep_id, type_id))
+            if removed_dep:
+                removed_deps.append(removed_dep)
+
+        return new_deps, removed_deps
+
 
 class HomebrewDB(DB):
     def __init__(self, logger_name: str, config: Config):
@@ -219,7 +331,7 @@ class HomebrewDB(DB):
                         self.dependencies[pkg.id] = set()
                     self.dependencies[pkg.id].add(dep)
 
-    def set_current_urls(self, urls: CurrentURLs) -> None:
+    def set_current_urls(self, urls: Set[str]) -> None:
         """Wrapper for setting current urls"""
         self.current_urls: CurrentURLs = self.get_current_urls(urls)
         self.logger.debug(f"Found {len(self.current_urls.url_map)} Homebrew URLs")
@@ -388,7 +500,7 @@ def main(config: Config, db: HomebrewDB) -> None:
 
         # NOTE: resolved urls is a map of url types to final URL ID for this pkg
         # also, new_urls gets passed in AND mutated
-        # if only there was a programming language that had away to specify that info
+        # if only there was a programming language that had a &way to specify that info
         resolved_urls = diff.diff_url(pkg, new_urls)
 
         # now, new package urls
@@ -419,5 +531,102 @@ def main(config: Config, db: HomebrewDB) -> None:
 
 if __name__ == "__main__":
     config = Config(PackageManager.HOMEBREW)
-    db = HomebrewDB("homebrew_db_main", config)
-    main(config, db)
+    # db = HomebrewDB("homebrew_db_main", config)
+    # main(config, db)
+
+    test_pkg = Actual(
+        formula="foo",
+        description="",
+        license="",
+        homepage="foo.com",
+        source="github.com/bar/foo",
+        repository="github.com/bar/foo",
+        build_dependencies=["baz"],
+        dependencies=["bar"],
+        test_dependencies=[""],
+        recommended_dependencies=[""],
+        optional_dependencies=[""],
+        uses_from_macos=[""],
+        conflicts_with=[""],
+    )
+    test_new = Actual(
+        formula="new",
+        description="",
+        license="",
+        homepage="",
+        source="",
+        repository="",
+        build_dependencies=[],
+        dependencies=["foo"],
+        test_dependencies=[],
+        recommended_dependencies=[],
+        optional_dependencies=[],
+        uses_from_macos=[],
+        conflicts_with=[],
+    )
+
+    foo_id = uuid4()
+    bar_id = uuid4()
+    baz_id = uuid4()
+
+    diff = Diff(
+        config,
+        Cache(
+            package_cache={
+                "foo": Package(
+                    id=foo_id,
+                    name="foo",
+                    package_manager_id=1,
+                    import_id="foo",
+                    created_at=datetime.now(),
+                    updated_at=datetime.now(),
+                ),
+                "bar": Package(
+                    id=bar_id,
+                    name="bar",
+                    package_manager_id=1,
+                    import_id="bar",
+                    created_at=datetime.now(),
+                    updated_at=datetime.now(),
+                ),
+                "baz": Package(
+                    id=baz_id,
+                    name="baz",
+                    package_manager_id=1,
+                    import_id="baz",
+                    created_at=datetime.now(),
+                    updated_at=datetime.now(),
+                ),
+            },
+            url_cache={},
+            package_url_cache={},
+            dependency_cache={
+                foo_id: {
+                    LegacyDependency(
+                        id=uuid4(),
+                        package_id=foo_id,
+                        dependency_id=bar_id,
+                        dependency_type_id=config.dependency_types.runtime,
+                        created_at=datetime.now(),
+                        updated_at=datetime.now(),
+                    )
+                }
+            },
+        ),
+    )
+    new, removed = diff.diff_deps(test_pkg)
+    print("***** new ")
+    for n in new:
+        print(n.package_id, n.dependency_id, n.dependency_type_id)
+    print("***** removed")
+    for r in removed:
+        print(r.package_id, r.dependency_id, r.dependency_type_id)
+
+    print("-" * 100)
+    new, removed = diff.diff_deps(test_new)
+    print("***** new ")
+    for n in new:
+        print(n.package_id, n.dependency_id, n.dependency_type_id)
+    print("***** removed")
+    for r in removed:
+        print(r.package_id, r.dependency_id, r.dependency_type_id)
