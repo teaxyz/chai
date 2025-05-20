@@ -278,7 +278,6 @@ class Diff:
         # now, we need to convert these to LegacyDependency objects
         for dep_id, type_id in added_tuples:
             new_dep = LegacyDependency(
-                id=uuid4(),
                 package_id=pkg_id,
                 dependency_id=dep_id,
                 dependency_type_id=type_id,
@@ -344,6 +343,8 @@ class HomebrewDB(DB):
         new_package_urls: List[PackageURL],
         updated_packages: List[Dict[str, Union[UUID, str, datetime]]],
         updated_package_urls: List[Dict[str, Union[UUID, datetime]]],
+        new_deps: List[LegacyDependency],
+        removed_deps: List[LegacyDependency],
     ) -> None:
         """
         Ingest the diffs by first adding all new entities, then updating existing ones.
@@ -361,6 +362,8 @@ class HomebrewDB(DB):
         self.logger.log(f"New package URLs: {len(new_package_urls)}")
         self.logger.log(f"Updated packages: {len(updated_packages)}")
         self.logger.log(f"Updated package URLs: {len(updated_package_urls)}")
+        self.logger.log(f"New dependencies: {len(new_deps)}")
+        self.logger.log(f"Removed dependencies: {len(removed_deps)}")
         self.logger.log("-" * 100)
 
         with self.session() as session:
@@ -376,6 +379,15 @@ class HomebrewDB(DB):
 
                 if new_package_urls:
                     session.add_all(new_package_urls)
+                    session.flush()
+
+                if new_deps:
+                    session.add_all(new_deps)
+                    session.flush()
+
+                if removed_deps:
+                    for dep in removed_deps:  # helper doesn't exist?
+                        session.delete(dep)
                     session.flush()
 
                 # 2. Perform updates (these will now operate on a flushed state)
@@ -476,11 +488,12 @@ def main(config: Config, db: HomebrewDB) -> None:
     logger.log("Set current URLs")
 
     # get the caches here
-    package_cache: Dict[str, Package] = db.package_map
-    url_cache: Dict[Tuple[str, UUID], UUID] = db.current_urls.url_map
-    package_url_cache: Dict[UUID, Set[PackageURL]] = db.current_urls.package_urls
-    # TODO: dependency cache
-    cache = Cache(package_cache, url_cache, package_url_cache, {})
+    cache = Cache(
+        db.package_map,
+        db.current_urls.url_map,
+        db.current_urls.package_urls,
+        db.dependencies,
+    )
 
     # total set of updates we'll make are:
     new_packages: List[Package] = []
@@ -488,6 +501,8 @@ def main(config: Config, db: HomebrewDB) -> None:
     new_package_urls: List[PackageURL] = []
     updated_packages: List[Dict[str, Union[UUID, str, datetime]]] = []
     updated_package_urls: List[Dict[str, Union[UUID, datetime]]] = []
+    new_deps: List[LegacyDependency] = []
+    removed_deps: List[LegacyDependency] = []
 
     diff = Diff(config, cache)
     for i, pkg in enumerate(brew):
@@ -513,6 +528,15 @@ def main(config: Config, db: HomebrewDB) -> None:
             logger.debug(f"Updated package URLs: {len(updated_links)}")
             updated_package_urls.extend(updated_links)
 
+        # finally, dependencies
+        new_dependencies, removed_dependencies = diff.diff_deps(pkg)
+        if new_dependencies:
+            logger.debug(f"New dependencies: {len(new_dependencies)}")
+            new_deps.extend(new_dependencies)
+        if removed_dependencies:
+            logger.debug(f"Removed dependencies: {len(removed_dependencies)}")
+            removed_deps.extend(removed_dependencies)
+
         if config.exec_config.test and i > 10:
             break
 
@@ -527,107 +551,12 @@ def main(config: Config, db: HomebrewDB) -> None:
         new_package_urls,
         updated_packages,
         updated_package_urls,
+        new_deps,
+        removed_deps,
     )
 
 
 if __name__ == "__main__":
     config = Config(PackageManager.HOMEBREW)
-    # db = HomebrewDB("homebrew_db_main", config)
-    # main(config, db)
-
-    test_pkg = Actual(
-        formula="foo",
-        description="",
-        license="",
-        homepage="foo.com",
-        source="github.com/bar/foo",
-        repository="github.com/bar/foo",
-        build_dependencies=["baz"],
-        dependencies=["bar"],
-        test_dependencies=[""],
-        recommended_dependencies=[""],
-        optional_dependencies=[""],
-        uses_from_macos=[""],
-        conflicts_with=[""],
-    )
-    test_new = Actual(
-        formula="new",
-        description="",
-        license="",
-        homepage="",
-        source="",
-        repository="",
-        build_dependencies=[],
-        dependencies=["foo"],
-        test_dependencies=[],
-        recommended_dependencies=[],
-        optional_dependencies=[],
-        uses_from_macos=[],
-        conflicts_with=[],
-    )
-
-    foo_id = uuid4()
-    bar_id = uuid4()
-    baz_id = uuid4()
-
-    diff = Diff(
-        config,
-        Cache(
-            package_cache={
-                "foo": Package(
-                    id=foo_id,
-                    name="foo",
-                    package_manager_id=1,
-                    import_id="foo",
-                    created_at=datetime.now(),
-                    updated_at=datetime.now(),
-                ),
-                "bar": Package(
-                    id=bar_id,
-                    name="bar",
-                    package_manager_id=1,
-                    import_id="bar",
-                    created_at=datetime.now(),
-                    updated_at=datetime.now(),
-                ),
-                "baz": Package(
-                    id=baz_id,
-                    name="baz",
-                    package_manager_id=1,
-                    import_id="baz",
-                    created_at=datetime.now(),
-                    updated_at=datetime.now(),
-                ),
-            },
-            url_cache={},
-            package_url_cache={},
-            dependency_cache={
-                foo_id: {
-                    LegacyDependency(
-                        id=uuid4(),
-                        package_id=foo_id,
-                        dependency_id=bar_id,
-                        dependency_type_id=config.dependency_types.runtime,
-                        created_at=datetime.now(),
-                        updated_at=datetime.now(),
-                    )
-                }
-            },
-        ),
-    )
-    new, removed = diff.diff_deps(test_pkg)
-    print("***** new ")
-    for n in new:
-        print(n.package_id, n.dependency_id, n.dependency_type_id)
-    print("***** removed")
-    for r in removed:
-        print(r.package_id, r.dependency_id, r.dependency_type_id)
-
-    print("-" * 100)
-    new, removed = diff.diff_deps(test_new)
-    print("***** new ")
-    for n in new:
-        print(n.package_id, n.dependency_id, n.dependency_type_id)
-    print("***** removed")
-    for r in removed:
-        print(r.package_id, r.dependency_id, r.dependency_type_id)
+    db = HomebrewDB("homebrew_db_main", config)
+    main(config, db)
