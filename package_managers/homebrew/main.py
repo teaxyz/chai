@@ -154,10 +154,50 @@ class Diff:
         return resolved_urls
 
     def diff_pkg_url(
-        self, pkg_id: UUID, url: str, url_type: UUID
-    ) -> Tuple[UUID, Optional[PackageURL]]:
-        """Placeholder for diffing a single package URL"""
-        pass
+        self, pkg_id: UUID, resolved_urls: Dict[UUID, UUID]
+    ) -> Tuple[List[PackageURL], List[Dict]]:
+        """Takes in a package_id and resolved URLs from diff_url, and generates
+        new PackageURL objects as well as a list of changes to existing ones
+
+        Inputs:
+          - pkg_id: the id of the package
+          - resolved_urls: a map of url types to final URL ID for this pkg
+
+        Outputs:
+          - new_package_urls: a list of new PackageURL objects
+          - updated_package_urls: a list of changes to existing PackageURL objects
+        """
+        new_links: List[PackageURL] = []
+        updates: List[Dict] = []
+
+        # what are the existing links?
+        existing: Set[UUID] = {
+            pu.url_id for pu in self.caches.package_url_cache[pkg_id]
+        }
+
+        for url_type, url_id in resolved_urls.items():
+            if url_id not in existing:
+                # new link!
+                new_links.append(
+                    PackageURL(
+                        id=uuid4(),
+                        package_id=pkg_id,
+                        url_id=url_id,
+                        created_at=self.now,
+                        updated_at=self.now,
+                    )
+                )
+            else:
+                # TODO: this should only happen for `latest` URLs
+                existing_pu = next(
+                    pu
+                    for pu in self.caches.package_url_cache[pkg_id]
+                    if pu.url_id == url_id
+                )
+                existing_pu.updated_at = self.now
+                updates.append(existing_pu)
+
+        return new_links, updates
 
 
 class HomebrewDB(DB):
@@ -333,7 +373,13 @@ class HomebrewDB(DB):
         # be a situation, since the new dependency package won't be in the cache
         # but, we can always have a thing that either gets a package id or makes one
 
-    def ingest(self, diffs: List[Diff]) -> None:
+    def ingest(
+        self,
+        new: List[Union[Package, URL, PackageURL]],
+        updates: List[Dict],
+        updated_packages: List[Dict[str, Union[UUID, str, datetime]]],
+        updated_package_urls: List[Dict[str, Union[UUID, datetime]]],
+    ) -> None:
         """
         Ingest the diffs by first adding all new entities, then updating existing ones.
 
@@ -343,42 +389,6 @@ class HomebrewDB(DB):
         Outputs:
           - None
         """
-        # init the lists
-        new_packages: List[Package] = []
-        new_urls: List[URL] = []
-        new_package_urls: List[PackageURL] = []
-
-        # for updates, store as (id, readme)
-        updated_packages: List[Dict[str, Union[UUID, str, datetime]]] = []
-        updated_package_urls: List[Dict[str, Union[UUID, datetime]]] = []
-
-        for diff in diffs:
-            if diff.new_package:
-                new_packages.append(diff.new_package)
-
-            if diff.new_urls:
-                new_urls.extend(list(diff.new_urls))
-
-            if diff.new_package_urls:
-                new_package_urls.extend(list(diff.new_package_urls))
-
-            if diff.updated_package:
-                updated_packages.append(
-                    {
-                        "id": diff.updated_package.id,
-                        "readme": diff.updated_package.readme,
-                        "updated_at": diff.updated_package.updated_at,
-                    }
-                )
-
-            if diff.updated_package_urls:
-                updated_package_urls.extend(
-                    [
-                        {"id": pu.id, "updated_at": self.now}
-                        for pu in diff.updated_package_urls
-                    ]
-                )
-
         self.logger.log("-" * 100)
         self.logger.log("Going to load")
         self.logger.log(f"New packages: {len(new_packages)}")
@@ -520,12 +530,28 @@ def main(config: Config, db: HomebrewDB) -> None:
             logger.debug(f"Updated package: {update_payload['id']}")
             updated_packages.append(update_payload)
 
-        # note that resolved_urls now has the correct URL map for this particular
-        # package
+        # NOTE: resolved urls is a map of url types to final URL ID for this pkg
+        # also, new_urls gets passed in AND mutated
+        # if only there was a programming language that had away to specify that info
         resolved_urls = diff.diff_url(pkg, new_urls)
+
+        # now, new package urls
+        new_package_urls, updated_package_urls = diff.diff_pkg_url(
+            pkg_id, resolved_urls
+        )
+        if new_package_urls:
+            logger.debug(f"New package URLs: {len(new_package_urls)}")
+            new_package_urls.extend(new_package_urls)
+        if updated_package_urls:
+            logger.debug(f"Updated package URLs: {len(updated_package_urls)}")
+            updated_package_urls.extend(updated_package_urls)
 
         if config.exec_config.test and i > 10:
             break
+
+    # cool, all done.
+    # final cleanup is to replace the new_urls map with a list
+    final_new_urls = list(new_urls.values())
 
     # send to loader
     # db.ingest(diffs)
