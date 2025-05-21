@@ -14,6 +14,7 @@ from core.models import (
     URL,
     BaseModel,
     DependsOnType,
+    LegacyDependency,
     LoadHistory,
     Package,
     PackageManager,
@@ -21,6 +22,7 @@ from core.models import (
     Source,
     URLType,
 )
+from core.structs import CurrentGraph, CurrentURLs, URLKey
 
 CHAI_DATABASE_URL = os.getenv("CHAI_DATABASE_URL")
 DEFAULT_BATCH_SIZE = 10000
@@ -83,6 +85,68 @@ class DB:
                 for name in package_names
                 if name in name_to_url
             ]
+
+    def current_graph(self, package_manager_id: UUID) -> CurrentGraph:
+        """Get the Homebrew packages and dependencies"""
+        package_map: Dict[str, Package] = {}  # name to package
+        dependencies: Dict[UUID, Set[LegacyDependency]] = {}
+
+        stmt = (
+            select(Package, LegacyDependency)
+            .select_from(Package)
+            .join(
+                LegacyDependency,
+                onclause=Package.id == LegacyDependency.package_id,
+                isouter=True,
+            )
+            .where(Package.package_manager_id == package_manager_id)
+        )
+
+        with self.session() as session:
+            result: Result[Tuple[Package, LegacyDependency]] = session.execute(stmt)
+
+            for pkg, dep in result:
+                # add to the package map
+                if pkg.name not in self.package_map:
+                    package_map[pkg.name] = pkg
+
+                # and add to the dependencies map as well
+                if dep:  # check because it's an outer join
+                    if pkg.id not in dependencies:
+                        dependencies[pkg.id] = set()
+                    dependencies[pkg.id].add(dep)
+
+        return CurrentGraph(package_map, dependencies)
+
+    def current_urls(self, urls: Set[str]) -> CurrentURLs:
+        stmt = (
+            select(Package, PackageURL, URL)
+            .select_from(URL)
+            .join(PackageURL, PackageURL.url_id == URL.id, isouter=True)
+            .join(Package, Package.id == PackageURL.package_id, isouter=True)
+            .where(URL.url.in_(urls))
+        )
+
+        with self.session() as session:
+            result = session.execute(stmt)
+
+            url_map: Dict[URLKey, URL] = {}
+            package_urls: Dict[UUID, Set[PackageURL]] = {}
+
+            for pkg, pkg_url, url in result:
+                url_key = URLKey(url.url, url.url_type_id)
+                url_map[url_key] = url
+
+                # since it's a left join, we need to check if pkg is None
+                if pkg is not None:
+                    if pkg.id not in package_urls:
+                        package_urls[pkg.id] = set()
+                    package_urls[pkg.id].add(pkg_url)
+
+            self.logger.debug(f"Length of url_map: {len(url_map)}")
+            self.logger.debug(f"Length of package_urls: {len(package_urls)}")
+
+            return CurrentURLs(url_map=url_map, package_urls=package_urls)
 
     # TODO: we should add the Cache class to the core structure, and have the individual
     # transfomers inherit from it. For now, keeping this as `Any`
