@@ -36,6 +36,15 @@ def main(config: Config, db: CratesDB):
         logger.log("Writing files to disk")
         fetcher.write(files)
 
+    # we should first do some standardization
+    # go though crates, standardize URLs
+    # grab latest version for each crate
+    # grab that version's dependencies from dependency table
+    # default_versions table has the latest
+    # version_downloads
+    # versions has all the URLs, as well...let's just pick one
+    # anyway, all this has to happen in a Parser class
+
     logger.log("✅ Done")
 
 
