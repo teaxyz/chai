@@ -55,16 +55,14 @@ services:
     environment:
       - CHAI_DATABASE_URL=${CHAI_DATABASE_URL:-postgresql://postgres:s3cr3t@db:5432/chai}
       - NO_CACHE=${NO_CACHE:-false}
+      - DEBUG=${DEBUG:-false}
       - TEST=${TEST:-false}
       - FETCH=${FETCH:-true}
-      - FREQUENCY=${FREQUENCY:-24}
+      - FREQUENCY=${FREQUENCY:-1}
       - ENABLE_SCHEDULER=${ENABLE_SCHEDULER:-true}
-      - SOURCE=https://formulae.brew.sh/api/formula.json
-      - CODE_DIR=/package_managers/homebrew
-      - DATA_DIR=/data/homebrew
+      - PYTHONPATH=/
     volumes:
       - ./data/homebrew:/data/homebrew
-      - ./logs/homebrew:/var/log
     depends_on:
       db:
         condition: service_healthy
