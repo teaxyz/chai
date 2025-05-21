@@ -246,14 +246,16 @@ class DB:
     ) -> None:
         """Smart batching utility"""
         if data:
-            values = [obj.to_dict_v2() for obj in data]
+            values: List[Dict[str, str | UUID | datetime]] = [
+                obj.to_dict_v2() for obj in data
+            ]
             self.batch(session, stmt, values, DEFAULT_BATCH_SIZE)
 
     def batch(
         self,
         session: Session,
         stmt: Insert | Update,
-        values: Dict[str, str | UUID | datetime],
+        values: List[Dict[str, str | UUID | datetime]],
         batch_size: int = DEFAULT_BATCH_SIZE,
     ):
         """

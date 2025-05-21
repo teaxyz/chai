@@ -1,6 +1,9 @@
 # __init__.py
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Dict, Union
+
 from sqlalchemy import (
     Column,
     DateTime,
@@ -26,7 +29,8 @@ metadata = MetaData(naming_convention=naming_convention)
 
 
 class BaseModel:
-    def to_dict_v2(self):
+    # we have UUIDs, strings, datetimes, ints, and floats
+    def to_dict_v2(self) -> Dict[str, Union[str, UUID, datetime, int, float]]:
         """Return a dictionary of all non-None attributes."""
         return {
             attr: getattr(self, attr)
