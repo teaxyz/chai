@@ -108,10 +108,10 @@ class HomebrewDB(DB):
 
                 # 2. Perform updates (these will now operate on a flushed state)
                 if updated_packages:
-                    self.batch(session, update(Package), updated_packages)
+                    session.execute(update(Package), updated_packages)
 
                 if updated_package_urls:
-                    self.batch(session, update(PackageURL), updated_package_urls)
+                    session.execute(update(PackageURL), updated_package_urls)
 
                 # 3. Commit all changes
                 session.commit()

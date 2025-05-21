@@ -26,5 +26,3 @@ class Actual:
     test_dependencies: Optional[List[str]]
     recommended_dependencies: Optional[List[str]]
     optional_dependencies: Optional[List[str]]
-    uses_from_macos: Optional[List[str]]
-    conflicts_with: Optional[List[str]]

@@ -9,7 +9,7 @@ from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
 from package_managers.homebrew.db import HomebrewDB
 from package_managers.homebrew.diff import Diff
-from package_managers.homebrew.formulae import homebrew_api
+from package_managers.homebrew.formulae import HomebrewFetcher
 from package_managers.homebrew.structs import Cache
 
 
@@ -17,7 +17,8 @@ def main(config: Config, db: HomebrewDB) -> None:
     """A diff-based attempt at loading into CHAI"""
 
     logger = Logger("homebrew_main")
-    brew = homebrew_api(config)
+    fetcher = HomebrewFetcher(config)
+    brew = fetcher.fetch()
 
     # get the URLs & set that
     brew_urls = set(b.source for b in brew) | set(b.homepage for b in brew)
