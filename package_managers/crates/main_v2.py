@@ -45,6 +45,9 @@ def main(config: Config, db: CratesDB):
     # versions has all the URLs, as well...let's just pick one
     # anyway, all this has to happen in a Parser class
 
+    # then, we can build the cache using whatever we got from the DB
+    # and start the diff process
+
     logger.log("✅ Done")
 
 
