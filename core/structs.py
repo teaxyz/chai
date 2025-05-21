@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, Set, Tuple
+from typing import Dict, Set
 from uuid import UUID
 
 from core.models import URL, LegacyDependency, Package, PackageURL

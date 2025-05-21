@@ -107,7 +107,7 @@ class DB:
 
             for pkg, dep in result:
                 # add to the package map
-                if pkg.name not in self.package_map:
+                if pkg.name not in package_map:
                     package_map[pkg.name] = pkg
 
                 # and add to the dependencies map as well
@@ -115,6 +115,8 @@ class DB:
                     if pkg.id not in dependencies:
                         dependencies[pkg.id] = set()
                     dependencies[pkg.id].add(dep)
+
+        self.logger.debug(f"Loaded {len(package_map)} packages")
 
         return CurrentGraph(package_map, dependencies)
 
@@ -143,8 +145,8 @@ class DB:
                         package_urls[pkg.id] = set()
                     package_urls[pkg.id].add(pkg_url)
 
-            self.logger.debug(f"Length of url_map: {len(url_map)}")
-            self.logger.debug(f"Length of package_urls: {len(package_urls)}")
+            self.logger.debug(f"Loaded {len(url_map)} URLs")
+            self.logger.debug(f"Loaded {len(package_urls)} package URLs")
 
             return CurrentURLs(url_map=url_map, package_urls=package_urls)
 
