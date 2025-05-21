@@ -1,5 +1,5 @@
 import re
-from typing import List
+from typing import Any, Dict, List
 
 from permalint import normalize_url
 from requests import get
@@ -31,7 +31,7 @@ class HomebrewFetcher(Fetcher):
             raise e
 
         # make json
-        data = response.json()
+        data: List[Dict[str, Any]] = response.json()
 
         # prep results
         results: List[Actual] = []
@@ -79,7 +79,7 @@ class HomebrewFetcher(Fetcher):
         if self.no_cache:
             logger.log("No cache, so not saving to file")
         else:
-            data = Data(self.output, "homebrew_formulae.json", results)
-            self.write([data])
+            write = Data(".", "homebrew_formulae.json", data)
+            self.write([write])
 
         return results
