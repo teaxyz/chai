@@ -30,6 +30,8 @@ class Dependencies:
     dependencies: list[str] = field(default_factory=list[str])
 
 
+# TODO: reconcile with debian/transformer.py. Let's just upgrade to use one cache
+# class. Once we generate the UUIDs, then the cache's complexity will reduce a lot
 @dataclass
 class Cache:
     package: Package = field(default_factory=Package)

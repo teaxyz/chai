@@ -26,6 +26,8 @@ def test_scenarios():
     Collection of test scenarios for URL loading.
     Each scenario represents a different case we want to test.
     """
+    # TODO; add a scenario to check if there's no URLs in the db, but the transformer
+    # found some
     scenarios = {
         "new_urls": {
             "import_id": "github.com/certifi/python-certifi",

@@ -1,0 +1,8 @@
+[
+    {
+        'id': UUID('b3133e5e-6d6b-458b-bd83-bf31032875a4'), 
+        'package_id': UUID('7d6c7a3f-2c75-425f-8674-12efd7ce1ca4'), 
+        'url_id': UUID('736acfdc-c3c2-4b53-ae6e-102fdd4f375a'), 
+        'created_at': datetime.datetime(2025, 5, 19, 17, 5, 10, 255947), 
+        'updated_at': datetime.datetime(2025, 5, 19, 17, 5, 10, 255947)
+    }, {'id': UUID('a274bb96-a443-46a7-86ed-71c6ee87a89b'), 'package_id': UUID('506f5abc-f385-4cbf-9fb1-cd34053397f4'), 'url_id': UUID('d0346cef-80b0-456c-8de3-eb1b95481bac'), 'created_at': datetime.datetime(2025, 5, 19, 17, 5, 10, 255947), 'updated_at': datetime.datetime(2025, 5, 19, 17, 5, 10, 255947)}, {'id': UUID('17fe8d3a-78d8-42f5-a9f6-7b7abaa37d53'), 'package_id': UUID('a08b41eb-723d-4800-929d-cb6c6d3aeca4'), 'url_id': UUID('334ec74b-dda3-4bb0-99c5-f39abc132f5a'), 'created_at': datetime.datetime(2025, 5, 19, 17, 5, 10, 255947), 'updated_at': datetime.datetime(2025, 5, 19, 17, 5, 10, 255947)}, {'id': UUID('5dd47edf-bc5d-43b5-9acd-d099ae9a22f0'), 'package_id': UUID('624c333c-e303-4d9b-a66e-c499bb3b4806'), 'url_id': UUID('6d866142-e2a9-4da0-96de-b5bfadc7cee9'), 'created_at': datetime.datetime(2025, 5, 19, 17, 5, 10, 255947), 'updated_at': datetime.datetime(2025, 5, 19, 17, 5, 10, 255947)}, {'id': UUID('c924c668-c6cb-4b6b-bac2-b588377a695d'), 'package_id': UUID('2d182e7a-1960-4376-8272-5ce401c369fd'), 'url_id': UUID('359015d5-8807-4cdc-b1c8-a4771b0069fe'), 'created_at': datetime.datetime(2025, 5, 19, 17, 5, 10, 255947), 'updated_at': datetime.datetime(2025, 5, 19, 17, 5, 10, 255947)}]

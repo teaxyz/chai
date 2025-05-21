@@ -67,7 +67,7 @@ def run_pipeline(config: Config) -> None:
     loader.load_dependencies()
 
     logger.log("Loading URLs...")
-    loader.load_urls()
+    loader.load_urls(loader.data)
 
     logger.log("Pipeline completed")
 

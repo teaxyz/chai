@@ -13,7 +13,7 @@ from package_managers.debian.parser import DebianData, DebianParser
 class Cache:
     package: Package
     versions: list[Version] = field(default_factory=list)
-    url: list[URL] = field(default_factory=list)
+    urls: list[URL] = field(default_factory=list)
     dependency: list[DependsOn] = field(default_factory=list)
 
 
@@ -45,6 +45,7 @@ class DebianTransformer(Transformer):
         self.package_manager_id = config.pm_config.pm_id
         self.url_types = config.url_types
         self.depends_on_types = config.dependency_types
+        self.test = config.exec_config.test
         self.files = {"packages": "packages", "sources": "sources"}
         self.cache_map: Dict[str, Cache] = {}
 
@@ -62,7 +63,9 @@ class DebianTransformer(Transformer):
         source_file = self.files["sources"]
         sources_file = self.open(source_file)
 
-        source_parser = DebianParser(sources_file)
+        source_parser = DebianParser(sources_file, self.test)
+        if self.test:
+            self.logger.log("Testing mode enabled, only parsing 10 sources")
 
         for source in source_parser.parse():
             pkg_name = source.package
@@ -83,7 +86,7 @@ class DebianTransformer(Transformer):
             # sources file has the homepage url type
             homepage_url_type = self.url_types.homepage
             homepage_url = self.generate_chai_url(source, homepage_url_type)
-            item.url.append(homepage_url)
+            item.urls.append(homepage_url)
 
             # now, manage the versions
             version = self.generate_chai_version(source)
@@ -108,7 +111,8 @@ class DebianTransformer(Transformer):
         )
 
     def generate_chai_url(self, debian_data: DebianData, url_type_id: UUID) -> URL:
-        return URL(url=debian_data.homepage, url_type_id=url_type_id)
+        homepage = self.canonicalize(debian_data.homepage)
+        return URL(url=homepage, url_type_id=url_type_id)
 
     # For versions and packages however, I need a temporary structure to hold the data
     # until I can insert it into the database

@@ -1,10 +1,13 @@
 FROM python:3.11
-RUN apt-get update && \
-    apt-get install -y jq curl postgresql-client cron && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+
+# Copy everything from the root directory (build context)
 COPY . .
-WORKDIR /package_managers/homebrew
-RUN chmod +x /package_managers/homebrew/pipeline.sh \
-    /package_managers/homebrew/schedule.sh
-CMD ["/package_managers/homebrew/schedule.sh"]
+
+# Install core requirements
+WORKDIR /core
+RUN pip install --no-cache-dir -r requirements.txt
+
+WORKDIR /
+
+# Run the main application
+CMD ["python", "/package_managers/homebrew/main.py"]
