@@ -245,5 +245,14 @@ Env: CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@host.docker.internal:5435/ch
 docker compose up $SERVICE --build
 ```
 
+### check
+
+Inputs: FOLDER
+Environment: FOLDER=.
+
+```sh
+pkgx +python@3.13 ty check $FOLDER
+```
+
 [PostgreSQL]: https://www.postgresql.org
 [`pkgx`]: https://pkgx.sh
