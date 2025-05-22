@@ -1,55 +1,30 @@
 from datetime import datetime
-from typing import Dict, List, Set, Tuple, Union
+from typing import Dict, List, Set, Union
 from uuid import UUID
 
-from sqlalchemy import Result, select, update
+from sqlalchemy import update
 
 from core.config import Config
 from core.db import DB, CurrentURLs
 from core.models import URL, LegacyDependency, Package, PackageURL
+from core.structs import CurrentGraph
 
 
 class HomebrewDB(DB):
     def __init__(self, logger_name: str, config: Config):
         super().__init__(logger_name)
         self.config = config
-        self.current_graph()
-        self.logger.log(f"{len(self.package_map)} packages from Homebrew")
+        self.set_current_graph()
 
-    def current_graph(self) -> None:
+    def set_current_graph(self) -> None:
         """Get the Homebrew packages and dependencies"""
-        self.package_map: Dict[str, Package] = {}  # name to package
-        self.dependencies: Dict[UUID, Set[LegacyDependency]] = {}
-
-        stmt = (
-            select(Package, LegacyDependency)
-            .select_from(Package)
-            .join(
-                LegacyDependency,
-                onclause=Package.id == LegacyDependency.package_id,
-                isouter=True,
-            )
-            .where(Package.package_manager_id == self.config.pm_config.pm_id)
-        )
-
-        with self.session() as session:
-            result: Result[Tuple[Package, LegacyDependency]] = session.execute(stmt)
-
-            for pkg, dep in result:
-                # add to the package map
-                if pkg.name not in self.package_map:
-                    self.package_map[pkg.name] = pkg
-
-                # and add to the dependencies map as well
-                if dep:  # check because it's an outer join
-                    if pkg.id not in self.dependencies:
-                        self.dependencies[pkg.id] = set()
-                    self.dependencies[pkg.id].add(dep)
+        self.graph: CurrentGraph = self.current_graph(self.config.pm_config.pm_id)
+        self.logger.log(f"Loaded {len(self.graph.package_map)} Homebrew packages")
 
     def set_current_urls(self, urls: Set[str]) -> None:
         """Wrapper for setting current urls"""
-        self.current_urls: CurrentURLs = self.get_current_urls(urls)
-        self.logger.debug(f"Found {len(self.current_urls.url_map)} Homebrew URLs")
+        self.urls: CurrentURLs = self.current_urls(urls)
+        self.logger.log(f"Found {len(self.urls.url_map)} Homebrew URLs")
 
     def ingest(
         self,

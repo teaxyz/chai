@@ -27,10 +27,10 @@ def main(config: Config, db: HomebrewDB) -> None:
 
     # get the caches here
     cache = Cache(
-        db.package_map,
-        db.current_urls.url_map,
-        db.current_urls.package_urls,
-        db.dependencies,
+        db.graph.package_map,
+        db.urls.url_map,
+        db.urls.package_urls,
+        db.graph.dependencies,
     )
 
     # total set of updates we'll make are:

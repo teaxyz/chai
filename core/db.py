@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 from uuid import UUID, uuid4
 
-from sqlalchemy import Insert, Update, create_engine, select, update
+from sqlalchemy import Insert, Result, Update, create_engine, select, update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, sessionmaker
@@ -26,12 +26,6 @@ from core.structs import CurrentGraph, CurrentURLs, URLKey
 
 CHAI_DATABASE_URL = os.getenv("CHAI_DATABASE_URL")
 DEFAULT_BATCH_SIZE = 10000
-
-
-@dataclass
-class CurrentURLs:
-    url_map: Dict[Tuple[str, UUID], URL]  # URL and URL Type ID to URL object
-    package_urls: Dict[UUID, Set[PackageURL]]  # Package ID to PackageURL rows
 
 
 class DB:
@@ -345,35 +339,6 @@ class DB:
             )
             value_stmt = stmt.values(batch)
             session.execute(value_stmt)
-
-    def get_current_urls(self, urls: Set[str]) -> CurrentURLs:
-        stmt = (
-            select(Package, PackageURL, URL)
-            .select_from(URL)
-            .join(PackageURL, PackageURL.url_id == URL.id, isouter=True)
-            .join(Package, Package.id == PackageURL.package_id, isouter=True)
-            .where(URL.url.in_(urls))
-        )
-
-        with self.session() as session:
-            result = session.execute(stmt)
-
-            url_map: Dict[Tuple[str, UUID], URL] = {}
-            package_urls: Dict[UUID, Set[PackageURL]] = {}
-
-            for pkg, pkg_url, url in result:
-                url_map[(url.url, url.url_type_id)] = url
-
-                # since it's a left join, we need to check if pkg is None
-                if pkg is not None:
-                    if pkg.id not in package_urls:
-                        package_urls[pkg.id] = set()
-                    package_urls[pkg.id].add(pkg_url)
-
-            self.logger.debug(f"Length of url_map: {len(url_map)}")
-            self.logger.debug(f"Length of package_urls: {len(package_urls)}")
-
-            return CurrentURLs(url_map=url_map, package_urls=package_urls)
 
 
 class ConfigDB(DB):
