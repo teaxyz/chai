@@ -58,30 +58,30 @@ class TestSpecialCase(unittest.TestCase):
 
     def test_special_case_crates_io(self):
         transformer = PkgxTransformer(self.mock_config, None)
-        assert (
-            transformer.special_case("crates.io/pkgx")
-            == "https://crates.io/crates/pkgx"
+        self.assertEqual(
+            transformer.special_case("crates.io/pkgx"),
+            "https://crates.io/crates/pkgx"
         )
 
     def test_special_case_x_org(self):
         transformer = PkgxTransformer(self.mock_config, None)
-        assert transformer.special_case("x.org/ice") == "https://x.org"
-        assert transformer.special_case("x.org/xxf86vm") == "https://x.org"
+        self.assertEqual(transformer.special_case("x.org/ice"), "https://x.org")
+        self.assertEqual(transformer.special_case("x.org/xxf86vm"), "https://x.org")
 
     def test_special_case_pkgx_sh(self):
         transformer = PkgxTransformer(self.mock_config, None)
-        assert (
-            transformer.special_case("pkgx.sh/pkgx")
-            == "https://github.com/pkgxdev/pkgx"
+        self.assertEqual(
+            transformer.special_case("pkgx.sh/pkgx"),
+            "https://github.com/pkgxdev/pkgx"
         )
 
     def test_special_case_no_slashes(self):
         transformer = PkgxTransformer(self.mock_config, None)
-        assert transformer.special_case("abseil.io") == "abseil.io"
+        self.assertEqual(transformer.special_case("abseil.io"), "abseil.io")
 
     def test_special_case_double_slashes(self):
         transformer = PkgxTransformer(self.mock_config, None)
-        assert (
-            transformer.special_case("github.com/awslabs/llrt")
-            == "github.com/awslabs/llrt"
+        self.assertEqual(
+            transformer.special_case("github.com/awslabs/llrt"),
+            "github.com/awslabs/llrt"
         )
