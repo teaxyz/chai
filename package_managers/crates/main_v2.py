@@ -13,11 +13,13 @@ class CratesDB(DB):
         self.config = config
         self.get_current_graph()
 
-    def get_current_graph(self) -> CurrentGraph:
-        return self.current_graph(self.config.pm_config.pm_id)
+    def set_current_graph(self) -> None:
+        self.graph: CurrentGraph = self.current_graph(self.config.pm_config.pm_id)
+        self.logger.log(f"Loaded {len(self.graph.package_map)} Crates packages")
 
-    def get_current_urls(self, urls: Set[str]) -> CurrentURLs:
-        return self.current_urls(urls)
+    def set_current_urls(self, urls: Set[str]) -> None:
+        self.urls: CurrentURLs = self.current_urls(urls)
+        self.logger.log(f"Found {len(self.urls.url_map)} Crates URLs")
 
 
 def main(config: Config, db: CratesDB):
