@@ -9,9 +9,9 @@ from package_managers.pkgx.transformer import PkgxTransformer
 class TestSpecialCase(unittest.TestCase):
     def setUp(self):
         """Set up common test data and mocks"""
+        # transformer needs a config, which accesses these values
 
         self.crates_package_manager_id = uuid4()
-
         # mock config values
         self.mock_dep_types = MagicMock(spec=DependencyTypes)
         self.mock_url_types = MagicMock(spec=URLTypes)
