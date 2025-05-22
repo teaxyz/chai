@@ -11,7 +11,7 @@ class TestSpecialCase(unittest.TestCase):
         """Set up common test data and mocks"""
 
         self.crates_package_manager_id = uuid4()
-        # mock config values
+        # Mock specific configuration objects (DependencyTypes, URLTypes, PMConf, etc.)
         self.mock_dep_types = MagicMock(spec=DependencyTypes)
         self.mock_url_types = MagicMock(spec=URLTypes)
         self.mock_pm_config = MagicMock(spec=PMConf)
