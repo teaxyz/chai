@@ -101,7 +101,8 @@ class PkgxTransformer(Transformer):
 
         # if it's a crates.io package, then we can use the crates URL
         elif re.search(r"^crates.io", import_id):
-            homepage = f"https://crates.io/crates/{import_id}"
+            name = import_id.split("/")[1]
+            homepage = f"https://crates.io/crates/{name}"
 
         # if it's part of the x.org family
         elif re.search(r"^x.org", import_id):
