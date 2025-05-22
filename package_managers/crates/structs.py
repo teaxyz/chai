@@ -1,6 +1,6 @@
 from dataclasses import dataclass
+from datetime import datetime
 from enum import IntEnum
-from typing import List
 
 
 class DependencyType(IntEnum):
@@ -22,7 +22,30 @@ class CrateDependency:
 
 
 @dataclass
+class CrateUser:
+    # from users.csv or teams.csv
+    id: int
+    name: str
+    github_username: str
+
+
+class CrateLatestVersion:
+    # latest version ID is from default_versions.csv
+    # data is from versions.csv
+    id: int
+    checksum: str
+    downloads: int
+    license: str
+    num: str
+    published_by: CrateUser
+    published_at: datetime  # version.created_at
+    # dependencies.csv
+    dependencies: list[CrateDependency]
+
+
+@dataclass
 class Crate:
+    # from crates.csv
     id: int
     name: str
     readme: str
@@ -30,6 +53,5 @@ class Crate:
     homepage: str
     repository: str
     documentation: str
-    latest_version_downloads: int
-    latest_version_dependencies: List[CrateDependency]
-    # TODO; add the user fields here
+    # from versions.csv
+    latest_version: CrateLatestVersion
