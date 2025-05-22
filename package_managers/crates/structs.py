@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import IntEnum
 
@@ -29,6 +29,7 @@ class CrateUser:
     github_username: str
 
 
+@dataclass
 class CrateLatestVersion:
     # latest version ID is from default_versions.csv
     # data is from versions.csv
@@ -49,9 +50,9 @@ class Crate:
     id: int
     name: str
     readme: str
-    latest_version: str
     homepage: str
     repository: str
     documentation: str
+    source: str | None = None
     # from versions.csv
-    latest_version: CrateLatestVersion
+    latest_version: CrateLatestVersion | None = None

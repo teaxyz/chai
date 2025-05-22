@@ -1,25 +1,96 @@
-from typing import Set
+import csv
+from collections.abc import Generator
 
 from core.config import Config, PackageManager
 from core.db import DB
 from core.fetcher import TarballFetcher
 from core.logger import Logger
 from core.structs import CurrentGraph, CurrentURLs
+from core.transformer import Transformer
+from core.utils import is_github_url
+from package_managers.crates.structs import Crate, CrateLatestVersion
 
 
 class CratesDB(DB):
     def __init__(self, config: Config):
         super().__init__("crates_db")
         self.config = config
-        self.get_current_graph()
+        # self.set_current_graph()
 
     def set_current_graph(self) -> None:
         self.graph: CurrentGraph = self.current_graph(self.config.pm_config.pm_id)
         self.logger.log(f"Loaded {len(self.graph.package_map)} Crates packages")
 
-    def set_current_urls(self, urls: Set[str]) -> None:
+    def set_current_urls(self, urls: set[str]) -> None:
         self.urls: CurrentURLs = self.current_urls(urls)
         self.logger.log(f"Found {len(self.urls.url_map)} Crates URLs")
+
+
+class CratesTransformer(Transformer):
+    def __init__(self, config: Config):
+        super().__init__("crates")
+        self.config = config
+
+        # maps that we'd need
+        self.crates: dict[int, Crate] = {}
+        self.latest_versions: dict[int, CrateLatestVersion] = {}
+        self.crate_to_latest_version: dict[int, int] = {}
+
+        # files we need to parse
+        self.files: dict[str, str] = {
+            "crates": "crates.csv",
+            "latest_versions": "default_versions.csv",
+            "versions": "versions.csv",
+            "dependencies": "dependencies.csv",
+            "users": "users.csv",
+            "teams": "teams.csv",
+        }
+
+    def _open_csv(self, file_name: str) -> Generator[dict[str, str], None, None]:
+        try:
+            file_path = self.finder(self.files[file_name])
+            with open(file_path, newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    yield row
+        except KeyError:
+            raise KeyError(f"Missing {file_name} from self.files: {self.files}")
+        except FileNotFoundError:
+            self.logger.error(f"Missing {file_path} from data directory")
+            raise FileNotFoundError(f"Missing {file_path} file")
+        except Exception as e:
+            self.logger.error(f"Error reading {file_path}: {e}")
+            raise e
+
+    def parse(self, file_name: str) -> Crate:
+        # first go through crates.csv to
+        # here, we can get the import_id, name, homepage, documentation, repository
+        # and also source, from repo if it is like GitHub
+        for i, row in enumerate(self._open_csv("crates")):
+            crate_id = row["id"]
+            name = row["name"]
+            readme = row["readme"]
+
+            # URLs:
+            homepage = self.canonicalize(row["homepage"])
+            documentation = self.canonicalize(row["documentation"])
+            repository = self.canonicalize(row["repository"])
+
+            source: str | None = None
+            if is_github_url(repository):
+                source = repository
+
+            crate = Crate(
+                crate_id, name, readme, homepage, repository, documentation, source
+            )
+            self.crates[crate_id] = crate
+
+            self.logger.log(f"Parsed crate {crate}")
+
+            if self.config.exec_config.test and i > 10:
+                break
+
+        self.logger.log(f"Parsed {len(self.crates)} crates")
 
 
 def main(config: Config, db: CratesDB):
@@ -32,11 +103,15 @@ def main(config: Config, db: CratesDB):
         config.exec_config.no_cache,
         config.exec_config.test,
     )
-    files = fetcher.fetch()
+    if config.exec_config.fetch:
+        files = fetcher.fetch()
 
     if not config.exec_config.no_cache:
         logger.log("Writing files to disk")
         fetcher.write(files)
+
+    transformer = CratesTransformer(config)
+    transformer.parse("crates")
 
     # we should first do some standardization
     # go though crates, standardize URLs
