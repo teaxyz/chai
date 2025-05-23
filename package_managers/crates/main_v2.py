@@ -8,7 +8,13 @@ from core.logger import Logger
 from core.structs import CurrentGraph, CurrentURLs
 from core.transformer import Transformer
 from core.utils import is_github_url
-from package_managers.crates.structs import Crate, CrateLatestVersion, CrateUser
+from package_managers.crates.structs import (
+    Crate,
+    CrateDependency,
+    CrateLatestVersion,
+    CrateUser,
+    DependencyType,
+)
 
 
 class CratesDB(DB):
@@ -91,7 +97,8 @@ class CratesTransformer(Transformer):
         # get the map of crate_id to latest_version_id, and the set of all
         # latest_version_ids
         latest_versions: set[int]
-        latest_versions = self._load_latest_versions()
+        latest_versions_map: dict[int, int]
+        latest_versions, latest_versions_map = self._load_latest_versions()
         self.logger.log(f"Loaded {len(latest_versions)} latest versions")
 
         # now, iterate through the versions.csv, and populate LatestVersion objects,
@@ -133,12 +140,7 @@ class CratesTransformer(Transformer):
             # map this LatestVersion to the crate in self.crates
             self.crates[crate_id].latest_version = latest_version
 
-        latest_version_count: int = 0
-        for crate in self.crates.values():
-            if crate.latest_version is not None:
-                latest_version_count += 1
-
-        self.logger.log(f"Found {latest_version_count} latest versions")
+        self.logger.log("Parsed the latest versions for each crate")
 
         # finally, parse through the dependencies.csv
         # again, we only care about the dependencies for the latest version
@@ -148,31 +150,62 @@ class CratesTransformer(Transformer):
             if start_id not in latest_versions:
                 continue
 
-            end_id = int(row["crate_id"])
+            end_crate_id = int(row["crate_id"])
 
             # we can do the same check for end_id as we do above, for a test mode
-            if end_id not in self.crates.keys() and self.config.exec_config.test:
+            if end_crate_id not in self.crates.keys() and self.config.exec_config.test:
                 continue
-            elif end_id not in self.crates.keys():
+            elif end_crate_id not in self.crates.keys():
                 # again, this should never happen
-                raise ValueError(f"Crate {end_id} not found in self.crates")
+                raise ValueError(f"Crate {end_crate_id} not found in self.crates")
 
-            # TODO
-            # make the crate dependency object, but we'd probably need
-            # the latest_version_map, to map the start_id to a crate_id
-            # LegacyDependency object is from package to package
-            # so we need the crate_id fpor that version_id
+            start_crate_id = latest_versions_map[start_id]
 
-            dependency_kind = row["kind"]
-            dependency_optional = row["optional"]
+            if (
+                start_crate_id not in self.crates.keys()
+                and self.config.exec_config.test
+            ):
+                continue
+            elif start_crate_id not in self.crates.keys():
+                # again, this should never happen
+                raise ValueError(f"Crate {start_crate_id} not found in self.crates")
 
-    def _load_latest_versions(self) -> set[int]:
+            kind = int(row["kind"])
+            dependency_type = DependencyType(kind)
+            semver = row["req"]
+
+            dependency = CrateDependency(
+                start_crate_id, end_crate_id, dependency_type, semver
+            )
+
+            # add this dependency to the crate
+            self.crates[start_crate_id].latest_version.dependencies.append(dependency)
+
+        self.logger.log("Parsed the dependencies for each crate")
+
+        # count latest versions and dependencies
+        latest_version_count: int = 0
+        dependency_count: int = 0
+        for crate in self.crates.values():
+            if crate.latest_version is not None:
+                latest_version_count += 1
+
+                if crate.latest_version.dependencies:
+                    dependency_count += 1
+
+        self.logger.log(f"Found {latest_version_count} latest versions")
+        self.logger.log(f"Found {dependency_count} dependencies")
+
+    def _load_latest_versions(self) -> tuple[set[int], dict[int, int]]:
         latest_versions: set[int] = set()
+        latest_versions_map: dict[int, int] = {}
         for row in self._open_csv("latest_versions"):
+            crate_id = int(row["crate_id"])
             version_id = int(row["version_id"])
             latest_versions.add(version_id)
+            latest_versions_map[version_id] = crate_id
 
-        return latest_versions
+        return latest_versions, latest_versions_map
 
     def _load_users(self) -> dict[int, CrateUser]:
         users: dict[int, CrateUser] = {}

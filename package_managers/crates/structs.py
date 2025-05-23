@@ -41,7 +41,7 @@ class CrateLatestVersion:
     published_by: CrateUser
     published_at: datetime  # version.created_at
     # dependencies.csv
-    dependencies: list[CrateDependency] | None = None
+    dependencies: list[CrateDependency] = field(default_factory=list)
 
 
 @dataclass
