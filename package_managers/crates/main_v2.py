@@ -33,8 +33,6 @@ class CratesTransformer(Transformer):
 
         # maps that we'd need
         self.crates: dict[int, Crate] = {}
-        self.latest_versions: dict[int, CrateLatestVersion] = {}
-        self.crate_to_latest_version: dict[int, int] = {}
 
         # files we need to parse
         self.files: dict[str, str] = {
@@ -67,7 +65,7 @@ class CratesTransformer(Transformer):
         # here, we can get the import_id, name, homepage, documentation, repository
         # and also source, from repo if it is like GitHub
         for i, row in enumerate(self._open_csv("crates")):
-            crate_id = row["id"]
+            crate_id = int(row["id"])
             name = row["name"]
             readme = row["readme"]
 
@@ -85,31 +83,42 @@ class CratesTransformer(Transformer):
             )
             self.crates[crate_id] = crate
 
-            self.logger.debug(f"Parsed crate {crate.name}")
-
-            if self.config.exec_config.test and i > 10:
+            if self.config.exec_config.test and i > 100:
                 break
 
         self.logger.log(f"Parsed {len(self.crates)} crates")
 
-        # next, go through latest_versions.csv to find the latest version for each crate
-        latest_versions_map, latest_versions = self._load_latest_versions_map()
+        # get the map of crate_id to latest_version_id, and the set of all
+        # latest_version_ids
+        latest_versions: set[int]
+        latest_versions = self._load_latest_versions()
+        self.logger.log(f"Loaded {len(latest_versions)} latest versions")
 
         # now, iterate through the versions.csv, and populate LatestVersion objects,
         # only if the version_id is in the latest_versions set
         for row in self._open_csv("versions"):
             version_id = int(row["id"])
+            crate_id = int(row["crate_id"])
+
+            # ignore if this version is not the latest
             if version_id not in latest_versions:
                 continue
 
-            crate_id = int(row["crate_id"])
-            version_id = int(row["id"])
+            if crate_id not in self.crates.keys() and self.config.exec_config.test:
+                # in test mode, we only look at a few crates
+                continue
+            elif crate_id not in self.crates.keys():
+                # should never run into this
+                raise ValueError(f"Crate {crate_id} not found in self.crates")
+
             checksum = row["checksum"]
             downloads = int(row["downloads"])
             license = row["license"]
             num = row["num"]
-            published_by = row["published_by"]
             published_at = row["created_at"]
+
+            # make a CrateUser object from the published_by
+            published_by_user = CrateUser(id=row["published_by"])
 
             latest_version = CrateLatestVersion(
                 version_id,
@@ -117,19 +126,27 @@ class CratesTransformer(Transformer):
                 downloads,
                 license,
                 num,
-                published_by,
+                published_by_user,
                 published_at,
             )
-            self.latest_versions[version_id] = latest_version
 
-    def _load_latest_versions_map(self) -> tuple[dict[int, int], set[int]]:
-        latest_versions_map: dict[int, int] = {}
+            # map this LatestVersion to the crate in self.crates
+            self.crates[crate_id].latest_version = latest_version
+
+        latest_version_count: int = 0
+        for crate in self.crates.values():
+            if crate.latest_version is not None:
+                latest_version_count += 1
+
+        self.logger.log(f"Found {latest_version_count} latest versions")
+
+    def _load_latest_versions(self) -> set[int]:
         latest_versions: set[int] = set()
         for row in self._open_csv("latest_versions"):
-            crate_id = int(row["id"])
             version_id = int(row["version_id"])
-            latest_versions_map[crate_id] = version_id
             latest_versions.add(version_id)
+
+        return latest_versions
 
     def _load_users(self) -> dict[int, CrateUser]:
         users: dict[int, CrateUser] = {}

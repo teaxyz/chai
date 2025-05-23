@@ -25,8 +25,8 @@ class CrateDependency:
 class CrateUser:
     # from users.csv or teams.csv
     id: int
-    name: str
-    github_username: str
+    name: str | None = None
+    github_username: str | None = None
 
 
 @dataclass
@@ -41,7 +41,7 @@ class CrateLatestVersion:
     published_by: CrateUser
     published_at: datetime  # version.created_at
     # dependencies.csv
-    dependencies: list[CrateDependency]
+    dependencies: list[CrateDependency] | None = None
 
 
 @dataclass
