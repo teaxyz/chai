@@ -8,7 +8,7 @@ from core.logger import Logger
 from core.structs import CurrentGraph, CurrentURLs
 from core.transformer import Transformer
 from core.utils import is_github_url
-from package_managers.crates.structs import Crate, CrateLatestVersion
+from package_managers.crates.structs import Crate, CrateLatestVersion, CrateUser
 
 
 class CratesDB(DB):
@@ -85,12 +85,63 @@ class CratesTransformer(Transformer):
             )
             self.crates[crate_id] = crate
 
-            self.logger.log(f"Parsed crate {crate}")
+            self.logger.debug(f"Parsed crate {crate.name}")
 
             if self.config.exec_config.test and i > 10:
                 break
 
         self.logger.log(f"Parsed {len(self.crates)} crates")
+
+        # next, go through latest_versions.csv to find the latest version for each crate
+        latest_versions_map, latest_versions = self._load_latest_versions_map()
+
+        # now, iterate through the versions.csv, and populate LatestVersion objects,
+        # only if the version_id is in the latest_versions set
+        for row in self._open_csv("versions"):
+            version_id = int(row["id"])
+            if version_id not in latest_versions:
+                continue
+
+            crate_id = int(row["crate_id"])
+            version_id = int(row["id"])
+            checksum = row["checksum"]
+            downloads = int(row["downloads"])
+            license = row["license"]
+            num = row["num"]
+            published_by = row["published_by"]
+            published_at = row["created_at"]
+
+            latest_version = CrateLatestVersion(
+                version_id,
+                checksum,
+                downloads,
+                license,
+                num,
+                published_by,
+                published_at,
+            )
+            self.latest_versions[version_id] = latest_version
+
+    def _load_latest_versions_map(self) -> tuple[dict[int, int], set[int]]:
+        latest_versions_map: dict[int, int] = {}
+        latest_versions: set[int] = set()
+        for row in self._open_csv("latest_versions"):
+            crate_id = int(row["id"])
+            version_id = int(row["version_id"])
+            latest_versions_map[crate_id] = version_id
+            latest_versions.add(version_id)
+
+    def _load_users(self) -> dict[int, CrateUser]:
+        users: dict[int, CrateUser] = {}
+        for row in self._open_csv("users"):
+            user_id = int(row["id"])
+            name = row["name"]
+            github_username = row["github_username"]
+            user = CrateUser(user_id, name, github_username)
+            users[user_id] = user
+
+        self.logger.log(f"Loaded {len(users)} users")
+        return users
 
 
 def main(config: Config, db: CratesDB):
