@@ -140,6 +140,32 @@ class CratesTransformer(Transformer):
 
         self.logger.log(f"Found {latest_version_count} latest versions")
 
+        # finally, parse through the dependencies.csv
+        # again, we only care about the dependencies for the latest version
+        for row in self._open_csv("dependencies"):
+            start_id = int(row["version_id"])
+
+            if start_id not in latest_versions:
+                continue
+
+            end_id = int(row["crate_id"])
+
+            # we can do the same check for end_id as we do above, for a test mode
+            if end_id not in self.crates.keys() and self.config.exec_config.test:
+                continue
+            elif end_id not in self.crates.keys():
+                # again, this should never happen
+                raise ValueError(f"Crate {end_id} not found in self.crates")
+
+            # TODO
+            # make the crate dependency object, but we'd probably need
+            # the latest_version_map, to map the start_id to a crate_id
+            # LegacyDependency object is from package to package
+            # so we need the crate_id fpor that version_id
+
+            dependency_kind = row["kind"]
+            dependency_optional = row["optional"]
+
     def _load_latest_versions(self) -> set[int]:
         latest_versions: set[int] = set()
         for row in self._open_csv("latest_versions"):
