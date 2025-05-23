@@ -84,7 +84,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       - name: Build
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v6
         with:
           context: ./api
           push: false # Set push to false to prevent pushing the image
