@@ -1,10 +1,13 @@
 import csv
 from collections.abc import Generator
+from datetime import datetime
+from uuid import UUID, uuid4
 
 from core.config import Config, PackageManager
 from core.db import DB
 from core.fetcher import TarballFetcher
 from core.logger import Logger
+from core.models import Package
 from core.structs import Cache, CurrentGraph, CurrentURLs
 from core.transformer import Transformer
 from core.utils import is_github_url
@@ -36,9 +39,6 @@ class CratesTransformer(Transformer):
     def __init__(self, config: Config):
         super().__init__("crates")
         self.config = config
-
-        # maps that we'd
-        crates_urls: set(str) = set()
         self.crates: dict[int, Crate] = {}
 
         # files we need to parse
@@ -67,7 +67,7 @@ class CratesTransformer(Transformer):
             self.logger.error(f"Error reading {file_path}: {e}")
             raise e
 
-    def parse(self, file_name: str) -> Crate:
+    def parse(self) -> None:
         # first go through crates.csv to
         # here, we can get the import_id, name, homepage, documentation, repository
         # and also source, from repo if it is like GitHub
@@ -94,6 +94,10 @@ class CratesTransformer(Transformer):
                 break
 
         self.logger.log(f"Parsed {len(self.crates)} crates")
+
+        if self.config.exec_config.test:
+            self.logger.log("Test mode, only parsing 100 crates")
+            return
 
         # get the map of crate_id to latest_version_id, and the set of all
         # latest_version_ids
@@ -227,6 +231,55 @@ class CratesTransformer(Transformer):
         return users
 
 
+class Diff:
+    def __init__(self, config: Config, caches: Cache):
+        self.config = config
+        self.now = datetime.now()
+        self.caches = caches
+        self.logger = Logger("crates_diff")
+
+    def diff_pkg(self, pkg: Crate) -> tuple[UUID, Package | None, dict | None]:
+        """
+        Checks if the given pkg is in the package_cache.
+
+        Returns:
+            pkg_id: UUID, the id of the package in the db
+            pkg_obj: Package | None, the package object if it's new
+            update_payload: dict | None, the update payload if it's an update
+        """
+        pkg_id: UUID
+        crate_id: str = str(pkg.id)  # import_ids are strings in the db
+        if crate_id not in self.caches.package_map:
+            # new package
+            p = Package(
+                id=uuid4(),
+                derived_id=f"crates/{pkg.name}",
+                name=pkg.name,
+                package_manager_id=self.config.pm_config.pm_id,
+                import_id=crate_id,
+                readme=pkg.readme,
+                created_at=self.now,
+                updated_at=self.now,
+            )
+            pkg_id = p.id
+            return pkg_id, p, {}
+        else:
+            # it's in the cache, so check for changes
+            p = self.caches.package_map[crate_id]
+            pkg_id = p.id
+            # check for changes
+            # right now, that's just the readme
+            if p.readme != pkg.readme:
+                return (
+                    pkg_id,
+                    None,
+                    {"id": p.id, "readme": pkg.readme, "updated_at": self.now},
+                )
+            else:
+                # existing package, no change
+                return pkg_id, None, None
+
+
 def main(config: Config, db: CratesDB):
     logger = Logger("crates_main_v2")
     logger.log("Starting crates_main_v2")
@@ -245,7 +298,7 @@ def main(config: Config, db: CratesDB):
         fetcher.write(files)
 
     transformer = CratesTransformer(config)
-    transformer.parse("crates")
+    transformer.parse()
 
     # the transformer object has transformer.crates, which has all the info
     # now, let's build the db's cache
@@ -256,6 +309,7 @@ def main(config: Config, db: CratesDB):
         crates_urls.add(crate.repository)
         crates_urls.add(crate.documentation)
 
+    logger.log(f"Found {len(crates_urls)} crates URLs")
     db.set_current_urls(crates_urls)
 
     # now, we can build the cache
@@ -266,7 +320,21 @@ def main(config: Config, db: CratesDB):
         db.graph.dependencies,
     )
 
+    new_packages: list[Package] = []
+    updated_packages: list[dict] = []
+
     # and now, we can do that diff
+    diff = Diff(config, cache)
+    for i, pkg in enumerate(transformer.crates.values()):
+        pkg_id, pkg_obj, update_payload = diff.diff_pkg(pkg)
+        if pkg_obj:
+            logger.debug(f"🆕: {pkg_obj.name}")
+            new_packages.append(pkg_obj)
+        if update_payload:
+            logger.debug(f"🔄: {pkg.name}")
+            updated_packages.append(update_payload)
+
+        # ok, no we should figure out the URLs
 
     logger.log("✅ Done")
 
@@ -274,4 +342,5 @@ def main(config: Config, db: CratesDB):
 if __name__ == "__main__":
     config = Config(PackageManager.CRATES)
     db = CratesDB(config)
+    db.set_current_graph()
     main(config, db)

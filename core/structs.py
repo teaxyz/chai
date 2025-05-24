@@ -10,7 +10,7 @@ class CurrentGraph:
     dependencies: dict[UUID, set[LegacyDependency]]
 
 
-@dataclass
+@dataclass(frozen=True)
 class URLKey:
     url: str
     url_type_id: UUID
@@ -24,7 +24,7 @@ class CurrentURLs:
 
 @dataclass
 class Cache:
-    package_map: dict[int, Package]
+    package_map: dict[str, Package]
     url_map: dict[URLKey, URL]
     package_urls: dict[UUID, set[PackageURL]]
     dependencies: dict[UUID, set[LegacyDependency]]
