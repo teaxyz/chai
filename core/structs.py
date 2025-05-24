@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Dict, Set
 from uuid import UUID
 
 from core.models import URL, LegacyDependency, Package, PackageURL
@@ -7,8 +6,8 @@ from core.models import URL, LegacyDependency, Package, PackageURL
 
 @dataclass
 class CurrentGraph:
-    package_map: Dict[str, Package]
-    dependencies: Dict[UUID, Set[LegacyDependency]]
+    package_map: dict[str, Package]
+    dependencies: dict[UUID, set[LegacyDependency]]
 
 
 @dataclass
@@ -19,5 +18,13 @@ class URLKey:
 
 @dataclass
 class CurrentURLs:
-    url_map: Dict[URLKey, URL]  # URL and URL Type ID to URL object
-    package_urls: Dict[UUID, Set[PackageURL]]  # Package ID to PackageURL rows
+    url_map: dict[URLKey, URL]  # URL and URL Type ID to URL object
+    package_urls: dict[UUID, set[PackageURL]]  # Package ID to PackageURL rows
+
+
+@dataclass
+class Cache:
+    package_map: dict[int, Package]
+    url_map: dict[URLKey, URL]
+    package_urls: dict[UUID, set[PackageURL]]
+    dependencies: dict[UUID, set[LegacyDependency]]

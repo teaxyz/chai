@@ -5,7 +5,7 @@ from core.config import Config, PackageManager
 from core.db import DB
 from core.fetcher import TarballFetcher
 from core.logger import Logger
-from core.structs import CurrentGraph, CurrentURLs
+from core.structs import Cache, CurrentGraph, CurrentURLs
 from core.transformer import Transformer
 from core.utils import is_github_url
 from package_managers.crates.structs import (
@@ -37,7 +37,8 @@ class CratesTransformer(Transformer):
         super().__init__("crates")
         self.config = config
 
-        # maps that we'd need
+        # maps that we'd
+        crates_urls: set(str) = set()
         self.crates: dict[int, Crate] = {}
 
         # files we need to parse
@@ -246,17 +247,26 @@ def main(config: Config, db: CratesDB):
     transformer = CratesTransformer(config)
     transformer.parse("crates")
 
-    # we should first do some standardization
-    # go though crates, standardize URLs
-    # grab latest version for each crate
-    # grab that version's dependencies from dependency table
-    # default_versions table has the latest
-    # version_downloads
-    # versions has all the URLs, as well...let's just pick one
-    # anyway, all this has to happen in a Parser class
+    # the transformer object has transformer.crates, which has all the info
+    # now, let's build the db's cache
+    # we need URLs
+    crates_urls: set[str] = set()
+    for crate in transformer.crates.values():
+        crates_urls.add(crate.homepage)
+        crates_urls.add(crate.repository)
+        crates_urls.add(crate.documentation)
 
-    # then, we can build the cache using whatever we got from the DB
-    # and start the diff process
+    db.set_current_urls(crates_urls)
+
+    # now, we can build the cache
+    cache = Cache(
+        db.graph.package_map,
+        db.urls.url_map,
+        db.urls.package_urls,
+        db.graph.dependencies,
+    )
+
+    # and now, we can do that diff
 
     logger.log("✅ Done")
 

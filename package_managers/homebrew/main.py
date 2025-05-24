@@ -7,10 +7,10 @@ from uuid import UUID
 from core.config import Config, PackageManager
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
+from core.structs import Cache
 from package_managers.homebrew.db import HomebrewDB
 from package_managers.homebrew.diff import Diff
 from package_managers.homebrew.formulae import HomebrewFetcher
-from package_managers.homebrew.structs import Cache
 
 
 def main(config: Config, db: HomebrewDB) -> None:
