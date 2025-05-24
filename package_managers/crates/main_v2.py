@@ -7,8 +7,8 @@ from core.config import Config, PackageManager
 from core.db import DB
 from core.fetcher import TarballFetcher
 from core.logger import Logger
-from core.models import Package
-from core.structs import Cache, CurrentGraph, CurrentURLs
+from core.models import URL, Package, PackageURL
+from core.structs import Cache, CurrentGraph, CurrentURLs, URLKey
 from core.transformer import Transformer
 from core.utils import is_github_url
 from package_managers.crates.structs import (
@@ -28,11 +28,9 @@ class CratesDB(DB):
 
     def set_current_graph(self) -> None:
         self.graph: CurrentGraph = self.current_graph(self.config.pm_config.pm_id)
-        self.logger.log(f"Loaded {len(self.graph.package_map)} Crates packages")
 
     def set_current_urls(self, urls: set[str]) -> None:
         self.urls: CurrentURLs = self.current_urls(urls)
-        self.logger.log(f"Found {len(self.urls.url_map)} Crates URLs")
 
 
 class CratesTransformer(Transformer):
@@ -279,6 +277,114 @@ class Diff:
                 # existing package, no change
                 return pkg_id, None, None
 
+    def diff_url(self, pkg: Crate, new_urls: dict[URLKey, URL]) -> dict[UUID, UUID]:
+        """
+        Identifies the correct URL for this crate, based on fetched data and all URL
+        strings collected so far
+
+        Returns:
+            resolved_urls: dict[UUID, UUID], the resolved URL for this crate
+        """
+        resolved_urls: dict[UUID, UUID] = {}
+
+        urls: list[URLKey] = [
+            URLKey(pkg.homepage, self.config.url_types.homepage),
+            URLKey(pkg.repository, self.config.url_types.repository),
+            URLKey(pkg.documentation, self.config.url_types.documentation),
+            URLKey(pkg.source, self.config.url_types.source),
+        ]
+
+        for url_key in urls:
+            url = url_key.url
+            url_type = url_key.url_type_id
+
+            # guard: no URL
+            if not url:
+                continue
+
+            resolved_url_id: UUID
+
+            if url_key in new_urls:
+                # if we've already tried to create this URL, use that one
+                resolved_url_id = new_urls[url_key].id
+            elif url_key in self.caches.url_map:
+                # if it's already in the database, let's use that one
+                resolved_url_id = self.caches.url_map[url_key].id
+            else:
+                # most will be here because it's the first run of clean data
+                # BIG HONKING TODO: uncomment this later
+                # self.logger.debug(f"URL {url} for {url_type} is entirely new")
+                # end of BIG HONKING TODO
+                new_url = URL(
+                    id=uuid4(),
+                    url=url,
+                    url_type_id=url_type,
+                    created_at=self.now,
+                    updated_at=self.now,
+                )
+                resolved_url_id = new_url.id
+
+                # NOTE: THIS IS SUPER IMPORTANT
+                # we're adding to new_urls here, not just in main
+                new_urls[url_key] = new_url
+
+            resolved_urls[url_type] = resolved_url_id
+
+        return resolved_urls
+
+    def diff_pkg_url(
+        self, pkg_id: UUID, resolved_urls: dict[UUID, UUID]
+    ) -> tuple[list[PackageURL], list[dict]]:
+        """Takes in a package_id and resolved URLs from diff_url, and generates
+        new PackageURL objects as well as a list of changes to existing ones
+
+        Inputs:
+          - pkg_id: the id of the package
+          - resolved_urls: a map of url types to final URL ID for this pkg
+
+        Outputs:
+          - new_package_urls: a list of new PackageURL objects
+          - updated_package_urls: a list of changes to existing PackageURL objects
+
+        TODO:
+          - We're updating every single package_url entity, which takes time. We should
+            check if the latest URL has changed, and if so, only update that one.
+        """
+        new_links: list[PackageURL] = []
+        updates: list[dict] = []
+
+        # what are the existing links?
+        existing: set[UUID] = {
+            pu.url_id for pu in self.caches.package_urls.get(pkg_id, set())
+        }
+
+        # for the correct URL type / URL for this package:
+        for url_type, url_id in resolved_urls.items():
+            if url_id not in existing:
+                # new link!
+                new_links.append(
+                    PackageURL(
+                        id=uuid4(),
+                        package_id=pkg_id,
+                        url_id=url_id,
+                        created_at=self.now,
+                        updated_at=self.now,
+                    )
+                )
+            else:
+                # TODO: this should only happen for `latest` URLs
+                # there is an existing link between this URL and this package
+                # let's find it
+                existing_pu = next(
+                    pu
+                    for pu in self.caches.package_url_cache[pkg_id]
+                    if pu.url_id == url_id
+                )
+                existing_pu.updated_at = self.now
+                updates.append({"id": existing_pu.id, "updated_at": self.now})
+
+        return new_links, updates
+
 
 def main(config: Config, db: CratesDB):
     logger = Logger("crates_main_v2")
@@ -322,6 +428,9 @@ def main(config: Config, db: CratesDB):
 
     new_packages: list[Package] = []
     updated_packages: list[dict] = []
+    new_urls: dict[URLKey, URL] = {}
+    new_package_urls: list[PackageURL] = []
+    updated_package_urls: list[dict] = []
 
     # and now, we can do that diff
     diff = Diff(config, cache)
@@ -335,6 +444,25 @@ def main(config: Config, db: CratesDB):
             updated_packages.append(update_payload)
 
         # ok, no we should figure out the URLs
+        resolved_urls = diff.diff_url(pkg, new_urls)
+
+        new_links, updated_links = diff.diff_pkg_url(pkg_id, resolved_urls)
+        if new_links:
+            new_package_urls.extend(new_links)
+        if updated_links:
+            logger.debug(f"Updated package URLs: {len(updated_links)}")
+            updated_package_urls.extend(updated_links)
+
+    logger.log("-" * 100)
+    logger.log("Going to load")
+    logger.log(f"New packages: {len(new_packages)}")
+    logger.log(f"New URLs: {len(new_urls)}")
+    logger.log(f"New package URLs: {len(new_package_urls)}")
+    logger.log(f"Updated packages: {len(updated_packages)}")
+    logger.log(f"Updated package URLs: {len(updated_package_urls)}")
+    # logger.log(f"New dependencies: {len(new_deps)}")
+    # logger.log(f"Removed dependencies: {len(removed_deps)}")
+    logger.log("-" * 100)
 
     logger.log("✅ Done")
 
