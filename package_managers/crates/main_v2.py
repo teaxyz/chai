@@ -101,6 +101,10 @@ class CratesTransformer(Transformer):
         latest_versions, latest_versions_map = self._load_latest_versions()
         self.logger.log(f"Loaded {len(latest_versions)} latest versions")
 
+        # also build the map of user_id to CrateUser object
+        users: dict[int, CrateUser] = self._load_users()
+        self.logger.log(f"Loaded {len(users)} users")
+
         # now, iterate through the versions.csv, and populate LatestVersion objects,
         # only if the version_id is in the latest_versions set
         for row in self._open_csv("versions"):
@@ -125,7 +129,10 @@ class CratesTransformer(Transformer):
             published_at = row["created_at"]
 
             # make a CrateUser object from the published_by
-            published_by_user = CrateUser(id=row["published_by"])
+            published_by = row["published_by"]
+            published_by_user: CrateUser | None = (
+                users[int(published_by)] if published_by else None
+            )
 
             latest_version = CrateLatestVersion(
                 version_id,
@@ -212,11 +219,10 @@ class CratesTransformer(Transformer):
         for row in self._open_csv("users"):
             user_id = int(row["id"])
             name = row["name"]
-            github_username = row["github_username"]
+            github_username = row["gh_login"]
             user = CrateUser(user_id, name, github_username)
             users[user_id] = user
 
-        self.logger.log(f"Loaded {len(users)} users")
         return users
 
 

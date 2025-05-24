@@ -38,8 +38,8 @@ class CrateLatestVersion:
     downloads: int
     license: str
     num: str
-    published_by: CrateUser
-    published_at: datetime  # version.created_at
+    published_at: datetime
+    published_by: CrateUser | None = None
     # dependencies.csv
     dependencies: list[CrateDependency] = field(default_factory=list)
 
