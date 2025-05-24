@@ -110,7 +110,7 @@ class DB:
                         dependencies[pkg.id] = set()
                     dependencies[pkg.id].add(dep)
 
-        self.logger.debug(f"Loaded {len(package_map)} packages")
+        self.logger.debug(f"Cached {len(package_map)} packages")
 
         return CurrentGraph(package_map, dependencies)
 
@@ -139,8 +139,8 @@ class DB:
                         package_urls[pkg.id] = set()
                     package_urls[pkg.id].add(pkg_url)
 
-            self.logger.debug(f"Loaded {len(url_map)} URLs")
-            self.logger.debug(f"Loaded {len(package_urls)} package URLs")
+            self.logger.debug(f"Cached {len(url_map)} URLs")
+            self.logger.debug(f"Cached {len(package_urls)} package URLs")
 
             return CurrentURLs(url_map=url_map, package_urls=package_urls)
 
