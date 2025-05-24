@@ -100,9 +100,9 @@ class DB:
             result: Result[Tuple[Package, LegacyDependency]] = session.execute(stmt)
 
             for pkg, dep in result:
-                # add to the package map
-                if pkg.name not in package_map:
-                    package_map[pkg.name] = pkg
+                # add to the package map, by import_id, which is usually name
+                if pkg.import_id not in package_map:
+                    package_map[pkg.import_id] = pkg
 
                 # and add to the dependencies map as well
                 if dep:  # check because it's an outer join
