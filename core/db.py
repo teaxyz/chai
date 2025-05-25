@@ -345,10 +345,10 @@ class DB:
         new_packages: List[Package],
         new_urls: List[URL],
         new_package_urls: List[PackageURL],
-        updated_packages: List[Dict[str, UUID | str | datetime]],
-        updated_package_urls: List[Dict[str, UUID | datetime]],
         new_deps: List[LegacyDependency],
         removed_deps: List[LegacyDependency],
+        updated_packages: List[Dict[str, UUID | str | datetime]],
+        updated_package_urls: List[Dict[str, UUID | datetime]],
     ) -> None:
         """
         Ingests a list of new, updated, and deleted objects from the database.
