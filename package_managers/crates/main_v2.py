@@ -7,7 +7,7 @@ from core.config import Config, PackageManager
 from core.db import DB
 from core.fetcher import TarballFetcher
 from core.logger import Logger
-from core.models import URL, Package, PackageURL
+from core.models import URL, LegacyDependency, Package, PackageURL
 from core.structs import Cache, CurrentGraph, CurrentURLs, URLKey
 from core.transformer import Transformer
 from core.utils import is_github_url
@@ -181,6 +181,10 @@ class CratesTransformer(Transformer):
                 raise ValueError(f"Crate {start_crate_id} not found in self.crates")
 
             kind = int(row["kind"])
+
+            if kind not in [0, 1, 2]:
+                raise ValueError(f"Unknown dependency kind: {kind}")
+
             dependency_type = DependencyType(kind)
             semver = row["req"]
 
@@ -385,6 +389,123 @@ class Diff:
 
         return new_links, updates
 
+    def diff_deps(
+        self, pkg: Crate
+    ) -> tuple[list[LegacyDependency], list[LegacyDependency]]:
+        """
+        Identifies new and removed dependencies for a given crate
+
+        The process is:
+           1. Build a view of what the package's dependencies are according to
+              the crates.io database.
+           2. Get this crate's Package ID from CHAI
+           3. Get this crate's existing dependencies from CHAI
+           4. Compare the two sets, and identify new and removed dependencies
+
+        Returns:
+            new_deps: list[LegacyDependency], the new dependencies
+            removed_deps: list[LegacyDependency], the removed dependencies
+        """
+        new_deps: list[LegacyDependency] = []
+        removed_deps: list[LegacyDependency] = []
+
+        actual: set[tuple[UUID, UUID]] = set()
+
+        # first, I need to map the actual dependencies into the
+        # (dep_id, dep_type) tuple
+        for dependency in pkg.latest_version.dependencies:
+            dep_crate_id: str = str(dependency.dependency_id)
+            dep_type: DependencyType = dependency.dependency_type
+
+            # guard: no dep_id
+            if not dep_crate_id:
+                raise ValueError(f"No dep_id for {dependency}")
+
+            # guard: no dep_type
+            # can't do if not dep_type bceause IntEnums might be 0, which is False
+            if dep_type is None:
+                raise ValueError(f"No dep_type for {dependency}")
+
+            # get the ID from the cache
+            dependency = self.caches.package_map.get(dep_crate_id)
+
+            # if we don't have the dependency, means there's a package which depends on
+            # something we have not indexed yet
+            # it's not problem, since we'll load the package now, and on the next run,
+            # this will sort itself out
+            if not dependency:
+                self.logger.warn(f"{dep_crate_id}, dependency of {pkg.name} is new")
+                continue
+
+            # figure out the dependency type UUID
+            dependency_type = self._resolve_dep_type(dep_type)
+
+            # add it to the set of actual dependencies
+            actual.add((dependency.id, dependency_type))
+
+        # establish the package that we are working with
+        crate_id: str = str(pkg.id)
+        package = self.caches.package_map.get(crate_id)
+        if not package:
+            # TODO: handle this case, though it fixes itself on the next run
+            self.logger.warn(f"New package {pkg.name}, will grab its deps next time")
+            return [], []
+
+        pkg_id: UUID = package.id
+
+        # what are its existing dependencies?
+        # specifically, existing dependencies IN THE SAME STRUCTURE as `actual`,
+        # so we can do an easy comparison
+        existing: set[tuple[UUID, UUID]] = {
+            (dep.dependency_id, dep.dependency_type_id)
+            for dep in self.caches.dependencies.get(pkg_id, set())
+        }
+
+        # we have two sets!
+        # actual minus existing = new_deps
+        # existing minus actual = removed_deps
+        new = actual - existing
+        removed = existing - actual
+
+        new_deps = [
+            LegacyDependency(
+                id=uuid4(),
+                package_id=pkg_id,
+                dependency_id=dep[0],
+                dependency_type_id=dep[1],
+                created_at=self.now,
+                updated_at=self.now,
+            )
+            for dep in new
+        ]
+
+        removed_deps = [
+            LegacyDependency(
+                id=uuid4(),
+                package_id=pkg_id,
+                dependency_id=dep[0],
+                dependency_type_id=dep[1],
+                created_at=self.now,
+                updated_at=self.now,
+            )
+            for dep in removed
+        ]
+
+        return new_deps, removed_deps
+
+    def _resolve_dep_type(self, dep_type: DependencyType) -> UUID:
+        """
+        Resolves the dependency type UUID from the config
+        """
+        if dep_type == DependencyType.NORMAL:
+            return self.config.dependency_types.runtime
+        elif dep_type == DependencyType.BUILD:
+            return self.config.dependency_types.build
+        elif dep_type == DependencyType.DEV:
+            return self.config.dependency_types.development
+        else:
+            raise ValueError(f"Unknown dependency type: {dep_type}")
+
 
 def main(config: Config, db: CratesDB):
     logger = Logger("crates_main_v2")
@@ -431,27 +552,34 @@ def main(config: Config, db: CratesDB):
     new_urls: dict[URLKey, URL] = {}
     new_package_urls: list[PackageURL] = []
     updated_package_urls: list[dict] = []
+    new_deps: list[LegacyDependency] = []
+    removed_deps: list[LegacyDependency] = []
 
     # and now, we can do that diff
     diff = Diff(config, cache)
     for i, pkg in enumerate(transformer.crates.values()):
         pkg_id, pkg_obj, update_payload = diff.diff_pkg(pkg)
         if pkg_obj:
-            logger.debug(f"🆕: {pkg_obj.name}")
             new_packages.append(pkg_obj)
         if update_payload:
-            logger.debug(f"🔄: {pkg.name}")
             updated_packages.append(update_payload)
 
-        # ok, no we should figure out the URLs
+        # URLs
         resolved_urls = diff.diff_url(pkg, new_urls)
 
+        # package URLs
         new_links, updated_links = diff.diff_pkg_url(pkg_id, resolved_urls)
         if new_links:
             new_package_urls.extend(new_links)
         if updated_links:
-            logger.debug(f"Updated package URLs: {len(updated_links)}")
             updated_package_urls.extend(updated_links)
+
+        # finally, dependencies
+        new_dependencies, removed_dependencies = diff.diff_deps(pkg)
+        if new_dependencies:
+            new_deps.extend(new_dependencies)
+        if removed_dependencies:
+            removed_deps.extend(removed_dependencies)
 
     logger.log("-" * 100)
     logger.log("Going to load")
@@ -460,8 +588,8 @@ def main(config: Config, db: CratesDB):
     logger.log(f"New package URLs: {len(new_package_urls)}")
     logger.log(f"Updated packages: {len(updated_packages)}")
     logger.log(f"Updated package URLs: {len(updated_package_urls)}")
-    # logger.log(f"New dependencies: {len(new_deps)}")
-    # logger.log(f"Removed dependencies: {len(removed_deps)}")
+    logger.log(f"New dependencies: {len(new_deps)}")
+    logger.log(f"Removed dependencies: {len(removed_deps)}")
     logger.log("-" * 100)
 
     logger.log("✅ Done")

@@ -4,6 +4,17 @@ from enum import IntEnum
 
 
 class DependencyType(IntEnum):
+    """
+    The kind of dependency from the crates.io database
+
+    - NORMAL: normal dependency (default)
+    - BUILD: build dependency (used for build scripts)
+    - DEV: dev dependency (used for testing or benchmarking)
+
+    Resources:
+    - https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html
+    """
+
     NORMAL = 0
     BUILD = 1  # used for build scripts
     DEV = 2  # used for testing or benchmarking
