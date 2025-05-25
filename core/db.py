@@ -340,6 +340,92 @@ class DB:
             value_stmt = stmt.values(batch)
             session.execute(value_stmt)
 
+    def ingest(
+        self,
+        new_packages: List[Package],
+        new_urls: List[URL],
+        new_package_urls: List[PackageURL],
+        updated_packages: List[Dict[str, UUID | str | datetime]],
+        updated_package_urls: List[Dict[str, UUID | datetime]],
+        new_deps: List[LegacyDependency],
+        removed_deps: List[LegacyDependency],
+    ) -> None:
+        """
+        Ingests a list of new, updated, and deleted objects from the database.
+
+        It flushes after after each insert, to ensure that the database is in a valid
+        state prior to the next batch of ingestions.
+
+        TODO: if pkey is set in the values provided, then sqlalchemy will use
+        psycopg2.executemany(...), which is quicker, but still the slowest of all
+        execution options provided by psycopg2. The best one is execute_values, which
+        is **only** available for inserts, and can be used as follows:
+
+        looks like sqlalchemy^2 has a native support for insertmanyvalues, but
+        **I think** we need to pass the data in as a list[dict] instead of objects.
+        See: https://docs.sqlalchemy.org/en/20/core/connections.html#engine-insertmanyvalues
+
+
+        Inputs:
+        - new_packages: a list of new Package objects
+        - new_urls: a list of new URL objects
+        - new_package_urls: a list of new PackageURL objects
+        - updated_packages: a list of updated Package objects
+        - updated_package_urls: a list of updated PackageURL objects
+        - new_deps: a list of new LegacyDependency objects
+        - removed_deps: a list of removed LegacyDependency objects
+        """
+        self.logger.log("-" * 100)
+        self.logger.log("Going to load")
+        self.logger.log(f"New packages: {len(new_packages)}")
+        self.logger.log(f"New URLs: {len(new_urls)}")
+        self.logger.log(f"New package URLs: {len(new_package_urls)}")
+        self.logger.log(f"Updated packages: {len(updated_packages)}")
+        self.logger.log(f"Updated package URLs: {len(updated_package_urls)}")
+        self.logger.log(f"New dependencies: {len(new_deps)}")
+        self.logger.log(f"Removed dependencies: {len(removed_deps)}")
+        self.logger.log("-" * 100)
+
+        with self.session() as session:
+            try:
+                # 1. Add all new objects with granular flushes
+                if new_packages:
+                    session.add_all(new_packages)
+                    session.flush()
+
+                if new_urls:
+                    session.add_all(new_urls)
+                    session.flush()
+
+                if new_package_urls:
+                    session.add_all(new_package_urls)
+                    session.flush()
+
+                # 2. remove all items we need to remove
+                if removed_deps:
+                    for dep in removed_deps:
+                        session.delete(dep)
+                    session.flush()
+
+                if new_deps:
+                    session.add_all(new_deps)
+                    session.flush()
+
+                # 2. Perform updates (these will now operate on a flushed state)
+                if updated_packages:
+                    session.execute(update(Package), updated_packages)
+
+                if updated_package_urls:
+                    session.execute(update(PackageURL), updated_package_urls)
+
+                # 3. Commit all changes
+                session.commit()
+                self.logger.log("✅ Successfully ingested")
+            except Exception as e:
+                self.logger.error(f"Error during batched ingest: {e}")
+                session.rollback()
+                raise e
+
 
 class ConfigDB(DB):
     def __init__(self):

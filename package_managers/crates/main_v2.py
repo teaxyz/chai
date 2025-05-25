@@ -581,16 +581,15 @@ def main(config: Config, db: CratesDB):
         if removed_dependencies:
             removed_deps.extend(removed_dependencies)
 
-    logger.log("-" * 100)
-    logger.log("Going to load")
-    logger.log(f"New packages: {len(new_packages)}")
-    logger.log(f"New URLs: {len(new_urls)}")
-    logger.log(f"New package URLs: {len(new_package_urls)}")
-    logger.log(f"Updated packages: {len(updated_packages)}")
-    logger.log(f"Updated package URLs: {len(updated_package_urls)}")
-    logger.log(f"New dependencies: {len(new_deps)}")
-    logger.log(f"Removed dependencies: {len(removed_deps)}")
-    logger.log("-" * 100)
+    db.ingest(
+        new_packages,
+        updated_packages,
+        new_urls,
+        new_package_urls,
+        updated_package_urls,
+        new_deps,
+        removed_deps,
+    )
 
     logger.log("✅ Done")
 
