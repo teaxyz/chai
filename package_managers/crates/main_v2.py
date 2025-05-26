@@ -1,13 +1,23 @@
 import csv
 from collections.abc import Generator
 from datetime import datetime
+import sys
 from uuid import UUID, uuid4
 
 from core.config import Config, PackageManager
 from core.db import DB
 from core.fetcher import TarballFetcher
 from core.logger import Logger
-from core.models import URL, LegacyDependency, Package, PackageURL
+from core.models import (
+    URL,
+    CanonPackage,
+    DependsOn,
+    LegacyDependency,
+    Package,
+    PackageURL,
+    UserPackage,
+    Version,
+)
 from core.structs import Cache, CurrentGraph, CurrentURLs, URLKey
 from core.transformer import Transformer
 from core.utils import is_github_url
@@ -31,6 +41,229 @@ class CratesDB(DB):
 
     def set_current_urls(self, urls: set[str]) -> None:
         self.urls: CurrentURLs = self.current_urls(urls)
+
+    def delete_packages_by_import_id(self, import_ids: set[int]) -> None:
+        """
+        Delete packages identified by import_ids and all their dependent records.
+        This is a DB class method to handle the cascade deletion properly.
+        """
+
+        logger = Logger("crates_db_delete")
+
+        # Convert import_ids to package_ids using the cache
+        package_ids: list[UUID] = []
+        for import_id in import_ids:
+            package = self.graph.package_map.get(str(import_id))
+            if package:
+                package_ids.append(package.id)
+
+        if not package_ids:
+            logger.log("No packages found to delete")
+            return
+
+        logger.log(f"Deleting {len(package_ids)} packages and their dependencies")
+
+        # Delete records in reverse dependency order
+        with self.session() as session:
+            try:
+                if self.config.exec_config.test:
+                    logger.log("[DRY RUN]")
+                    # 1. Delete PackageURLs
+                    package_urls_deleted = (
+                        session.query(PackageURL)
+                        .filter(PackageURL.package_id.in_(package_ids))
+                        .count()
+                    )
+
+                    # 2. Delete CanonPackages
+                    canon_packages_deleted = (
+                        session.query(CanonPackage)
+                        .filter(CanonPackage.package_id.in_(package_ids))
+                        .count()
+                    )
+
+                    # 3. Delete UserPackages
+                    user_packages_deleted = (
+                        session.query(UserPackage)
+                        .filter(UserPackage.package_id.in_(package_ids))
+                        .count()
+                    )
+
+                    # 4. Delete LegacyDependencies (both package_id and dependency_id)
+                    legacy_deps_package_deleted = (
+                        session.query(LegacyDependency)
+                        .filter(LegacyDependency.package_id.in_(package_ids))
+                        .count()
+                    )
+
+                    legacy_deps_dependency_deleted = (
+                        session.query(LegacyDependency)
+                        .filter(LegacyDependency.dependency_id.in_(package_ids))
+                        .count()
+                    )
+
+                    # TODO: this table is deprecated, but still contains records
+                    # we can remove this line, once all indexers use LegacyDependencies
+                    # 5. Delete DependsOn where dependency_id is in package_ids
+                    depends_on_deleted = (
+                        session.query(DependsOn)
+                        .filter(DependsOn.dependency_id.in_(package_ids))
+                        .count()
+                    )
+
+                    # 6. Delete Versions and their dependencies
+                    # TODO: remove this line once all indexers stop using Versions and
+                    # we can truncate this table
+                    # First get all version ids for these packages
+                    version_ids = [
+                        vid
+                        for (vid,) in session.query(Version.id).filter(
+                            Version.package_id.in_(package_ids)
+                        )
+                    ]
+
+                    # Delete dependencies attached to these versions
+                    version_deps_deleted = 0
+                    if version_ids:
+                        version_deps_deleted = (
+                            session.query(DependsOn)
+                            .filter(DependsOn.version_id.in_(version_ids))
+                            .count()
+                        )
+
+                    # Now delete the versions
+                    versions_deleted = (
+                        session.query(Version)
+                        .filter(Version.package_id.in_(package_ids))
+                        .count()
+                    )
+
+                    # 7. Finally delete the packages
+                    packages_deleted = (
+                        session.query(Package)
+                        .filter(Package.id.in_(package_ids))
+                        .count()
+                    )
+
+                    logger.log("-" * 100)
+                    logger.log("Going to commit delete for")
+                    logger.log(f"{packages_deleted} packages")
+                    logger.log(f"{versions_deleted} versions")
+                    logger.log(f"{version_deps_deleted} version dependencies")
+                    logger.log(f"{depends_on_deleted} direct dependencies")
+                    logger.log(
+                        f"{legacy_deps_package_deleted + legacy_deps_dependency_deleted} legacy deps"
+                    )
+                    logger.log(f"{user_packages_deleted} user packages")
+                    logger.log(f"{canon_packages_deleted} canon packages")
+                    logger.log(f"{package_urls_deleted} package URLs")
+                    logger.log("-" * 100)
+
+                    return
+
+                else:
+                    # 1. Delete PackageURLs
+                    package_urls_deleted = (
+                        session.query(PackageURL)
+                        .filter(PackageURL.package_id.in_(package_ids))
+                        .delete(synchronize_session=False)
+                    )
+
+                    # 2. Delete CanonPackages
+                    canon_packages_deleted = (
+                        session.query(CanonPackage)
+                        .filter(CanonPackage.package_id.in_(package_ids))
+                        .delete(synchronize_session=False)
+                    )
+
+                    # 3. Delete UserPackages
+                    user_packages_deleted = (
+                        session.query(UserPackage)
+                        .filter(UserPackage.package_id.in_(package_ids))
+                        .delete(synchronize_session=False)
+                    )
+
+                    # 4. Delete LegacyDependencies (both package_id and dependency_id)
+                    legacy_deps_package_deleted = (
+                        session.query(LegacyDependency)
+                        .filter(LegacyDependency.package_id.in_(package_ids))
+                        .delete(synchronize_session=False)
+                    )
+
+                    legacy_deps_dependency_deleted = (
+                        session.query(LegacyDependency)
+                        .filter(LegacyDependency.dependency_id.in_(package_ids))
+                        .delete(synchronize_session=False)
+                    )
+
+                    # TODO: this table is deprecated, but still contains records
+                    # we can remove this line, once all indexers use LegacyDependencies
+                    # 5. Delete DependsOn where dependency_id is in package_ids
+                    depends_on_deleted = (
+                        session.query(DependsOn)
+                        .filter(DependsOn.dependency_id.in_(package_ids))
+                        .delete(synchronize_session=False)
+                    )
+
+                    # 6. Delete Versions and their dependencies
+                    # TODO: remove this line once all indexers stop using Versions and
+                    # we can truncate this table
+                    # First get all version ids for these packages
+                    version_ids = [
+                        vid
+                        for (vid,) in session.query(Version.id).filter(
+                            Version.package_id.in_(package_ids)
+                        )
+                    ]
+
+                    # Delete dependencies attached to these versions
+                    version_deps_deleted = 0
+                    if version_ids:
+                        version_deps_deleted = (
+                            session.query(DependsOn)
+                            .filter(DependsOn.version_id.in_(version_ids))
+                            .delete(synchronize_session=False)
+                        )
+
+                    # Now delete the versions
+                    versions_deleted = (
+                        session.query(Version)
+                        .filter(Version.package_id.in_(package_ids))
+                        .delete(synchronize_session=False)
+                    )
+
+                    # 7. Finally delete the packages
+                    packages_deleted = (
+                        session.query(Package)
+                        .filter(Package.id.in_(package_ids))
+                        .delete(synchronize_session=False)
+                    )
+
+                    logger.log("-" * 100)
+                    logger.log("Going to commit delete for")
+                    logger.log(f"{packages_deleted} packages")
+                    logger.log(f"{versions_deleted} versions")
+                    logger.log(f"{version_deps_deleted} version dependencies")
+                    logger.log(f"{depends_on_deleted} direct dependencies")
+                    logger.log(
+                        f"{legacy_deps_package_deleted + legacy_deps_dependency_deleted} legacy deps"
+                    )
+                    logger.log(f"{user_packages_deleted} user packages")
+                    logger.log(f"{canon_packages_deleted} canon packages")
+                    logger.log(f"{package_urls_deleted} package URLs")
+                    logger.log("-" * 100)
+
+                    # Commit the transaction
+                    session.commit()
+
+                    # once all the deletions are done, let's update the current graph
+                    # so the cache is accurate
+                    self.set_current_graph()
+
+            except Exception as e:
+                session.rollback()
+                logger.error(f"Error deleting packages: {e}")
+                raise
 
 
 class CratesTransformer(Transformer):
@@ -88,13 +321,10 @@ class CratesTransformer(Transformer):
             )
             self.crates[crate_id] = crate
 
-            if self.config.exec_config.test and i > 100:
-                break
-
         self.logger.log(f"Parsed {len(self.crates)} crates")
 
         if self.config.exec_config.test:
-            self.logger.log("Test mode, only parsing 100 crates")
+            self.logger.log("Ignoring latest versions and dependencies")
             return
 
         # get the map of crate_id to latest_version_id, and the set of all
@@ -507,6 +737,51 @@ class Diff:
             raise ValueError(f"Unknown dependency type: {dep_type}")
 
 
+def identify_deletions(transformer: CratesTransformer, db: CratesDB) -> set[int]:
+    """
+    Identifies crates that are in the db but not in the transformer
+
+    Cargo enables deletion of crates from the registry, if:
+      - the crate has been published for less than 72 hours
+      - the crate only has a single owner
+      - the crate has been downloaded less than 500 times for each month it has been
+      - the crate is not depended upon by any other crate on crates.io
+
+    The risk is that the namespace for an invalid import_id is now available, and
+    might be taken by a new crate, which would violate our uniqueness constraint on
+    derived_id
+
+    Returns:
+      - a set of import_ids that are in the db but not in the transformer
+
+    References:
+      - https://crates.io/policies
+      - https://rurust.github.io/cargo-docs-ru/policies.html
+    """
+    logger = Logger("crates_identify_deletions")
+
+    transformer_import_ids: set[int] = {int(c.id) for c in transformer.crates.values()}
+    db_import_ids: set[int] = {int(p.import_id) for p in db.graph.package_map.values()}
+
+    # calculate deletions
+    deletions: set[int] = db_import_ids - transformer_import_ids
+    logger.warn(f"There are {len(deletions)} crates in the db but not in the registry")
+
+    # TODO: this is unnecessary, but going to log it anyway
+    deletion_db_names: set[str] = {
+        str(p.name)
+        for p in db.graph.package_map.values()
+        if int(p.import_id) in deletions
+    }
+    all_crate_names: set[str] = {c.name for c in transformer.crates.values()}
+    name_collisions: set[str] = deletion_db_names & all_crate_names
+
+    if name_collisions:
+        logger.warn(f"There are {len(name_collisions)} name collisions")
+
+    return deletions
+
+
 def main(config: Config, db: CratesDB):
     logger = Logger("crates_main_v2")
     logger.log("Starting crates_main_v2")
@@ -526,6 +801,15 @@ def main(config: Config, db: CratesDB):
 
     transformer = CratesTransformer(config)
     transformer.parse()
+
+    # first, identify crates we need to delete from CHAI because they are no longer on
+    # cargo
+    deletions = identify_deletions(transformer, db)
+
+    if deletions:
+        db.delete_packages_by_import_id(deletions)
+
+    sys.exit()
 
     # the transformer object has transformer.crates, which has all the info
     # now, let's build the db's cache
@@ -598,4 +882,27 @@ if __name__ == "__main__":
     config = Config(PackageManager.CRATES)
     db = CratesDB(config)
     db.set_current_graph()
+
+    # print(f"There are {len(db.graph.package_map)} packages in the graph")
+    # db_import_ids = [int(pkg.import_id) for pkg in db.graph.package_map.values()]
+    # print(f"There are {len(db_import_ids)} import_ids in the graph")
+
+    # # now, read the crates from the transformer file
+    # config.exec_config.test = True
+    # transformer = CratesTransformer(config)
+    # transformer.parse()
+
+    # print(f"There are {len(transformer.crates)} crates in the transformer")
+    # transformer_import_ids = [int(pkg.id) for pkg in transformer.crates.values()]
+    # print(f"There are {len(transformer_import_ids)} import_ids in the transformer")
+
+    # db_set_import_ids = set(db_import_ids)
+    # transformer_set_import_ids = set(transformer_import_ids)
+
+    # # problem
+    # problem = db_set_import_ids - transformer_set_import_ids
+    # print(f"{len(problem)} packages are in the db but not in the transformer")
+
+    # print(problem)
+
     main(config, db)

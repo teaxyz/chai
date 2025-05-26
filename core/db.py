@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from core.logger import Logger
 from core.models import (
     URL,
+    Base,
     BaseModel,
     DependsOnType,
     LegacyDependency,
