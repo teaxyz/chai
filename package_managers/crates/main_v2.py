@@ -1,6 +1,7 @@
 import csv
 from collections.abc import Generator
 from datetime import datetime
+import sys
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -616,9 +617,9 @@ class Diff:
         new = actual - existing
         removed = existing - actual
 
-        new_deps = [
+        new_deps: list[LegacyDependency] = [
             LegacyDependency(
-                id=uuid4(),
+                # don't include the ID because it's a sequence for this table
                 package_id=pkg_id,
                 dependency_id=dep[0],
                 dependency_type_id=dep[1],
@@ -628,20 +629,29 @@ class Diff:
             for dep in new
         ]
 
-        # ///// BIG HONKING TODO:
-        # I'M CREATING LEGACY DEPENDENCIES when in fact I should be removing them
-        # ///// END BIG HONKING TODO:
-        removed_deps = [
-            LegacyDependency(
-                id=uuid4(),
-                package_id=pkg_id,
-                dependency_id=dep[0],
-                dependency_type_id=dep[1],
-                created_at=self.now,
-                updated_at=self.now,
-            )
-            for dep in removed
-        ]
+        # get the existing legacy dependency, and add it to removed_deps
+        removed_deps: list[LegacyDependency] = []
+        cache_deps: set[LegacyDependency] = self.caches.dependencies.get(pkg_id, set())
+        for removed_dep_id, removed_dep_type in removed:
+            try:
+                existing_dep = next(
+                    dep
+                    for dep in cache_deps
+                    if dep.dependency_id == removed_dep_id
+                    and dep.dependency_type_id == removed_dep_type
+                )
+
+                removed_deps.append(existing_dep)
+            except StopIteration:
+                cache_deps_str = "\n".join(
+                    [
+                        f"{dep.dependency_id} / {dep.dependency_type_id}"
+                        for dep in cache_deps.values()
+                    ]
+                )
+                raise ValueError(
+                    f"Removing {removed_dep_id} / {removed_dep_type} for {pkg_id} but not in Cache: \n{cache_deps_str}"  # noqa: E501
+                )
 
         return new_deps, removed_deps
 
