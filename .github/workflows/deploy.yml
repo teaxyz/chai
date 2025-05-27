@@ -53,9 +53,7 @@ jobs:
             alembic:
               - 'alembic/**'
               - 'core/models/**'
-            ranker:
-              - 'ranker/**'
-          
+
       - name: Set any_changes output
         id: set-any-changes
         run: |
@@ -77,31 +75,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
         with:
           role-to-assume: ${{ secrets.TEA_AWS_ROLE }}
           aws-region: us-east-1
-      
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-      
+
       - name: Set deployment ref
         id: set-ref
         run: |
           DEPLOY_REF=${{ inputs.ref }}
           echo "DEPLOY_REF=${DEPLOY_REF}" >> $GITHUB_ENV
           echo "deploy_ref=${DEPLOY_REF}" >> $GITHUB_OUTPUT
-      
+
       - name: Set environment
         id: set-env
         run: |
           DEPLOY_ENV=${{ inputs.env }}
           echo "DEPLOY_ENV=${DEPLOY_ENV}" >> $GITHUB_ENV
           echo "deploy_env=${DEPLOY_ENV}" >> $GITHUB_OUTPUT
-      
+
       - name: Build and push Crates indexer image
         if: ${{ needs.changes.outputs.crates == 'true' || github.event_name == 'workflow_dispatch' }}
         uses: docker/build-push-action@v2
@@ -112,7 +110,7 @@ jobs:
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/crates:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/crates:latest
-      
+
       - name: Build and push Homebrew indexer image
         if: ${{ needs.changes.outputs.homebrew == 'true' || github.event_name == 'workflow_dispatch' }}
         uses: docker/build-push-action@v2
@@ -123,7 +121,7 @@ jobs:
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/homebrew:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/homebrew:latest
-      
+
       - name: Build and push Debian indexer image
         if: ${{ needs.changes.outputs.debian == 'true' || github.event_name == 'workflow_dispatch' }}
         uses: docker/build-push-action@v2
@@ -134,7 +132,7 @@ jobs:
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/debian:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/debian:latest
-      
+
       - name: Build and push Pkgx indexer image
         if: ${{ needs.changes.outputs.pkgx == 'true' || github.event_name == 'workflow_dispatch' }}
         uses: docker/build-push-action@v2
@@ -145,7 +143,7 @@ jobs:
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/pkgx:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/pkgx:latest
-      
+
       - name: Build and push Alembic image
         if: ${{ needs.changes.outputs.alembic == 'true' || github.event_name == 'workflow_dispatch' }}
         uses: docker/build-push-action@v2
@@ -156,17 +154,7 @@ jobs:
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/alembic:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/alembic:latest
-  
-      - name: Build and push Ranker indexer image
-        if: ${{ needs.changes.outputs.ranker == 'true' || github.event_name == 'workflow_dispatch' }}
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          file: ./ranker/Dockerfile
-          push: true
-          tags: |
-            ${{ steps.login-ecr.outputs.registry }}/chai-v2/ranker:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
-            ${{ steps.login-ecr.outputs.registry }}/chai-v2/ranker:latest
+
   deploy:
     needs: [changes, build]
     if: ${{ needs.changes.outputs.any_changes == 'true' || github.event_name == 'workflow_dispatch' }}
@@ -174,20 +162,20 @@ jobs:
     environment: ${{ inputs.env || 'dev' }}
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
         with:
           role-to-assume: ${{ secrets.TEA_AWS_ROLE }}
           aws-region: us-east-1
-      
+
       - name: Set deployment ref
         id: set-ref
         run: |
           DEPLOY_REF=${{ inputs.ref }}
           echo "DEPLOY_REF=${DEPLOY_REF}" >> $GITHUB_ENV
           echo "deploy_ref=${DEPLOY_REF}" >> $GITHUB_OUTPUT
-      
+
       - name: Set environment
         id: set-env
         run: |
