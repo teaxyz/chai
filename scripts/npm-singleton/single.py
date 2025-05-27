@@ -1,7 +1,7 @@
-#!/usr/bin/env pkgx +python@3.11 uv run --with requests==2.31.0 --with permalint==0.1.8
+#!/usr/bin/env pkgx +python@3.11 uv run --with requests==2.31.0 --with permalint==0.1.9
 import argparse
-from datetime import datetime
-from typing import Any
+import sys
+from typing import Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
 import requests
@@ -18,10 +18,10 @@ class ChaiDB(DB):
     def __init__(self):
         super().__init__("chai-singleton")
 
-    def check_package_exists(self, pkg_name: str) -> bool:
+    def check_package_exists(self, derived_id: str) -> bool:
         with self.session() as session:
             return (
-                session.query(Package).filter(Package.name == pkg_name).first()
+                session.query(Package).filter(Package.derived_id == derived_id).first()
                 is not None
             )
 
@@ -69,82 +69,122 @@ class ChaiDB(DB):
             session.commit()
 
 
-def get_package_info(npm_package: str) -> dict[str, Any]:
+def get_package_info(npm_package: str) -> Tuple[bool, dict, Optional[str]]:
     url = NPM_API_URL.format(name=npm_package)
-    response = requests.get(url)
-    if response.status_code != 200:
-        raise Exception(f"Failed to get URLs for {npm_package}")
-    return response.json()
-
-
-def get_homepage(package_info: dict) -> str:
     try:
-        return canonicalize(package_info["homepage"])
-    except KeyError as ke:
-        raise Exception(f"Couldn't find homepage in {package_info}: {ke}")
+        response = requests.get(url)
+        if response.status_code != 200:
+            return (
+                False,
+                {},
+                f"Failed with status {response.status_code}: {response.text}",
+            )
+        return True, response.json(), None
+    except Exception as e:
+        return False, {}, f"Request failed: {str(e)}"
 
 
-def get_repository_url(package_info: dict) -> str:
+def get_homepage(package_info: dict) -> Tuple[bool, Optional[str]]:
     try:
-        return canonicalize(package_info["repository"]["url"])
-    except KeyError as ke:
-        raise Exception(f"Couldn't find repository URL in {package_info}: {ke}")
+        return True, canonicalize(package_info["homepage"])
+    except KeyError:
+        return False, None
+    except Exception as e:
+        return False, str(e)
 
 
-def get_source_url(package_info: dict) -> str:
+def get_repository_url(package_info: dict) -> Tuple[bool, Optional[str]]:
+    try:
+        return True, canonicalize(package_info["repository"]["url"])
+    except KeyError:
+        return False, None
+    except Exception as e:
+        return False, str(e)
+
+
+def get_source_url(package_info: dict) -> Tuple[bool, Optional[str]]:
     try:
         repository_obj = package_info["repository"]
         if repository_obj["type"] == "git":
-            return canonicalize(repository_obj["url"])
+            return True, canonicalize(repository_obj["url"])
         else:
-            raise Exception(f"Repository is not a git URL: {repository_obj}")
-    except KeyError as ke:
-        raise Exception(f"Couldn't find source URL in {package_info}: {ke}")
+            return False, f"Repository is not a git URL: {repository_obj}"
+    except KeyError:
+        return False, None
+    except Exception as e:
+        return False, str(e)
 
 
 def canonicalize(url: str) -> str:
     return normalize_url(url)
 
 
-def get_latest_version(package_info: dict) -> str:
+def get_latest_version(package_info: dict) -> Tuple[bool, Optional[str]]:
     try:
         dist_tags = package_info["dist-tags"]
-        return dist_tags["latest"]
-    except KeyError as ke:
-        raise Exception(f"Couldn't find latest version in {package_info}: {ke}")
+        return True, dist_tags["latest"]
+    except KeyError:
+        return False, None
 
 
-def get_latest_version_dependencies(latest_version: dict) -> dict[str, str]:
+def get_version_info(package_info: dict, version: str) -> Tuple[bool, Optional[dict]]:
+    try:
+        return True, package_info["versions"][version]
+    except KeyError:
+        return False, None
+
+
+def get_latest_version_dependencies(
+    latest_version: dict,
+) -> Tuple[bool, Dict[str, str]]:
     """Gets the dependencies from a version object from NPM's Registry API
 
     Returns:
-      - a dictionary keyed by dependency, with semver range as the value"""
+      - a tuple of (success, dependencies) where dependencies is a dictionary
+        keyed by dependency, with semver range as the value
+    """
     try:
-        return latest_version["dependencies"]
-    except KeyError as ke:
-        raise Exception(
-            f"Couldn't find latest version dependencies in {latest_version}: {ke}"
-        )
+        deps = latest_version.get("dependencies", {})
+        return True, deps
+    except Exception:
+        return False, {}
 
 
-def get_latest_version_dev_dependencies(latest_version: dict) -> dict[str, str]:
+def get_latest_version_dev_dependencies(
+    latest_version: dict,
+) -> Tuple[bool, Dict[str, str]]:
     """Gets the development dependencies from a version object from NPM's Registry API
 
     Returns:
-      - a dictionary keyed by dependency, with semver range as the value"""
+      - a tuple of (success, dependencies) where dependencies is a dictionary
+        keyed by dependency, with semver range as the value
+    """
     try:
-        return latest_version["devDependencies"]
-    except KeyError as ke:
-        raise Exception(
-            f"Couldn't find latest version dev dependencies in {latest_version}: {ke}"
-        )
+        deps = latest_version.get("devDependencies", {})
+        return True, deps
+    except Exception:
+        return False, {}
 
 
-def get_urls(package_info: dict) -> tuple[str, str, str]:
-    homepage = get_homepage(package_info)
-    repository_url = get_repository_url(package_info)
-    source_url = get_source_url(package_info)
-    return homepage, repository_url, source_url
+def check_dependencies_on_chai(
+    db: ChaiDB, deps: Dict[str, str]
+) -> List[Tuple[str, str, bool]]:
+    """Check if dependencies exist on CHAI
+
+    Args:
+        db: ChaiDB instance
+        deps: Dependencies to check
+
+    Returns:
+        List of tuples (dependency_name, semver_range, exists_on_chai)
+    """
+    results = []
+    for dep_name, dep_range in deps.items():
+        derived_id = f"npm/{dep_name}"
+        exists = db.get_package_by_derived_id(derived_id) is not None
+        results.append((dep_name, dep_range, exists))
+
+    return results
 
 
 def generate_url(url_type_id: UUID, url: str) -> URL:
@@ -153,15 +193,17 @@ def generate_url(url_type_id: UUID, url: str) -> URL:
 
 def generate_legacy_dependencies(
     db: ChaiDB, pkg: Package, deps: dict[str, str], dependency_type_id: UUID
-) -> list[LegacyDependency]:
+) -> Tuple[List[LegacyDependency], List[Tuple[str, str, bool]]]:
     legacy_deps: list[LegacyDependency] = []
+    dep_status: List[Tuple[str, str, bool]] = []
 
     for dep_name, dep_range in deps.items():
         derived_id = f"npm/{dep_name}"
         chai_dep: Package | None = db.get_package_by_derived_id(derived_id)
+        exists = chai_dep is not None
+        dep_status.append((dep_name, dep_range, exists))
 
-        if not chai_dep:
-            print(f"Dependency {dep_name} does not exist in CHAI...skipping")
+        if not exists:
             continue
 
         dependency = LegacyDependency(
@@ -172,39 +214,174 @@ def generate_legacy_dependencies(
         )
         legacy_deps.append(dependency)
 
-    return legacy_deps
+    return legacy_deps, dep_status
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Load a single NPM package by name into CHAI"
-    )
-    parser.add_argument("name", help="Name of the NPM package")
-    args = parser.parse_args()
+def print_status_report(
+    package_name: str,
+    exists_on_chai: bool,
+    npm_response_ok: bool,
+    npm_error: Optional[str],
+    homepage_result: Tuple[bool, Optional[str]],
+    repository_result: Tuple[bool, Optional[str]],
+    source_result: Tuple[bool, Optional[str]],
+    runtime_deps: List[Tuple[str, str, bool]],
+    dev_deps: List[Tuple[str, str, bool]],
+    changes_summary: Optional[Dict[str, int]] = None,
+    dry_run: bool = False,
+):
+    """Print a formatted status report of the package processing"""
+    divider = "-" * 45
 
+    print(divider)
+    print(f"Package: {package_name}")
+    print(divider)
+
+    if exists_on_chai:
+        print(f"❌ Exiting bc {package_name} exists on CHAI")
+    else:
+        print(f"✅ {package_name} doesn't exist on CHAI")
+
+    print(divider)
+
+    if npm_response_ok:
+        print("✅ OK from NPM")
+    else:
+        print(f"❌ Exiting bc response error from registry: {npm_error}")
+
+    print(divider)
+
+    homepage_ok, homepage = homepage_result
+    if homepage_ok:
+        print(f"✅ has homepage: {homepage}")
+    else:
+        print("❌ no homepage")
+
+    repository_ok, repository = repository_result
+    if repository_ok:
+        print(f"✅ has repository: {repository}")
+    else:
+        print("❌ no repository")
+
+    source_ok, source = source_result
+    if source_ok:
+        print(f"✅ has source: {source}")
+    else:
+        print("❌ no source")
+
+    print(divider)
+    print("Runtime Dependencies:")
+    if not runtime_deps:
+        print("(none)")
+    else:
+        for dep, semver, exists in runtime_deps:
+            if exists:
+                print(f"✅ {dep} / {semver} on CHAI")
+            else:
+                print(f"❌ {dep} / {semver} not on CHAI")
+
+    print(divider)
+    print("Dev Dependencies:")
+    if not dev_deps:
+        print("(none)")
+    else:
+        for dep, semver, exists in dev_deps:
+            if exists:
+                print(f"✅ {dep} / {semver} on CHAI")
+            else:
+                print(f"❌ {dep} / {semver} not on CHAI")
+
+    print(divider)
+
+    if changes_summary:
+        if dry_run:
+            print("DRY RUN: Would create the following rows:")
+        else:
+            print("Created the following rows:")
+
+        for entity_type, count in changes_summary.items():
+            print(f"  - {count} {entity_type}")
+    else:
+        print("Won't even create any rows")
+
+    print(divider)
+
+
+def process_package(package_name: str, dry_run: bool = False) -> bool:
+    """Process a package and return True if successful, False otherwise"""
     config = Config(PackageManager.NPM)
-
     chai_db = ChaiDB()
-    if chai_db.check_package_exists(args.name):
-        print(f"Package {args.name} already exists")
-        exit(1)
 
-    # Establish now for the created_at
-    now = datetime.now()
+    # Check if package exists
+    derived_id = f"npm/{package_name}"
+    exists_on_chai = chai_db.check_package_exists(derived_id)
 
     # Get Package Info from NPM
-    package_info = get_package_info(args.name)
+    npm_response_ok, package_info, npm_error = get_package_info(package_name)
+
+    # Check URLs
+    homepage_result = get_homepage(package_info) if npm_response_ok else (False, None)
+    repository_result = (
+        get_repository_url(package_info) if npm_response_ok else (False, None)
+    )
+    source_result = get_source_url(package_info) if npm_response_ok else (False, None)
+
+    # Check latest version
+    latest_version_result = (
+        get_latest_version(package_info) if npm_response_ok else (False, None)
+    )
+
+    # Get version info
+    version_info_result = (False, None)
+    if npm_response_ok and latest_version_result[0]:
+        version_info_result = get_version_info(package_info, latest_version_result[1])
+
+    # Get dependencies
+    runtime_deps_result = (False, {})
+    dev_deps_result = (False, {})
+    if npm_response_ok and version_info_result[0]:
+        runtime_deps_result = get_latest_version_dependencies(version_info_result[1])
+        dev_deps_result = get_latest_version_dev_dependencies(version_info_result[1])
+
+    # Check dependencies on CHAI
+    runtime_deps_status = check_dependencies_on_chai(chai_db, runtime_deps_result[1])
+    dev_deps_status = check_dependencies_on_chai(chai_db, dev_deps_result[1])
+
+    # Create entities to add to database if not in dry run mode and all checks pass
+    changes_summary = {
+        "Package": 1,
+        "URLs": 0,
+        "PackageURLs": 0,
+        "Runtime Dependencies": 0,
+        "Dev Dependencies": 0,
+    }
+
+    # Early exit if necessary conditions aren't met
+    if exists_on_chai or not npm_response_ok:
+        print_status_report(
+            package_name,
+            exists_on_chai,
+            npm_response_ok,
+            npm_error,
+            homepage_result,
+            repository_result,
+            source_result,
+            runtime_deps_status,
+            dev_deps_status,
+            None,
+            dry_run,
+        )
+        return False
 
     # Create Package
-    name = args.name
-    derived_id = f"npm/{name}"
+    derived_id = f"npm/{package_name}"
     package_manager_id = config.pm_config.pm_id
-    import_id = f"npm-singleton/{name}"
-    readme = package_info["readme"]
+    import_id = f"npm-singleton/{package_name}"
+    readme = package_info.get("readme", "")
 
     pkg = Package(
         id=uuid4(),
-        name=name,
+        name=package_name,
         derived_id=derived_id,
         package_manager_id=package_manager_id,
         import_id=import_id,
@@ -212,27 +389,73 @@ if __name__ == "__main__":
     )
 
     # URLs
-    homepage, repository, source = get_urls(package_info)
+    urls = []
+    if homepage_result[0]:
+        urls.append(
+            generate_url(config.url_types.homepage, normalize_url(homepage_result[1]))
+        )
+    if repository_result[0]:
+        urls.append(
+            generate_url(
+                config.url_types.repository, normalize_url(repository_result[1])
+            )
+        )
+    if source_result[0]:
+        urls.append(
+            generate_url(config.url_types.source, normalize_url(source_result[1]))
+        )
 
-    homepage_url = generate_url(config.url_types.homepage, normalize_url(homepage))
-    repository_url = generate_url(
-        config.url_types.repository, normalize_url(repository)
-    )
-    source_url = generate_url(config.url_types.source, normalize_url(source))
-
-    urls = [homepage_url, repository_url, source_url]
+    changes_summary["URLs"] = len(urls)
+    changes_summary["PackageURLs"] = len(urls)
 
     # Dependencies
-    latest_version = get_latest_version(package_info)
-    latest_version_info = package_info["versions"][latest_version]
-    deps = get_latest_version_dependencies(latest_version_info)
-    dev_deps = get_latest_version_dev_dependencies(latest_version_info)
+    runtime_deps, _ = generate_legacy_dependencies(
+        chai_db, pkg, runtime_deps_result[1], config.dependency_types.runtime
+    )
+    dev_deps, _ = generate_legacy_dependencies(
+        chai_db, pkg, dev_deps_result[1], config.dependency_types.development
+    )
 
-    runtime_deps: list[LegacyDependency] = generate_legacy_dependencies(
-        chai_db, pkg, deps, config.dependency_types.runtime
+    changes_summary["Runtime Dependencies"] = len(runtime_deps)
+    changes_summary["Dev Dependencies"] = len(dev_deps)
+
+    # Print status report
+    print_status_report(
+        package_name,
+        exists_on_chai,
+        npm_response_ok,
+        npm_error,
+        homepage_result,
+        repository_result,
+        source_result,
+        runtime_deps_status,
+        dev_deps_status,
+        changes_summary,
+        dry_run,
     )
-    dev_deps: list[LegacyDependency] = generate_legacy_dependencies(
-        chai_db, pkg, dev_deps, config.dependency_types.development
+
+    # Load the package into the database (unless in dry run mode)
+    if not dry_run:
+        chai_db.load(pkg, urls, runtime_deps, dev_deps)
+        print("✅ Successfully committed changes to database")
+    else:
+        print("ℹ️ Dry run: No changes committed to database")
+
+    return True
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Load a single NPM package by name into CHAI"
     )
-    # Load the package and its URLs into the database
-    chai_db.load(pkg, urls, runtime_deps, dev_deps)
+    parser.add_argument("name", help="Name of the NPM package")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Check package without committing to database",
+    )
+    args = parser.parse_args()
+
+    success = process_package(args.name, args.dry_run)
+    if not success:
+        sys.exit(1)
