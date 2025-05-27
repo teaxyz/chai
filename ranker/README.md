@@ -79,3 +79,4 @@ docker run --rm -e CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@localhost:5435
 
 The container will execute `dedupe.py` followed by `main.py` and exit with code 0 on 
 success or a non-zero code on failure.
+
