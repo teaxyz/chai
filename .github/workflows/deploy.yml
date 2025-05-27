@@ -63,8 +63,8 @@ jobs:
                 "${{ steps.filter.outputs.homebrew }}" == "true" || \
                 "${{ steps.filter.outputs.debian }}" == "true" || \
                 "${{ steps.filter.outputs.pkgx }}" == "true" || \
-                "${{ steps.filter.outputs.alembic }}" == "true" ]]; then
-                "${{ steps.filter.outputs.ranker }}" == "true" ]]; then
+                "${{ steps.filter.outputs.ranker }}" == "true" || \
+                "${{ steps.filter.outputs.alembic }}" == "true" ]]; then  
             echo "any_changes=true" >> $GITHUB_OUTPUT
           else
             echo "any_changes=false" >> $GITHUB_OUTPUT
