@@ -1,7 +1,7 @@
 #!/usr/bin/env pkgx +python@3.11 uv run --with requests==2.31.0 --with permalint==0.1.8
 import argparse
 from datetime import datetime
-from typing import Any, List, Tuple
+from typing import Any
 from uuid import UUID, uuid4
 
 import requests
@@ -140,7 +140,7 @@ def get_latest_version_dev_dependencies(latest_version: dict) -> dict[str, str]:
         )
 
 
-def get_urls(package_info: dict) -> Tuple[str, str, str]:
+def get_urls(package_info: dict) -> tuple[str, str, str]:
     homepage = get_homepage(package_info)
     repository_url = get_repository_url(package_info)
     source_url = get_source_url(package_info)
