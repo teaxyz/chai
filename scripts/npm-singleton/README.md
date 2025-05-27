@@ -28,7 +28,7 @@ chmod +x scripts/npm-singleton/single.py
 PYTHONPATH=. scripts/npm-singleton/single.py <package_name> [--dry-run]
 ```
 
-### Method 2: Using uv directly
+### Method 2: Using [uv](https://github.com/astral-sh/uv) directly
 
 ```bash
 PYTHONPATH=. uv run scripts/npm-singleton/single.py <package_name> [--dry-run]
@@ -103,16 +103,19 @@ In dry-run mode, the script will show what changes would be made without committ
 Check a package without adding it to the database:
 
 ```bash
-PYTHONPATH=. scripts/npm-singleton/single.py react --dry-run
+PYTHONPATH=. ./scripts/npm-singleton/single.py react --dry-run
 ```
 
 Add a package to the database:
 
 ```bash
-PYTHONPATH=. scripts/npm-singleton/single.py lodash
+PYTHONPATH=. ./scripts/npm-singleton/single.py lodash
 ```
 
 ## Tasks
+
+The below can be run using [xc](https://xcfile.dev), from within the
+scripts/npm-singleton directory
 
 ### check
 
