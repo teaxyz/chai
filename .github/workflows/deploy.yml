@@ -30,6 +30,7 @@ jobs:
       debian: ${{ steps.filter.outputs.debian }}
       pkgx: ${{ steps.filter.outputs.pkgx }}
       alembic: ${{ steps.filter.outputs.alembic }}
+      ranker: ${{ steps.filter.outputs.ranker }}
       any_changes: ${{ steps.filter.outputs.any_changes }}
     steps:
       - uses: actions/checkout@v4
@@ -52,6 +53,8 @@ jobs:
             alembic:
               - 'alembic/**'
               - 'core/models/**'
+            ranker:
+              - 'ranker/**'
           
       - name: Set any_changes output
         id: set-any-changes
@@ -61,6 +64,7 @@ jobs:
                 "${{ steps.filter.outputs.debian }}" == "true" || \
                 "${{ steps.filter.outputs.pkgx }}" == "true" || \
                 "${{ steps.filter.outputs.alembic }}" == "true" ]]; then
+                "${{ steps.filter.outputs.ranker }}" == "true" ]]; then
             echo "any_changes=true" >> $GITHUB_OUTPUT
           else
             echo "any_changes=false" >> $GITHUB_OUTPUT
@@ -153,6 +157,16 @@ jobs:
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/alembic:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/alembic:latest
   
+      - name: Build and push Ranker indexer image
+        if: ${{ needs.changes.outputs.ranker == 'true' || github.event_name == 'workflow_dispatch' }}
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./ranker/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/ranker:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/ranker:latest
   deploy:
     needs: [changes, build]
     if: ${{ needs.changes.outputs.any_changes == 'true' || github.event_name == 'workflow_dispatch' }}
