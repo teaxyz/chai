@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from permalint import normalize_url
+from permalint import is_canonical_url, normalize_url
 
 from core.db import DB
 from core.logger import Logger
@@ -121,6 +121,11 @@ def main(config: Config, db: DedupeDB):
     # 1. Get current state
     current_canons: dict[str, Canon] = db.get_current_canons()
     logger.debug(f"Found {len(current_canons)} current canons")
+
+    # check if any canons are not canonicalized
+    for url, canon in current_canons.items():
+        if not is_canonical_url(url):
+            raise Exception(f"{canon.id}: {url} is not canonicalized")
 
     current_canon_packages: dict[UUID, UUID] = db.get_current_canon_packages()
     logger.debug(f"Found {len(current_canon_packages)} current canon packages")
