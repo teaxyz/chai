@@ -5,7 +5,12 @@ from permalint import normalize_url
 from core.db import DB
 from core.logger import Logger
 from core.models import URL, Canon, CanonPackage, Package, PackageURL
+from core.utils import env_vars
 from ranker.config import Config, load_config
+
+# TODO: add both of these to the config object for the ranker
+LOAD = env_vars("LOAD", "true")
+TEST = env_vars("TEST", "false")
 
 
 class DedupeDB(DB):
@@ -137,10 +142,10 @@ def main(config: Config, db: DedupeDB):
         try:
             canonicalized = normalize_url(url.url)
             if canonicalized != url.url:
-                not_permalinted.append(url)
+                not_permalinted.add(url)
         except Exception as e:
             logger.warn(f"Potential bug for `permalint` on {url.url}: {e}")
-            not_permalinted.append(url)
+            not_permalinted.add(url)
 
     if not_permalinted:
         logger.warn(f"Found {len(not_permalinted)} not permalinted homepages")
@@ -155,6 +160,9 @@ def main(config: Config, db: DedupeDB):
     mappings_to_update: list[tuple[UUID, UUID]] = []  # (package_id, canon_id)
 
     for pkg_id, url in latest_homepages.items():
+        if url in not_permalinted:
+            continue
+
         current_canon_id = current_canon_packages.get(pkg_id)
         target_canon = find_canon_for_url(url.url, current_canons)
 
@@ -176,12 +184,26 @@ def main(config: Config, db: DedupeDB):
                 canons_to_create.append(new_canon)
                 mappings_to_update.append((pkg_id, new_canon_id))
         else:
-            # Package already has a canon mapping
+            # Package already has a canon mapping, let's grab it
             current_canon = next(
                 c for c in current_canons.values() if c.id == current_canon_id
             )
+            current_canon_url: str = current_canon.url
 
-            if target_canon and target_canon.id != current_canon_id:
+            # also, let's grab the target canon's URL
+            target_canon_url: str = target_canon.url
+
+            # now, if target and current are not None, AND different, that's a data
+            # problem, and we should warn and stop
+            if target_canon and current_canon and target_canon.url != current_canon.url:
+                msg = f"""
+                    Multiple different canons for Package {pkg_id}:
+                    Actual canon {target_canon_url} 
+                    Current canon {current_canon_url}
+                """
+                logger.warn(msg)
+                raise Exception(msg)
+            elif target_canon and target_canon.id != current_canon_id:
                 # URL matches a different existing canon, update mapping
                 mappings_to_update.append((pkg_id, target_canon.id))
             elif current_canon.url != url.url:
@@ -189,10 +211,16 @@ def main(config: Config, db: DedupeDB):
                 canons_to_update.append((current_canon_id, url.url))
 
     # 5. Apply changes
-    logger.debug(f"Changes to apply:")
-    logger.debug(f"  Canons to update: {len(canons_to_update)}")
-    logger.debug(f"  Canons to create: {len(canons_to_create)}")
-    logger.debug(f"  Mappings to update: {len(mappings_to_update)}")
+    logger.log("-" * 100)
+    logger.log("Changes to apply:")
+    logger.log(f"  Canons to update: {len(canons_to_update)}")
+    logger.log(f"  Canons to create: {len(canons_to_create)}")
+    logger.log(f"  Mappings to update: {len(mappings_to_update)}")
+    logger.log("-" * 100)
+
+    if not LOAD:
+        logger.log("Skipping changes because LOAD is not set")
+        return
 
     # Update existing canon URLs
     for canon_id, new_url in canons_to_update:
@@ -209,7 +237,7 @@ def main(config: Config, db: DedupeDB):
         logger.debug(f"Updating package {package_id} to canon {canon_id}")
         db.update_canon_package_mapping(package_id, canon_id)
 
-    logger.log("✅ Improved deduplication process completed")
+    logger.log("✅ Deduplication process completed")
 
 
 if __name__ == "__main__":
