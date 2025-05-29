@@ -1,4 +1,4 @@
-#!/usr/bin/env uv run --with psycopg2==2.9.10 --with permalint==0.1.10
+#!/usr/bin/env uv run --with psycopg2==2.9.10 --with permalint==0.1.11
 
 import argparse
 from collections import defaultdict
@@ -8,7 +8,7 @@ from os import getenv
 from uuid import UUID, uuid4
 
 import psycopg2
-from permalint import is_canonical_url
+from permalint import is_canonical_url, normalize_url
 
 CHAI_DATABASE_URL = getenv("CHAI_DATABASE_URL")
 
@@ -53,61 +53,111 @@ class DB:
         self.cursor.execute("SELECT id, url FROM canons")
         return self.cursor.fetchall()
 
-    def get_package_urls(self, url_strings: list[str]) -> dict[UUID, list[UUID]]:
+    def get_package_urls(self, url_ids: list[UUID]) -> dict[UUID, list[UUID]]:
         self.cursor.execute(
-            "SELECT package_id, url_id FROM package_urls WHERE url IN %s",
-            (url_strings,),
+            "SELECT package_id, url_id FROM package_urls WHERE url_id IN %s",
+            (url_ids,),
         )
         result: dict[UUID, list[UUID]] = defaultdict(list)
         for package_id, url_id in self.cursor.fetchall():
             result[url_id].append(package_id)
         return result
 
-    def ingest(
-        self,
-        urls_to_add: list[URL],
-        package_urls_to_add: list[PackageURL],
-        canons_to_update: list[Canon],
-    ): ...
+    def ingest(self, urls_to_add: list[URL], package_urls_to_add: list[PackageURL]):
+        self.cursor.executemany(
+            "INSERT INTO urls (id, url, url_type_id, created_at, updated_at) VALUES (%s, %s, %s, %s, %s)",
+            [
+                (url.id, url.url, url.url_type_id, url.created_at, url.updated_at)
+                for url in urls_to_add
+            ],
+        )
+        print(f"Inserted {len(urls_to_add)} URLs")
+        self.cursor.executemany(
+            "INSERT INTO package_urls (id, package_id, url_id, created_at, updated_at) VALUES (%s, %s, %s, %s, %s)",
+            [
+                (
+                    package_url.id,
+                    package_url.package_id,
+                    package_url.url_id,
+                    package_url.created_at,
+                    package_url.updated_at,
+                )
+                for package_url in package_urls_to_add
+            ],
+        )
+        print(f"Inserted {len(package_urls_to_add)} package URLs")
+        self.conn.commit()
 
 
-def main(db: DB, homepage_id: UUID):
+def main(db: DB, homepage_id: UUID, dry_run: bool):
     now = datetime.now()
-    # get all the canons
-    canons: list[tuple[UUID, str]] = db.get_canons()
 
+    # get all the existing canons
+    canons: list[tuple[UUID, str]] = db.get_canons()
+    print(f"Found {len(canons)} existing canons")
+
+    # we'll need a map of new URL ID to old URL ID
+    old_url_to_new_url: dict[UUID, UUID] = {}
     urls_to_add: list[URL] = []
-    package_urls_to_add: list[PackageURL] = []
 
     for canon_id, url in canons:
         try:
             if not is_canonical_url(url):
-                # everything in canons is a Homepage
+                # canonicalize the URL
+                canonical_url = normalize_url(url)
+
+                # create the new URL object
                 new_url = URL(
                     id=uuid4(),
-                    url=url,
+                    url=canonical_url,
                     url_type_id=homepage_id,
                     created_at=now,
                     updated_at=now,
                 )
+
+                # add it to our master list of URLs to add
                 urls_to_add.append(new_url)
+
+                # populate the map
+                old_url_to_new_url[canon_id] = new_url.id
         except ValueError as e:
             print(f"{canon_id}: {url} is malformed: {e}")
 
-    # now, for each of these urls_to_add, we should copy the existing package_url
-    # entries they already have
-    package_urls: dict[UUID, list[UUID]] = db.get_package_urls(urls_to_add)
+    # now, for each of the old URLs, we need to know what packages they belong to, so we
+    # can replicate those relationships to the new URLs
+    old_url_ids = list(old_url_to_new_url.keys())
+    existing_package_urls: dict[UUID, list[UUID]] = db.get_package_urls(old_url_ids)
+    print(f"Found {len(existing_package_urls)} existing package URLs")
+    new_package_urls: list[PackageURL] = []
 
-    # package_urls is a dictionary of each exi
+    for package_id, url_ids in existing_package_urls.items():
+        for url_id in url_ids:
+            canonicalized_url_id = old_url_to_new_url[url_id]
+            # we'll need a new package url object for this
+            new_package_url = PackageURL(
+                id=uuid4(),
+                package_id=package_id,
+                url_id=canonicalized_url_id,
+                created_at=now,
+                updated_at=now,
+            )
+            new_package_urls.append(new_package_url)
 
-    # now check if they are normalized or not
-    print(f"Found {len(urls_to_add)} non-canonicalized canons")
+    print("-" * 100)
+    print("Going to insert:")
+    print(f"  {len(urls_to_add)} URLs")
+    print(f"  {len(new_package_urls)} PackageURLs")
+    print("-" * 100)
+
+    if not dry_run:
+        db.ingest(urls_to_add, new_package_urls)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--homepage-id", type=UUID, required=True)
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     db = DB()
-    main(db, args.homepage_id)
+    main(db, args.homepage_id, args.dry_run)
