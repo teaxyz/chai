@@ -153,10 +153,11 @@ def main(db: DB, homepage_id: UUID, dry_run: bool):
     # unique constraint on url_type (homepage) and url string
     existing_homepages: set[str] = set(urls.keys())
     skipped: int = 0
+    already_added: int = 0
 
     # we'll need a map of new URL ID to old URL ID
     old_url_to_new_url: dict[UUID, UUID] = {}
-    urls_to_add: list[URL] = []
+    urls_to_add: dict[str, URL] = {}
 
     for canon_id, url in canons:
         try:
@@ -169,6 +170,11 @@ def main(db: DB, homepage_id: UUID, dry_run: bool):
                     skipped += 1
                     continue
 
+                # also skip the URL if we've already seen it
+                if canonical_url in urls_to_add:
+                    already_added += 1
+                    continue
+
                 # create the new URL object
                 new_url = URL(
                     id=uuid4(),
@@ -179,7 +185,7 @@ def main(db: DB, homepage_id: UUID, dry_run: bool):
                 )
 
                 # add it to our master list of URLs to add
-                urls_to_add.append(new_url)
+                urls_to_add[canonical_url] = new_url
 
                 # populate the map
                 # we'd first need the URL ID of the old URL value
@@ -189,6 +195,7 @@ def main(db: DB, homepage_id: UUID, dry_run: bool):
             print(f"{canon_id}: {url} is malformed: {e}")
     print(f"  ⭐️ Populated {len(urls_to_add)} canonical URLs")
     print(f"  ⭐️ Skipped {skipped} URLs that were already canonicalized")
+    print(f"  ⭐️ Skipped {already_added} URLs that were already added")
 
     # now, for each of the old URLs, we need to know what packages they belong to, so we
     # can replicate those relationships to the new URLs
@@ -222,7 +229,9 @@ def main(db: DB, homepage_id: UUID, dry_run: bool):
     print(f"  {len(new_package_urls)} PackageURLs")
     print("-" * 100)
 
-    db.ingest(urls_to_add, new_package_urls, dry_run)
+    urls_to_add_list = list(urls_to_add.values())
+
+    db.ingest(urls_to_add_list, new_package_urls, dry_run)
 
 
 if __name__ == "__main__":
