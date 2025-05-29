@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres
+    shm_size: 256m
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=s3cr3t
