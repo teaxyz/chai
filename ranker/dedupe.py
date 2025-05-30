@@ -219,7 +219,7 @@ def process_deduplication_changes(
 def main(config: DedupeConfig, db: DedupeDB):
     logger = Logger("ranker.dedupe_v2")
     now = datetime.now()
-    logger.debug(f"Starting deduplication process at {now}")
+    logger.log(f"Starting deduplication process at {now}")
 
     # 1. Get current state
     current_canons: dict[UUID, Canon] = db.get_current_canons()
