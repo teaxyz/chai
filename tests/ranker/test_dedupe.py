@@ -6,7 +6,7 @@ from uuid import uuid4
 from core.config import URLTypes
 from core.models import URL, Canon, Package
 from ranker.config import DedupeConfig
-from ranker.dedupe_v2 import DedupeDB, main
+from ranker.dedupe import DedupeDB, main
 
 
 class TestDedupe(unittest.TestCase):
