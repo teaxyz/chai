@@ -8,6 +8,7 @@ from sqlalchemy import func
 from core.db import DB
 from core.logger import Logger
 from core.models import Canon, CanonPackage, Package, PackageManager, Source, URLType
+from core.utils import env_vars
 
 logger = Logger("graph.config")
 SYSTEM_PACKAGE_MANAGERS = ["homebrew", "debian", "pkgx"]
@@ -151,6 +152,15 @@ class URLTypes:
         return f"URLTypes(homepage_url_type_id={self.homepage_url_type_id})"
 
 
+class DedupeConfig:
+    def __init__(self, db: ConfigDB) -> None:
+        self.homepage_url_type_id = db.get_homepage_url_type_id()
+        self.load = env_vars("LOAD", "true")
+
+    def __str__(self) -> str:
+        return f"DedupeConfig(db={self.db})"
+
+
 @dataclass
 class Config:
     def __init__(self, db: ConfigDB) -> None:
@@ -166,3 +176,7 @@ class Config:
 def load_config() -> Config:
     logger.debug("Loading config")
     return Config(db=ConfigDB())
+
+
+def load_dedupe_config() -> DedupeConfig:
+    return DedupeConfig(db=ConfigDB())

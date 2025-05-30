@@ -1,6 +1,3 @@
-import argparse
-import cProfile
-import pstats
 from datetime import datetime
 from uuid import UUID, uuid4
 
@@ -11,18 +8,13 @@ from sqlalchemy.orm import Session
 from core.db import DB
 from core.logger import Logger
 from core.models import URL, BaseModel, Canon, CanonPackage, Package, PackageURL
-from core.utils import env_vars
-from ranker.config import Config, load_config
-
-# TODO: add both of these to the config object for the ranker
-LOAD = env_vars("LOAD", "true")
-TEST = env_vars("TEST", "false")
+from ranker.config import DedupeConfig, load_dedupe_config
 
 
 class DedupeDB(DB):
-    def __init__(self, config: Config):
+    def __init__(self, config: DedupeConfig):
         super().__init__("ranker.db")
-        self.config: Config = config
+        self.config: DedupeConfig = config
 
     def get_current_canons(self) -> dict[UUID, Canon]:
         """Get current canons as a mapping from URL to Canon object."""
@@ -45,11 +37,12 @@ class DedupeDB(DB):
                 session.query(Package, URL)
                 .join(PackageURL, Package.id == PackageURL.package_id)
                 .join(URL, PackageURL.url_id == URL.id)
-                .where(URL.url_type_id == self.config.url_types.homepage_url_type_id)
+                .where(URL.url_type_id == self.config.homepage_url_type_id)
                 .order_by(Package.id, URL.created_at.desc())  # Latest URL / package
                 .all()
             )
 
+    # TODO: first to be optimized
     def ingest(
         self,
         new_canons: list[Canon],
@@ -123,7 +116,7 @@ def build_update_payload(
     return {"id": current_canon_package_id, "canon_id": new_canon_id, "updated_at": now}
 
 
-def main(db: DedupeDB):
+def main(config: DedupeConfig, db: DedupeDB):
     logger = Logger("ranker.dedupe_v2")
     now = datetime.now()
     logger.debug(f"Starting deduplication process at {now}")
@@ -240,7 +233,7 @@ def main(db: DedupeDB):
     logger.log(f"  Mappings to update: {len(mappings_to_update)}")
     logger.log("-" * 100)
 
-    if not LOAD:
+    if not config.load:
         logger.log("Skipping changes because LOAD is not set")
         return
 
@@ -249,25 +242,11 @@ def main(db: DedupeDB):
     logger.log("✅ Deduplication process completed")
 
 
-def profile_main(db: DedupeDB):
-    cProfile.run("main(db)", "ranker.dedupe_v2.prof")
-    p = pstats.Stats("ranker.dedupe_v2.prof")
-    p.sort_stats("cumulative")
-    p.print_stats()
-
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--profile", action="store_true")
-    args = parser.parse_args()
-
-    config: Config = load_config()
+    config: DedupeConfig = load_dedupe_config()
     db: DedupeDB = DedupeDB(config)
 
     try:
-        if args.profile:
-            profile_main(db)
-        else:
-            main(db)
+        main(config, db)
     finally:
         db.close()
