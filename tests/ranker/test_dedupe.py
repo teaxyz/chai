@@ -173,7 +173,9 @@ class TestDedupe(unittest.TestCase):
 
         # Current state: no canon for this URL, but package is mapped to different canon
         current_canons = {self.url2_id: existing_canon}  # old URL exists
-        current_canon_packages = {self.pkg1_id: existing_canon.id}  # pkg mapped to old
+        current_canon_packages = {
+            self.pkg1_id: {"id": uuid4(), "canon_id": existing_canon.id}
+        }  # pkg mapped to old canon with structure {id, canon_id}
         packages_with_homepages = [(self.package1, homepage_url)]  # homepage is new
 
         # Mock database
@@ -218,17 +220,16 @@ class TestDedupe(unittest.TestCase):
 
         # Verify mapping update (should point to NEW canon, not old one)
         updated_mapping = updated_canon_packages[0]
+        self.assertIn("id", updated_mapping, "Update should include canon package ID")
         self.assertEqual(
-            updated_mapping[0], self.pkg1_id, "Should update correct package"
-        )
-        self.assertEqual(
-            updated_mapping[1],
+            updated_mapping["canon_id"],
             created_canon.id,
             "Should update to NEW canon, not old one",
         )
         self.assertNotEqual(
-            updated_mapping[1], self.canon2_id, "Should NOT point to old canon"
+            updated_mapping["canon_id"], self.canon2_id, "Should NOT point to old canon"
         )
+        self.assertIn("updated_at", updated_mapping, "Update should include timestamp")
 
     def test_case_2a_no_changes_needed(self):
         """
@@ -256,7 +257,9 @@ class TestDedupe(unittest.TestCase):
 
         # Current state: URL has canon, package linked to that same canon
         current_canons = {self.url1_id: existing_canon}
-        current_canon_packages = {self.pkg1_id: self.canon1_id}  # Already correct
+        current_canon_packages = {
+            self.pkg1_id: {"id": uuid4(), "canon_id": self.canon1_id}
+        }  # Already correct with new structure
         packages_with_homepages = [(self.package1, homepage_url)]
 
         # Mock database
@@ -327,7 +330,9 @@ class TestDedupe(unittest.TestCase):
             self.url1_id: correct_canon,
             self.url2_id: wrong_canon,
         }
-        current_canon_packages = {self.pkg1_id: self.canon2_id}  # Linked to wrong canon
+        current_canon_packages = {
+            self.pkg1_id: {"id": uuid4(), "canon_id": self.canon2_id}
+        }  # Linked to wrong canon with new structure
         packages_with_homepages = [(self.package1, homepage_url)]
 
         # Mock database
@@ -366,15 +371,18 @@ class TestDedupe(unittest.TestCase):
 
         # Verify mapping update points to correct canon
         updated_mapping = updated_canon_packages[0]
+        self.assertIn("id", updated_mapping, "Update should include canon package ID")
         self.assertEqual(
-            updated_mapping[0], self.pkg1_id, "Should update correct package"
-        )
-        self.assertEqual(
-            updated_mapping[1], self.canon1_id, "Should update to correct canon"
+            updated_mapping["canon_id"],
+            self.canon1_id,
+            "Should update to correct canon",
         )
         self.assertNotEqual(
-            updated_mapping[1], self.canon2_id, "Should NOT point to wrong canon"
+            updated_mapping["canon_id"],
+            self.canon2_id,
+            "Should NOT point to wrong canon",
         )
+        self.assertIn("updated_at", updated_mapping, "Update should include timestamp")
 
     def test_case_2c_create_new_mapping(self):
         """
@@ -470,7 +478,7 @@ class TestDedupe(unittest.TestCase):
 
         # Current state: no canons exist for this URL, no package mappings exist
         current_canons = {}  # URL has no canon
-        current_canon_packages = {}  # Neither package has mapping
+        current_canon_packages = {}  # Neither package has mapping (empty dict with new structure)
         packages_with_homepages = [
             (self.package1, shared_homepage_url),  # Both packages point to same URL
             (self.package2, shared_homepage_url),
