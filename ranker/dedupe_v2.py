@@ -1,3 +1,6 @@
+import argparse
+import cProfile
+import pstats
 from datetime import datetime
 from uuid import UUID, uuid4
 
@@ -73,12 +76,17 @@ def get_latest_homepage_per_package(
         # the first URL we see for each package is the latest
         if pkg.id not in latest_homepages:
             # guard against non-canonicalized URLs
-            if not is_canonical_url(url.url):
+            try:
+                if not is_canonical_url(url.url):
+                    non_canonical_urls.append(url)
+            except Exception as e:
+                logger.warn(f"Error checking if {url.url} is canonical: {e}")
                 non_canonical_urls.append(url)
             else:
                 latest_homepages[pkg.id] = url
 
-    logger.warn(f"Found {len(non_canonical_urls)} non-canonicalized URLs")
+    if non_canonical_urls:
+        logger.warn(f"Found {len(non_canonical_urls)} non-canonicalized URLs in URLs")
 
     return latest_homepages, non_canonical_urls
 
@@ -102,7 +110,7 @@ def main(db: DedupeDB):
 
     # 2. Get latest homepage per package
     latest_homepages, non_canonical_urls = get_latest_homepage_per_package(
-        packages_with_homepages
+        packages_with_homepages, logger
     )
     logger.debug(f"Found {len(latest_homepages)} packages with latest homepages")
 
@@ -190,11 +198,25 @@ def main(db: DedupeDB):
         logger.warn(msg)
 
 
+def profile_main(db: DedupeDB):
+    cProfile.run("main(db)", "ranker.dedupe_v2.prof")
+    p = pstats.Stats("ranker.dedupe_v2.prof")
+    p.sort_stats("cumulative")
+    p.print_stats()
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--profile", action="store_true")
+    args = parser.parse_args()
+
     config: Config = load_config()
     db: DedupeDB = DedupeDB(config)
 
     try:
-        main(db)
+        if args.profile:
+            profile_main(db)
+        else:
+            main(db)
     finally:
         db.close()
