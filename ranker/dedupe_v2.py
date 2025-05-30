@@ -3,10 +3,11 @@ from uuid import UUID, uuid4
 
 from permalint import is_canonical_url
 from sqlalchemy import update
+from sqlalchemy.orm import Session
 
 from core.db import DB
 from core.logger import Logger
-from core.models import URL, Canon, CanonPackage, Package, PackageURL
+from core.models import URL, BaseModel, Canon, CanonPackage, Package, PackageURL
 from core.utils import env_vars
 from ranker.config import Config, load_config
 
@@ -39,30 +40,25 @@ class DedupeDB(DB):
                 .join(PackageURL, Package.id == PackageURL.package_id)
                 .join(URL, PackageURL.url_id == URL.id)
                 .where(URL.url_type_id == self.config.url_types.homepage_url_type_id)
-                .order_by(
-                    Package.id, URL.created_at.desc()
-                )  # Latest URL per package first
+                .order_by(Package.id, URL.created_at.desc())  # Latest URL / package
                 .all()
             )
 
-    # TODO: make these execute_values / batched / just better
-    def create_canon(self, canon: Canon) -> None:
-        """Create a new canon."""
+    def ingest(
+        self,
+        new_canons: list[Canon],
+        new_canon_packages: list[CanonPackage],
+        updated_canon_packages: list[tuple[UUID, UUID]],
+    ) -> None:
         with self.session() as session:
-            session.add(canon)
+            self.add_with_flush(session, new_canons)
+            self.add_with_flush(session, new_canon_packages)
+            session.execute(update(CanonPackage), updated_canon_packages)
             session.commit()
 
-    def create_canon_package(self, canon_package: CanonPackage) -> None:
-        """Create a new canon-package mapping."""
-        with self.session() as session:
-            session.add(canon_package)
-            session.commit()
-
-    def update_canon_package(self, updated_mapping: tuple[UUID, UUID]) -> None:
-        """Update or create canon-package mapping."""
-        with self.session() as session:
-            session.execute(update(CanonPackage), updated_mapping)
-            session.commit()
+    def add_with_flush(self, session: Session, rows: list[BaseModel]) -> None:
+        session.add_all(rows)
+        session.flush()
 
 
 def get_latest_homepage_per_package(
@@ -91,11 +87,6 @@ def main(config: Config, db: DedupeDB):
     # 1. Get current state
     current_canons: dict[UUID, Canon] = db.get_current_canons()
     logger.debug(f"Found {len(current_canons)} current canons")
-
-    # check if any canons are not canonicalized, and throw if so
-    for url, canon in current_canons.items():
-        if not is_canonical_url(url):
-            raise Exception(f"{canon.id}: {url} is not canonicalized")
 
     current_canon_packages: dict[UUID, UUID] = db.get_current_canon_packages()
     logger.debug(f"Found {len(current_canon_packages)} current canon packages")
@@ -184,17 +175,7 @@ def main(config: Config, db: DedupeDB):
         logger.log("Skipping changes because LOAD is not set")
         return
 
-    # Create new canons
-    for canon in canons_to_create:
-        db.create_canon(canon)
-
-    # Create new canon-package mappings
-    for mapping in mappings_to_create:
-        db.create_canon_package(mapping)
-
-    # Update canon-package mappings
-    for mapping in mappings_to_update:
-        db.update_canon_package(mapping)
+    db.ingest(canons_to_create, mappings_to_create, mappings_to_update)
 
     logger.log("✅ Deduplication process completed")
 

@@ -3,10 +3,22 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
-from core.config import URLTypes
-from core.models import URL, Canon, Package
-from ranker.config import Config
-from ranker.dedupe_v2 import DedupeDB, main
+# Mock the problematic modules before any imports that might trigger database calls
+mock_config_db = MagicMock()
+mock_config_db.get_npm_pm_id.return_value = uuid4()
+mock_config_db.get_pm_id_by_name.return_value = [(uuid4(),)]
+
+# Mock the config module
+with patch.dict(
+    "sys.modules",
+    {
+        "ranker.config": MagicMock(),
+    },
+):
+    # Now import the modules we need
+    from core.config import URLTypes
+    from core.models import URL, Canon, Package
+    from ranker.dedupe_v2 import DedupeDB, main
 
 
 class TestDedupe(unittest.TestCase):
@@ -36,7 +48,7 @@ class TestDedupe(unittest.TestCase):
         # Mock config
         self.url_types = MagicMock(spec=URLTypes)
         self.url_types.homepage_url_type_id = self.homepage_url_type_id
-        self.mock_config = MagicMock(spec=Config)
+        self.mock_config = MagicMock()
         self.mock_config.url_types = self.url_types
 
         # Common test URLs
@@ -75,20 +87,17 @@ class TestDedupe(unittest.TestCase):
             updated_at=datetime.now(),
         )
 
-    @patch("ranker.dedupe_v2.is_canonical_url")
-    def test_case_2d_new_canon_new_mapping(self, mock_is_canonical):
+    def test_case_2d_new_canon_new_mapping(self):
         """
         Test Case 2d: URL has no canon AND package has no existing mapping
 
         Expected: Create new canon + create new mapping
         """
         # Arrange
-        mock_is_canonical.return_value = True
-
-        # Create URL object that has no canon
+        # Create URL object that has no canon (using canonical URL to avoid validation issues)
         homepage_url = URL(
             id=self.url1_id,
-            url=self.canonical_url,
+            url=self.canonical_url,  # Already canonical
             url_type_id=self.homepage_url_type_id,
             created_at=datetime.now(),
             updated_at=datetime.now(),
@@ -105,35 +114,35 @@ class TestDedupe(unittest.TestCase):
         mock_db.get_current_canon_packages.return_value = current_canon_packages
         mock_db.get_packages_with_homepages.return_value = packages_with_homepages
 
-        created_canons = []
-        created_mappings = []
-        updated_mappings = []
+        # Capture ingest call arguments
+        ingest_calls = []
 
-        def capture_canon(canon):
-            created_canons.append(canon)
+        def capture_ingest(new_canons, new_canon_packages, updated_canon_packages):
+            ingest_calls.append(
+                (new_canons, new_canon_packages, updated_canon_packages)
+            )
 
-        def capture_mapping(mapping):
-            created_mappings.append(mapping)
-
-        def capture_mapping_update(mapping):
-            updated_mappings.append(mapping)
-
-        mock_db.create_canon.side_effect = capture_canon
-        mock_db.create_canon_package.side_effect = capture_mapping
-        mock_db.update_canon_package.side_effect = capture_mapping_update
+        mock_db.ingest.side_effect = capture_ingest
 
         # Act
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
             main(self.mock_config, mock_db)
 
         # Assert
-        self.assertEqual(len(created_canons), 1, "Should create exactly one new canon")
-        self.assertEqual(
-            len(created_mappings), 1, "Should create exactly one new mapping"
-        )
+        self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
+
+        new_canons, new_canon_packages, updated_canon_packages = ingest_calls[0]
 
         # Verify canon creation
-        created_canon = created_canons[0]
+        self.assertEqual(len(new_canons), 1, "Should create exactly one new canon")
+        self.assertEqual(
+            len(new_canon_packages), 1, "Should create exactly one new mapping"
+        )
+        self.assertEqual(
+            len(updated_canon_packages), 0, "Should not update any mappings"
+        )
+
+        created_canon = new_canons[0]
         self.assertEqual(
             created_canon.url_id, self.url1_id, "Canon should reference correct URL ID"
         )
@@ -142,7 +151,7 @@ class TestDedupe(unittest.TestCase):
         )
 
         # Verify mapping creation
-        created_mapping = created_mappings[0]
+        created_mapping = new_canon_packages[0]
         self.assertEqual(
             created_mapping.package_id, self.pkg1_id, "Should map correct package"
         )
@@ -150,19 +159,13 @@ class TestDedupe(unittest.TestCase):
             created_mapping.canon_id, created_canon.id, "Should map to new canon"
         )
 
-        # Verify no updates to existing data
-        mock_db.update_canon_package.assert_not_called()
-
-    @patch("ranker.dedupe_v2.is_canonical_url")
-    def test_case_2d_new_canon_update_mapping(self, mock_is_canonical):
+    def test_case_2d_new_canon_update_mapping(self):
         """
         Test Case 2d: URL has no canon AND package has existing mapping to different canon
 
         Expected: Create new canon + update existing mapping
         """
         # Arrange
-        mock_is_canonical.return_value = True
-
         # Create URL object that has no canon
         homepage_url = URL(
             id=self.url1_id,
@@ -192,33 +195,33 @@ class TestDedupe(unittest.TestCase):
         mock_db.get_current_canon_packages.return_value = current_canon_packages
         mock_db.get_packages_with_homepages.return_value = packages_with_homepages
 
-        created_canons = []
-        created_mappings = []
-        updated_mappings = []
+        # Capture ingest call arguments
+        ingest_calls = []
 
-        def capture_canon(canon):
-            created_canons.append(canon)
+        def capture_ingest(new_canons, new_canon_packages, updated_canon_packages):
+            ingest_calls.append(
+                (new_canons, new_canon_packages, updated_canon_packages)
+            )
 
-        def capture_mapping(mapping):
-            created_mappings.append(mapping)
-
-        def capture_mapping_update(mapping):
-            updated_mappings.append(mapping)
-
-        mock_db.create_canon.side_effect = capture_canon
-        mock_db.create_canon_package.side_effect = capture_mapping
-        mock_db.update_canon_package.side_effect = capture_mapping_update
+        mock_db.ingest.side_effect = capture_ingest
 
         # Act
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
             main(self.mock_config, mock_db)
 
         # Assert
-        self.assertEqual(len(created_canons), 1, "Should create exactly one new canon")
-        self.assertEqual(len(updated_mappings), 1, "Should update exactly one mapping")
+        self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
+
+        new_canons, new_canon_packages, updated_canon_packages = ingest_calls[0]
 
         # Verify canon creation
-        created_canon = created_canons[0]
+        self.assertEqual(len(new_canons), 1, "Should create exactly one new canon")
+        self.assertEqual(len(new_canon_packages), 0, "Should not create new mappings")
+        self.assertEqual(
+            len(updated_canon_packages), 1, "Should update exactly one mapping"
+        )
+
+        created_canon = new_canons[0]
         self.assertEqual(
             created_canon.url_id, self.url1_id, "Canon should reference correct URL ID"
         )
@@ -227,7 +230,7 @@ class TestDedupe(unittest.TestCase):
         )
 
         # Verify mapping update (should point to NEW canon, not old one)
-        updated_mapping = updated_mappings[0]
+        updated_mapping = updated_canon_packages[0]
         self.assertEqual(
             updated_mapping[0], self.pkg1_id, "Should update correct package"
         )
@@ -240,19 +243,13 @@ class TestDedupe(unittest.TestCase):
             updated_mapping[1], self.canon2_id, "Should NOT point to old canon"
         )
 
-        # Verify no updates to existing canons
-        mock_db.create_canon_package.assert_not_called()
-
-    @patch("ranker.dedupe_v2.is_canonical_url")
-    def test_case_2a_no_changes_needed(self, mock_is_canonical):
+    def test_case_2a_no_changes_needed(self):
         """
         Test Case 2a: URL has canon AND package already linked to that canon
 
         Expected: Do nothing (no changes)
         """
         # Arrange
-        mock_is_canonical.return_value = True
-
         # Create URL object and existing canon
         homepage_url = URL(
             id=self.url1_id,
@@ -281,25 +278,38 @@ class TestDedupe(unittest.TestCase):
         mock_db.get_current_canon_packages.return_value = current_canon_packages
         mock_db.get_packages_with_homepages.return_value = packages_with_homepages
 
+        # Capture ingest call arguments
+        ingest_calls = []
+
+        def capture_ingest(new_canons, new_canon_packages, updated_canon_packages):
+            ingest_calls.append(
+                (new_canons, new_canon_packages, updated_canon_packages)
+            )
+
+        mock_db.ingest.side_effect = capture_ingest
+
         # Act
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
             main(self.mock_config, mock_db)
 
-        # Assert - no changes should be made
-        mock_db.create_canon.assert_not_called()
-        mock_db.create_canon_package.assert_not_called()
-        mock_db.update_canon_package.assert_not_called()
+        # Assert - should call ingest with empty lists (no changes)
+        self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
 
-    @patch("ranker.dedupe_v2.is_canonical_url")
-    def test_case_2b_update_existing_mapping(self, mock_is_canonical):
+        new_canons, new_canon_packages, updated_canon_packages = ingest_calls[0]
+
+        self.assertEqual(len(new_canons), 0, "Should not create any canons")
+        self.assertEqual(len(new_canon_packages), 0, "Should not create any mappings")
+        self.assertEqual(
+            len(updated_canon_packages), 0, "Should not update any mappings"
+        )
+
+    def test_case_2b_update_existing_mapping(self):
         """
         Test Case 2b: URL has canon AND package linked to different canon
 
         Expected: Update mapping to correct canon
         """
         # Arrange
-        mock_is_canonical.return_value = True
-
         # Create URL object and canons
         homepage_url = URL(
             id=self.url1_id,
@@ -339,22 +349,36 @@ class TestDedupe(unittest.TestCase):
         mock_db.get_current_canon_packages.return_value = current_canon_packages
         mock_db.get_packages_with_homepages.return_value = packages_with_homepages
 
-        updated_mappings = []
+        # Capture ingest call arguments
+        ingest_calls = []
 
-        def capture_mapping_update(mapping):
-            updated_mappings.append(mapping)
+        def capture_ingest(new_canons, new_canon_packages, updated_canon_packages):
+            ingest_calls.append(
+                (new_canons, new_canon_packages, updated_canon_packages)
+            )
 
-        mock_db.update_canon_package.side_effect = capture_mapping_update
+        mock_db.ingest.side_effect = capture_ingest
 
         # Act
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
             main(self.mock_config, mock_db)
 
         # Assert
-        self.assertEqual(len(updated_mappings), 1, "Should update exactly one mapping")
+        self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
+
+        new_canons, new_canon_packages, updated_canon_packages = ingest_calls[0]
+
+        # Should only update mapping, no new creations
+        self.assertEqual(len(new_canons), 0, "Should not create any canons")
+        self.assertEqual(
+            len(new_canon_packages), 0, "Should not create any new mappings"
+        )
+        self.assertEqual(
+            len(updated_canon_packages), 1, "Should update exactly one mapping"
+        )
 
         # Verify mapping update points to correct canon
-        updated_mapping = updated_mappings[0]
+        updated_mapping = updated_canon_packages[0]
         self.assertEqual(
             updated_mapping[0], self.pkg1_id, "Should update correct package"
         )
@@ -365,20 +389,13 @@ class TestDedupe(unittest.TestCase):
             updated_mapping[1], self.canon2_id, "Should NOT point to wrong canon"
         )
 
-        # Verify no new creations
-        mock_db.create_canon.assert_not_called()
-        mock_db.create_canon_package.assert_not_called()
-
-    @patch("ranker.dedupe_v2.is_canonical_url")
-    def test_case_2c_create_new_mapping(self, mock_is_canonical):
+    def test_case_2c_create_new_mapping(self):
         """
         Test Case 2c: URL has canon AND package has no mapping
 
         Expected: Create new mapping to existing canon
         """
         # Arrange
-        mock_is_canonical.return_value = True
-
         # Create URL object and existing canon
         homepage_url = URL(
             id=self.url1_id,
@@ -407,34 +424,42 @@ class TestDedupe(unittest.TestCase):
         mock_db.get_current_canon_packages.return_value = current_canon_packages
         mock_db.get_packages_with_homepages.return_value = packages_with_homepages
 
-        created_mappings = []
+        # Capture ingest call arguments
+        ingest_calls = []
 
-        def capture_mapping(mapping):
-            created_mappings.append(mapping)
+        def capture_ingest(new_canons, new_canon_packages, updated_canon_packages):
+            ingest_calls.append(
+                (new_canons, new_canon_packages, updated_canon_packages)
+            )
 
-        mock_db.create_canon_package.side_effect = capture_mapping
+        mock_db.ingest.side_effect = capture_ingest
 
         # Act
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
             main(self.mock_config, mock_db)
 
         # Assert
+        self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
+
+        new_canons, new_canon_packages, updated_canon_packages = ingest_calls[0]
+
+        # Should only create new mapping, no updates or new canons
+        self.assertEqual(len(new_canons), 0, "Should not create any canons")
         self.assertEqual(
-            len(created_mappings), 1, "Should create exactly one new mapping"
+            len(new_canon_packages), 1, "Should create exactly one new mapping"
+        )
+        self.assertEqual(
+            len(updated_canon_packages), 0, "Should not update any mappings"
         )
 
         # Verify mapping creation points to existing canon
-        created_mapping = created_mappings[0]
+        created_mapping = new_canon_packages[0]
         self.assertEqual(
             created_mapping.package_id, self.pkg1_id, "Should map correct package"
         )
         self.assertEqual(
             created_mapping.canon_id, self.canon1_id, "Should map to existing canon"
         )
-
-        # Verify no other changes
-        mock_db.create_canon.assert_not_called()
-        mock_db.update_canon_package.assert_not_called()
 
 
 if __name__ == "__main__":
