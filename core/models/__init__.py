@@ -472,9 +472,19 @@ class LegacyDependency(Base):
 
 class Canon(Base):
     __tablename__ = "canons"
-    id = Column(UUID(as_uuid=True), primary_key=True)
-    url = Column(String, nullable=False, index=True, unique=True)  # the derived key
-    # CanonNames should be its own table, so we collect all aliases of a package!
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=func.uuid_generate_v4(),
+        server_default=func.uuid_generate_v4(),
+    )
+    url_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("urls.id"),
+        nullable=False,
+        index=True,
+        unique=True,
+    )
     name_trgm_idx = Index(
         "ix_canons_name_trgm",
         "name",
@@ -488,6 +498,8 @@ class Canon(Base):
     updated_at = Column(
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
+
+    url: Mapped["URL"] = relationship()
 
 
 class CanonPackage(Base):
