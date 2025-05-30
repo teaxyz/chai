@@ -27,13 +27,18 @@ def upgrade() -> None:
     # Step 1: Rename existing table to preserve data as backup
     op.rename_table("canons", "canons_old")
 
-    # Step 2: Drop FK constraints that pointed to old table
+    # Step 2: Drop FK constraints that pointed to old table (from other tables)
     op.drop_constraint(
         "fk_canon_packages_canon_id_canons", "canon_packages", type_="foreignkey"
     )
     op.drop_constraint("fk_tea_ranks_canon_id_canons", "tea_ranks", type_="foreignkey")
 
-    # Step 3: Create new canons table with proper schema
+    # Step 3: Drop indexes and constraints from old table to avoid naming conflicts
+    op.drop_constraint("pk_canons", "canons_old", type_="primary")
+    op.drop_index("ix_canons_url", table_name="canons_old")
+    op.drop_index("ix_canons_name_trgm", table_name="canons_old")
+
+    # Step 4: Create new canons table with proper schema
     op.create_table(
         "canons",
         sa.Column(
@@ -57,8 +62,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("url_id", name="uq_canons_url_id"),
     )
 
-    # Step 4: Create indexes
-    op.create_index("ix_canons_url_id", "canons", ["url_id"])
+    # Step 5: Create indexes
     op.create_index(
         "ix_canons_name_trgm",
         "canons",
@@ -73,7 +77,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """
-    Restore original canons table
+    Restore original canons table with all its original indexes and constraints
     """
     # FK constraints were dropped in upgrade and not recreated, so no need to drop them here
 
@@ -83,7 +87,18 @@ def downgrade() -> None:
     # Restore old table
     op.rename_table("canons_old", "canons")
 
-    # Recreate original FK constraints
+    # Recreate all original constraints and indexes on restored table
+    op.create_primary_key("pk_canons", "canons", ["id"])
+    op.create_index("ix_canons_url", "canons", ["url"], unique=True)
+    op.create_index(
+        "ix_canons_name_trgm",
+        "canons",
+        ["name"],
+        postgresql_using="gin",
+        postgresql_ops={"name": "gin_trgm_ops"},
+    )
+
+    # Recreate FK constraints from other tables pointing to canons
     op.create_foreign_key(
         "fk_canon_packages_canon_id_canons",
         "canon_packages",
