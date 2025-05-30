@@ -1,4 +1,5 @@
-from uuid import UUID
+from datetime import datetime
+from uuid import UUID, uuid4
 
 from permalint import is_canonical_url, normalize_url
 
@@ -18,11 +19,11 @@ class DedupeDB(DB):
         super().__init__("ranker.db")
         self.config: Config = config
 
-    def get_current_canons(self) -> dict[str, Canon]:
+    def get_current_canons(self) -> dict[UUID, Canon]:
         """Get current canons as a mapping from URL to Canon object."""
         with self.session() as session:
             canons = session.query(Canon).all()
-            return {canon.url: canon for canon in canons}
+            return {canon.url_id: canon for canon in canons}
 
     def get_current_canon_packages(self) -> dict[UUID, UUID]:
         """Get current canon-package mappings as dict[package_id -> canon_id]."""
@@ -95,34 +96,16 @@ def get_latest_homepage_per_package(
     return latest_homepages
 
 
-def find_canon_for_url(url: str, current_canons: dict[str, Canon]) -> Canon | None:
-    """Find an existing canon that should be used for this URL.
-
-    This handles cases where:
-    1. Exact URL match exists
-    2. Canonicalized version of existing canon URL matches this URL
-    """
-    # Direct match
-    if url in current_canons:
-        return current_canons[url]
-
-    # Check if this URL is a canonicalized version of any existing canon
-    for existing_url, canon in current_canons.items():
-        if normalize_url(existing_url) == url:
-            return canon
-
-    return None
-
-
 def main(config: Config, db: DedupeDB):
     logger = Logger("ranker.dedupe_v2")
-    logger.debug("Starting improved deduplication process")
+    now = datetime.now()
+    logger.debug(f"Starting deduplication process at {now}")
 
     # 1. Get current state
-    current_canons: dict[str, Canon] = db.get_current_canons()
+    current_canons: dict[UUID, Canon] = db.get_current_canons()
     logger.debug(f"Found {len(current_canons)} current canons")
 
-    # check if any canons are not canonicalized
+    # check if any canons are not canonicalized, and throw if so
     for url, canon in current_canons.items():
         if not is_canonical_url(url):
             raise Exception(f"{canon.id}: {url} is not canonicalized")
@@ -141,79 +124,49 @@ def main(config: Config, db: DedupeDB):
     )
     logger.debug(f"Found {len(latest_homepages)} packages with latest homepages")
 
-    # 3. Validate all URLs are permalinted
-    not_permalinted: set[URL] = set()
-    for pkg_id, url in latest_homepages.items():
-        try:
-            canonicalized = normalize_url(url.url)
-            if canonicalized != url.url:
-                not_permalinted.add(url)
-        except Exception as e:
-            logger.warn(f"Potential bug for `permalint` on {url.url}: {e}")
-            not_permalinted.add(url)
-
-    if not_permalinted:
-        logger.warn(f"Found {len(not_permalinted)} not permalinted homepages")
-        logger.warn(
-            "The following homepages are not permalinted, please fix them manually:"
-        )
-        raise Exception("Not permalinted homepages found")
-
-    # 4. Process changes differentially
+    # 3. Process changes differentially
     canons_to_update: list[tuple[UUID, str]] = []  # (canon_id, new_url)
     canons_to_create: list[Canon] = []
     mappings_to_update: list[tuple[UUID, UUID]] = []  # (package_id, canon_id)
+    mappings_to_create: list[tuple[UUID, UUID]] = []  # (package_id, canon_id)
 
     for pkg_id, url in latest_homepages.items():
-        if url in not_permalinted:
-            continue
+        # does the url have a canon?
+        actual_canon_id = current_canons.get(url.id)
 
-        current_canon_id = current_canon_packages.get(pkg_id)
-        target_canon = find_canon_for_url(url.url, current_canons)
+        # is the package tied to a canon?
+        linked_canon_id = current_canon_packages.get(pkg_id)
 
-        if current_canon_id is None:
-            # Package has no canon mapping yet
-            if target_canon:
-                # Link to existing canon
-                mappings_to_update.append((pkg_id, target_canon.id))
-            else:
-                # Create new canon
-                from uuid import uuid4
-
-                new_canon_id = uuid4()
-                # Get package name for canon name (you might want to improve this logic)
-                pkg_name = next(
-                    pkg.name for pkg, _ in packages_with_homepages if pkg.id == pkg_id
-                )
-                new_canon = Canon(id=new_canon_id, name=pkg_name, url=url.url)
-                canons_to_create.append(new_canon)
-                mappings_to_update.append((pkg_id, new_canon_id))
-        else:
-            # Package already has a canon mapping, let's grab it
-            current_canon = next(
-                c for c in current_canons.values() if c.id == current_canon_id
+        if actual_canon_id is None:
+            # this URL is not associated with a canon, so we need to create one
+            # name: TODO?
+            new_canon = Canon(
+                id=uuid4(),
+                url_id=url.id,
+                name=url.url,
+                created_at=now,
+                updated_at=now,
             )
-            current_canon_url: str = current_canon.url
+            canons_to_create.append(new_canon)
 
-            # also, let's grab the target canon's URL
-            target_canon_url: str = target_canon.url
-
-            # now, if target and current are not None, AND different, that's a data
-            # problem, and we should warn and stop
-            if target_canon and current_canon and target_canon.url != current_canon.url:
-                msg = f"""
-                    Multiple different canons for Package {pkg_id}:
-                    Actual canon {target_canon_url} 
-                    Current canon {current_canon_url}
-                """
-                logger.warn(msg)
-                raise Exception(msg)
-            elif target_canon and target_canon.id != current_canon_id:
-                # URL matches a different existing canon, update mapping
-                mappings_to_update.append((pkg_id, target_canon.id))
-            elif current_canon.url != url.url:
-                # Same canon but URL has changed, update the canon's URL
-                canons_to_update.append((current_canon_id, url.url))
+            # now, is the package tied to a canon?
+            if linked_canon_id is None:
+                # new canon package!
+                new_canon_package = CanonPackage(
+                    id=uuid4(),
+                    canon_id=new_canon.id,
+                    package_id=pkg_id,
+                    created_at=now,
+                    updated_at=now,
+                )
+                mappings_to_create.append((pkg_id, new_canon.id))
+            else:
+                # update the existing canon package row
+                mappings_to_update.append((pkg_id, new_canon.id))
+        else:
+            # ok, this is an existing canon
+            # it also cannot exist in the mappings, so it means a new canon package to
+            pass
 
     # 5. Apply changes
     logger.log("-" * 100)
