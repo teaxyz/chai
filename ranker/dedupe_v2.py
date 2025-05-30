@@ -196,8 +196,11 @@ def main(db: DedupeDB):
     logger.log("✅ Deduplication process completed")
 
     if non_canonical_urls:
+        non_canonical_urls_str = "\n".join(
+            [f"{url.id}: {url.url}" for url in non_canonical_urls]
+        )
         msg = f"""Skipped non_canonical URLs to avoid loading bad data into canons:
-        {non_canonical_urls}
+        {non_canonical_urls_str}
         """
         logger.warn(msg)
 
