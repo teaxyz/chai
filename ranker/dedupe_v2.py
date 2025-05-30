@@ -62,10 +62,11 @@ class DedupeDB(DB):
 
 
 def get_latest_homepage_per_package(
-    packages_with_homepages: list[tuple[Package, URL]],
-) -> dict[UUID, URL]:
+    packages_with_homepages: list[tuple[Package, URL]], logger: Logger
+) -> tuple[dict[UUID, URL], list[URL]]:
     """Get the latest homepage URL for each package."""
     latest_homepages: dict[UUID, URL] = {}
+    non_canonical_urls: list[URL] = []
 
     for pkg, url in packages_with_homepages:
         # Since we ordered by Package.id, URL.created_at.desc(),
@@ -73,13 +74,16 @@ def get_latest_homepage_per_package(
         if pkg.id not in latest_homepages:
             # guard against non-canonicalized URLs
             if not is_canonical_url(url.url):
-                raise Exception(f"{url.id}: {url.url} is not canonicalized")
-            latest_homepages[pkg.id] = url
+                non_canonical_urls.append(url)
+            else:
+                latest_homepages[pkg.id] = url
 
-    return latest_homepages
+    logger.warn(f"Found {len(non_canonical_urls)} non-canonicalized URLs")
+
+    return latest_homepages, non_canonical_urls
 
 
-def main(config: Config, db: DedupeDB):
+def main(db: DedupeDB):
     logger = Logger("ranker.dedupe_v2")
     now = datetime.now()
     logger.debug(f"Starting deduplication process at {now}")
@@ -97,7 +101,7 @@ def main(config: Config, db: DedupeDB):
     logger.debug(f"Found {len(packages_with_homepages)} packages with homepages")
 
     # 2. Get latest homepage per package
-    latest_homepages: dict[UUID, URL] = get_latest_homepage_per_package(
+    latest_homepages, non_canonical_urls = get_latest_homepage_per_package(
         packages_with_homepages
     )
     logger.debug(f"Found {len(latest_homepages)} packages with latest homepages")
@@ -179,8 +183,18 @@ def main(config: Config, db: DedupeDB):
 
     logger.log("✅ Deduplication process completed")
 
+    if non_canonical_urls:
+        msg = f"""Skipped non_canonical URLs to avoid loading bad data into canons:
+        {non_canonical_urls}
+        """
+        logger.warn(msg)
+
 
 if __name__ == "__main__":
     config: Config = load_config()
     db: DedupeDB = DedupeDB(config)
-    main(config, db)
+
+    try:
+        main(db)
+    finally:
+        db.close()

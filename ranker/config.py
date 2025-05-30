@@ -69,6 +69,7 @@ class ConfigDB(DB):
 class TeaRankConfig:
     def __init__(self, db: ConfigDB) -> None:
         self.db = db
+        self.map_favorites(SYSTEM_PACKAGE_MANAGERS)
 
     alpha: Decimal = Decimal(0.85)
     favorites: dict[str, Decimal] = {}
@@ -92,9 +93,6 @@ class TeaRankConfig:
                     self.favorites[pm_id] = Decimal(0.1)
                 case _:
                     raise ValueError(f"Unknown system package manager: {pm}")
-
-    def __init__(self) -> None:
-        self.map_favorites(SYSTEM_PACKAGE_MANAGERS)
 
     def personalize(
         self, canons_with_source_types: List[Tuple[UUID, List[str]]]

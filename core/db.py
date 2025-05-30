@@ -52,6 +52,10 @@ class DB:
         )
         self.logger.log(str(compiled_stmt))
 
+    def close(self):
+        self.logger.debug("closing")
+        self.engine.dispose()
+
     def search_names(
         self, package_names: List[str], package_managers: List[UUID]
     ) -> List[str]:
