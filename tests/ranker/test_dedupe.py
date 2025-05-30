@@ -3,22 +3,9 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
-# Mock the problematic modules before any imports that might trigger database calls
-mock_config_db = MagicMock()
-mock_config_db.get_npm_pm_id.return_value = uuid4()
-mock_config_db.get_pm_id_by_name.return_value = [(uuid4(),)]
-
-# Mock the config module
-with patch.dict(
-    "sys.modules",
-    {
-        "ranker.config": MagicMock(),
-    },
-):
-    # Now import the modules we need
-    from core.config import URLTypes
-    from core.models import URL, Canon, Package
-    from ranker.dedupe_v2 import DedupeDB, main
+from core.config import URLTypes
+from core.models import URL, Canon, Package
+from ranker.dedupe_v2 import DedupeDB, main
 
 
 class TestDedupe(unittest.TestCase):
