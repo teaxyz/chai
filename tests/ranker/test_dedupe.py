@@ -6,6 +6,7 @@ from uuid import uuid4
 from core.config import URLTypes
 from core.models import URL, Canon, Package
 from ranker.dedupe_v2 import DedupeDB, main
+from ranker.config import DedupeConfig
 
 
 class TestDedupe(unittest.TestCase):
@@ -37,6 +38,11 @@ class TestDedupe(unittest.TestCase):
         self.url_types.homepage_url_type_id = self.homepage_url_type_id
         self.mock_config = MagicMock()
         self.mock_config.url_types = self.url_types
+
+        # Mock DedupeConfig for main function
+        self.mock_dedupe_config = MagicMock(spec=DedupeConfig)
+        self.mock_dedupe_config.load = True  # Enable loading by default
+        self.mock_dedupe_config.homepage_url_type_id = self.homepage_url_type_id
 
         # Common test URLs
         self.canonical_url = "github.com/example/repo"
@@ -113,7 +119,7 @@ class TestDedupe(unittest.TestCase):
 
         # Act
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
-            main(mock_db)
+            main(self.mock_dedupe_config, mock_db)
 
         # Assert
         self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
@@ -196,7 +202,7 @@ class TestDedupe(unittest.TestCase):
 
         # Act
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
-            main(mock_db)
+            main(self.mock_dedupe_config, mock_db)
 
         # Assert
         self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
@@ -280,7 +286,7 @@ class TestDedupe(unittest.TestCase):
 
         # Act
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
-            main(mock_db)
+            main(self.mock_dedupe_config, mock_db)
 
         # Assert - should call ingest with empty lists (no changes)
         self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
@@ -353,7 +359,7 @@ class TestDedupe(unittest.TestCase):
 
         # Act
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
-            main(mock_db)
+            main(self.mock_dedupe_config, mock_db)
 
         # Assert
         self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
@@ -431,7 +437,7 @@ class TestDedupe(unittest.TestCase):
 
         # Act
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
-            main(mock_db)
+            main(self.mock_dedupe_config, mock_db)
 
         # Assert
         self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
@@ -502,7 +508,7 @@ class TestDedupe(unittest.TestCase):
 
         # Act
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
-            main(mock_db)
+            main(self.mock_dedupe_config, mock_db)
 
         # Assert
         self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")

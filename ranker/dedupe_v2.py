@@ -116,34 +116,21 @@ def build_update_payload(
     return {"id": current_canon_package_id, "canon_id": new_canon_id, "updated_at": now}
 
 
-def main(config: DedupeConfig, db: DedupeDB):
-    logger = Logger("ranker.dedupe_v2")
+def process_deduplication_changes(
+    latest_homepages: dict[UUID, URL],
+    current_canons: dict[UUID, Canon],
+    current_canon_packages: dict[UUID, dict[str, UUID]],
+    logger: Logger,
+) -> tuple[list[Canon], list[CanonPackage], list[dict[str, UUID | datetime]]]:
+    """
+    Process deduplication changes based on current state.
+
+    Returns:
+        tuple of (canons_to_create, mappings_to_create, mappings_to_update)
+    """
     now = datetime.now()
-    logger.debug(f"Starting deduplication process at {now}")
-
-    # 1. Get current state
-    current_canons: dict[UUID, Canon] = db.get_current_canons()
-    logger.debug(f"Found {len(current_canons)} current canons")
-
-    current_canon_packages: dict[UUID, dict[str, UUID]] = (
-        db.get_current_canon_packages()
-    )
-    logger.debug(f"Found {len(current_canon_packages)} current canon packages")
-
-    packages_with_homepages: list[tuple[Package, URL]] = (
-        db.get_packages_with_homepages()
-    )
-    logger.debug(f"Found {len(packages_with_homepages)} packages with homepages")
-
-    # 2. Get latest homepage per package
-    latest_homepages, non_canonical_urls = get_latest_homepage_per_package(
-        packages_with_homepages, logger
-    )
-    logger.debug(f"Found {len(latest_homepages)} packages with latest homepages")
-
-    # 3. Process changes differentially
     canons_to_create: dict[UUID, Canon] = {}  # indexed by url_id for deduplication
-    mappings_to_update: list[tuple[UUID, UUID]] = []  # (id, new_canon_id)
+    mappings_to_update: list[dict[str, UUID | datetime]] = []
     mappings_to_create: list[CanonPackage] = []
 
     for pkg_id, url in latest_homepages.items():
@@ -225,7 +212,42 @@ def main(config: DedupeConfig, db: DedupeDB):
                 # in this case, no changes needed!
                 continue
 
-    # 5. Apply changes
+    return list(canons_to_create.values()), mappings_to_create, mappings_to_update
+
+
+def main(config: DedupeConfig, db: DedupeDB):
+    logger = Logger("ranker.dedupe_v2")
+    now = datetime.now()
+    logger.debug(f"Starting deduplication process at {now}")
+
+    # 1. Get current state
+    current_canons: dict[UUID, Canon] = db.get_current_canons()
+    logger.debug(f"Found {len(current_canons)} current canons")
+
+    current_canon_packages: dict[UUID, dict[str, UUID]] = (
+        db.get_current_canon_packages()
+    )
+    logger.debug(f"Found {len(current_canon_packages)} current canon packages")
+
+    packages_with_homepages: list[tuple[Package, URL]] = (
+        db.get_packages_with_homepages()
+    )
+    logger.debug(f"Found {len(packages_with_homepages)} packages with homepages")
+
+    # 2. Get latest homepage per package
+    latest_homepages, non_canonical_urls = get_latest_homepage_per_package(
+        packages_with_homepages, logger
+    )
+    logger.debug(f"Found {len(latest_homepages)} packages with latest homepages")
+
+    # 3. Process changes differentially
+    canons_to_create, mappings_to_create, mappings_to_update = (
+        process_deduplication_changes(
+            latest_homepages, current_canons, current_canon_packages, logger
+        )
+    )
+
+    # 4. Apply changes
     logger.log("-" * 100)
     logger.log("Changes to apply:")
     logger.log(f"  Canons to create: {len(canons_to_create)}")
@@ -237,7 +259,7 @@ def main(config: DedupeConfig, db: DedupeDB):
         logger.log("Skipping changes because LOAD is not set")
         return
 
-    db.ingest(list(canons_to_create.values()), mappings_to_create, mappings_to_update)
+    db.ingest(canons_to_create, mappings_to_create, mappings_to_update)
 
     logger.log("✅ Deduplication process completed")
 
