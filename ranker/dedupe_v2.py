@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from permalint import is_canonical_url, normalize_url
+from permalint import is_canonical_url
 from sqlalchemy import update
 
 from core.db import DB
@@ -45,6 +45,7 @@ class DedupeDB(DB):
                 .all()
             )
 
+    # TODO: make these execute_values / batched / just better
     def create_canon(self, canon: Canon) -> None:
         """Create a new canon."""
         with self.session() as session:
@@ -74,6 +75,9 @@ def get_latest_homepage_per_package(
         # Since we ordered by Package.id, URL.created_at.desc(),
         # the first URL we see for each package is the latest
         if pkg.id not in latest_homepages:
+            # guard against non-canonicalized URLs
+            if not is_canonical_url(url.url):
+                raise Exception(f"{url.id}: {url.url} is not canonicalized")
             latest_homepages[pkg.id] = url
 
     return latest_homepages
@@ -114,10 +118,11 @@ def main(config: Config, db: DedupeDB):
 
     for pkg_id, url in latest_homepages.items():
         # does the url have a canon?
-        actual_canon_id = current_canons.get(url.id)
+        actual_canon: Canon | None = current_canons.get(url.id)
+        actual_canon_id: UUID | None = actual_canon.id if actual_canon else None
 
         # is the package tied to a canon?
-        linked_canon_id = current_canon_packages.get(pkg_id)
+        linked_canon_id: UUID | None = current_canon_packages.get(pkg_id)
 
         if actual_canon_id is None:
             # this URL is not associated with a canon, so we need to create one
@@ -147,8 +152,25 @@ def main(config: Config, db: DedupeDB):
                 mappings_to_update.append((pkg_id, new_canon.id))
         else:
             # ok, this is an existing canon
-            # it also cannot exist in the mappings, so it means a new canon package to
-            pass
+            # let's check if the package is linked to anything
+            if linked_canon_id is None:
+                # time to create a new canon package
+                new_canon_package = CanonPackage(
+                    id=uuid4(),
+                    canon_id=actual_canon_id,
+                    package_id=pkg_id,
+                    created_at=now,
+                    updated_at=now,
+                )
+                mappings_to_create.append(new_canon_package)
+
+            # what if it's linked to something, that's not actual_canon_id
+            elif linked_canon_id != actual_canon_id:
+                # time to update the existing canon package row
+                mappings_to_update.append((pkg_id, actual_canon_id))
+            else:
+                # in this case, no changes needed!
+                continue
 
     # 5. Apply changes
     logger.log("-" * 100)
