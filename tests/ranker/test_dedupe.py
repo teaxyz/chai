@@ -113,7 +113,7 @@ class TestDedupe(unittest.TestCase):
 
         # Act
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
-            main(self.mock_config, mock_db)
+            main(mock_db)
 
         # Assert
         self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
@@ -194,7 +194,7 @@ class TestDedupe(unittest.TestCase):
 
         # Act
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
-            main(self.mock_config, mock_db)
+            main(mock_db)
 
         # Assert
         self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
@@ -277,7 +277,7 @@ class TestDedupe(unittest.TestCase):
 
         # Act
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
-            main(self.mock_config, mock_db)
+            main(mock_db)
 
         # Assert - should call ingest with empty lists (no changes)
         self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
@@ -348,7 +348,7 @@ class TestDedupe(unittest.TestCase):
 
         # Act
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
-            main(self.mock_config, mock_db)
+            main(mock_db)
 
         # Assert
         self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
@@ -423,7 +423,7 @@ class TestDedupe(unittest.TestCase):
 
         # Act
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
-            main(self.mock_config, mock_db)
+            main(mock_db)
 
         # Assert
         self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
@@ -446,6 +446,103 @@ class TestDedupe(unittest.TestCase):
         )
         self.assertEqual(
             created_mapping.canon_id, self.canon1_id, "Should map to existing canon"
+        )
+
+    def test_multiple_packages_same_homepage_creates_single_canon(self):
+        """
+        Test deduplication: Multiple packages with same homepage URL should create only one canon
+
+        This tests the core deduplication logic where:
+        - Package 1 points to URL X (no existing canon)
+        - Package 2 also points to URL X
+        - Should create only ONE canon for URL X
+        - Both packages should be linked to the same canon
+        """
+        # Arrange
+        # Create URL object that has no canon (using canonical URL to avoid validation issues)
+        shared_homepage_url = URL(
+            id=self.url1_id,
+            url=self.canonical_url,  # Already canonical
+            url_type_id=self.homepage_url_type_id,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+        # Current state: no canons exist for this URL, no package mappings exist
+        current_canons = {}  # URL has no canon
+        current_canon_packages = {}  # Neither package has mapping
+        packages_with_homepages = [
+            (self.package1, shared_homepage_url),  # Both packages point to same URL
+            (self.package2, shared_homepage_url),
+        ]
+
+        # Mock database
+        mock_db = MagicMock(spec=DedupeDB)
+        mock_db.get_current_canons.return_value = current_canons
+        mock_db.get_current_canon_packages.return_value = current_canon_packages
+        mock_db.get_packages_with_homepages.return_value = packages_with_homepages
+
+        # Capture ingest call arguments
+        ingest_calls = []
+
+        def capture_ingest(new_canons, new_canon_packages, updated_canon_packages):
+            ingest_calls.append(
+                (new_canons, new_canon_packages, updated_canon_packages)
+            )
+
+        mock_db.ingest.side_effect = capture_ingest
+
+        # Act
+        with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
+            main(mock_db)
+
+        # Assert
+        self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
+
+        new_canons, new_canon_packages, updated_canon_packages = ingest_calls[0]
+
+        # Verify only ONE canon is created (deduplication working)
+        self.assertEqual(
+            len(new_canons), 1, "Should create exactly one canon for shared URL"
+        )
+
+        # Verify TWO mappings are created (both packages linked to same canon)
+        self.assertEqual(
+            len(new_canon_packages), 2, "Should create two mappings for both packages"
+        )
+        self.assertEqual(
+            len(updated_canon_packages), 0, "Should not update any mappings"
+        )
+
+        created_canon = new_canons[0]
+        self.assertEqual(
+            created_canon.url_id, self.url1_id, "Canon should reference correct URL ID"
+        )
+        self.assertEqual(
+            created_canon.name, self.canonical_url, "Canon name should be URL"
+        )
+
+        # Verify both mappings point to the SAME canon
+        mapping1, mapping2 = new_canon_packages
+        self.assertEqual(
+            mapping1.canon_id, created_canon.id, "First package should map to canon"
+        )
+        self.assertEqual(
+            mapping2.canon_id,
+            created_canon.id,
+            "Second package should map to SAME canon",
+        )
+        self.assertEqual(
+            mapping1.canon_id,
+            mapping2.canon_id,
+            "Both packages should share same canon",
+        )
+
+        # Verify correct packages are mapped
+        mapped_package_ids = {mapping1.package_id, mapping2.package_id}
+        expected_package_ids = {self.pkg1_id, self.pkg2_id}
+        self.assertEqual(
+            mapped_package_ids, expected_package_ids, "Should map both packages"
         )
 
 

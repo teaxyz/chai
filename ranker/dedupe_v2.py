@@ -115,21 +115,25 @@ def main(db: DedupeDB):
     logger.debug(f"Found {len(latest_homepages)} packages with latest homepages")
 
     # 3. Process changes differentially
-    canons_to_create: list[Canon] = []
+    canons_to_create: dict[UUID, Canon] = {}  # indexed by url_id for deduplication
     mappings_to_update: list[tuple[UUID, UUID]] = []  # (id, new_canon_id)
     mappings_to_create: list[CanonPackage] = []
 
     for pkg_id, url in latest_homepages.items():
         # does the url have a canon?
         actual_canon: Canon | None = current_canons.get(url.id)
+
+        # if not, are we already creating a canon for this URL?
+        if actual_canon is None:
+            actual_canon = canons_to_create.get(url.id)
+
         actual_canon_id: UUID | None = actual_canon.id if actual_canon else None
 
         # is the package tied to a canon?
         linked_canon_id: UUID | None = current_canon_packages.get(pkg_id)
 
         if actual_canon_id is None:
-            # this URL is not associated with a canon, so we need to create one
-            # name: TODO?
+            # this URL has no canon and we're not already creating one
             new_canon = Canon(
                 id=uuid4(),
                 url_id=url.id,
@@ -137,7 +141,7 @@ def main(db: DedupeDB):
                 created_at=now,
                 updated_at=now,
             )
-            canons_to_create.append(new_canon)
+            canons_to_create[url.id] = new_canon  # Store by URL ID for deduplication
 
             # now, is the package tied to a canon?
             if linked_canon_id is None:
@@ -154,7 +158,7 @@ def main(db: DedupeDB):
                 # update the existing canon package row
                 mappings_to_update.append((pkg_id, new_canon.id))
         else:
-            # ok, this is an existing canon
+            # this canon exists, OR we've already created it for this URL
             # let's check if the package is linked to anything
             if linked_canon_id is None:
                 # time to create a new canon package
@@ -187,7 +191,7 @@ def main(db: DedupeDB):
         logger.log("Skipping changes because LOAD is not set")
         return
 
-    db.ingest(canons_to_create, mappings_to_create, mappings_to_update)
+    db.ingest(list(canons_to_create.values()), mappings_to_create, mappings_to_update)
 
     logger.log("✅ Deduplication process completed")
 
