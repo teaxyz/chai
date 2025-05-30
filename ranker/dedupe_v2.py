@@ -30,11 +30,14 @@ class DedupeDB(DB):
             canons = session.query(Canon).all()
             return {canon.url_id: canon for canon in canons}
 
-    def get_current_canon_packages(self) -> dict[UUID, UUID]:
+    def get_current_canon_packages(self) -> dict[UUID, dict[str, UUID]]:
         """Get current canon-package mappings as dict[package_id -> canon_id]."""
         with self.session() as session:
             canon_packages = session.query(CanonPackage).all()
-            return {cp.package_id: cp.canon_id for cp in canon_packages}
+            return {
+                cp.package_id: {"id": cp.id, "canon_id": cp.canon_id}
+                for cp in canon_packages
+            }
 
     def get_packages_with_homepages(self) -> list[tuple[Package, URL]]:
         with self.session() as session:
@@ -51,12 +54,18 @@ class DedupeDB(DB):
         self,
         new_canons: list[Canon],
         new_canon_packages: list[CanonPackage],
-        updated_canon_packages: list[tuple[UUID, UUID]],
+        updated_canon_packages: list[dict[str, UUID | datetime]],
     ) -> None:
         with self.session() as session:
-            self.add_with_flush(session, new_canons)
-            self.add_with_flush(session, new_canon_packages)
-            session.execute(update(CanonPackage), updated_canon_packages)
+            if new_canons:
+                self.add_with_flush(session, new_canons)
+
+            if new_canon_packages:
+                self.add_with_flush(session, new_canon_packages)
+
+            if updated_canon_packages:
+                session.execute(update(CanonPackage), updated_canon_packages)
+
             session.commit()
 
     def add_with_flush(self, session: Session, rows: list[BaseModel]) -> None:
@@ -91,6 +100,29 @@ def get_latest_homepage_per_package(
     return latest_homepages, non_canonical_urls
 
 
+def build_update_payload(
+    current_canon_packages: dict[UUID, dict[str, UUID]],
+    pkg_id: UUID,
+    new_canon_id: UUID,
+    now: datetime,
+    logger: Logger,
+) -> dict[str, UUID | datetime] | None:
+    """Build an update payload for a canon package."""
+    canon_package_data = current_canon_packages.get(pkg_id)
+    if canon_package_data is None:
+        logger.warn(f"Package {pkg_id} not found in current canon packages")
+        return None
+
+    current_canon_package_id = canon_package_data.get("id")
+    if current_canon_package_id is None:
+        logger.warn(
+            f"Package {pkg_id} has no canon package ID but canon: {new_canon_id}"
+        )
+        return None
+
+    return {"id": current_canon_package_id, "canon_id": new_canon_id, "updated_at": now}
+
+
 def main(db: DedupeDB):
     logger = Logger("ranker.dedupe_v2")
     now = datetime.now()
@@ -100,7 +132,9 @@ def main(db: DedupeDB):
     current_canons: dict[UUID, Canon] = db.get_current_canons()
     logger.debug(f"Found {len(current_canons)} current canons")
 
-    current_canon_packages: dict[UUID, UUID] = db.get_current_canon_packages()
+    current_canon_packages: dict[UUID, dict[str, UUID]] = (
+        db.get_current_canon_packages()
+    )
     logger.debug(f"Found {len(current_canon_packages)} current canon packages")
 
     packages_with_homepages: list[tuple[Package, URL]] = (
@@ -130,7 +164,9 @@ def main(db: DedupeDB):
         actual_canon_id: UUID | None = actual_canon.id if actual_canon else None
 
         # is the package tied to a canon?
-        linked_canon_id: UUID | None = current_canon_packages.get(pkg_id)
+        linked_canon_id: UUID | None = current_canon_packages.get(pkg_id, {}).get(
+            "canon_id"
+        )
 
         if actual_canon_id is None:
             # this URL has no canon and we're not already creating one
@@ -155,8 +191,16 @@ def main(db: DedupeDB):
                 )
                 mappings_to_create.append(new_canon_package)
             else:
-                # update the existing canon package row
-                mappings_to_update.append((pkg_id, new_canon.id))
+                update_payload = build_update_payload(
+                    current_canon_packages,
+                    pkg_id,
+                    new_canon.id,
+                    now,
+                    logger,
+                )
+
+                if update_payload:
+                    mappings_to_update.append(update_payload)
         else:
             # this canon exists, OR we've already created it for this URL
             # let's check if the package is linked to anything
@@ -174,7 +218,16 @@ def main(db: DedupeDB):
             # what if it's linked to something, that's not actual_canon_id
             elif linked_canon_id != actual_canon_id:
                 # time to update the existing canon package row
-                mappings_to_update.append((pkg_id, actual_canon_id))
+                update_payload = build_update_payload(
+                    current_canon_packages,
+                    pkg_id,
+                    actual_canon_id,
+                    now,
+                    logger,
+                )
+
+                if update_payload:
+                    mappings_to_update.append(update_payload)
             else:
                 # in this case, no changes needed!
                 continue
