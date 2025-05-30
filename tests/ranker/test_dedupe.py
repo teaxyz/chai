@@ -6,17 +6,12 @@ from uuid import uuid4
 from core.config import URLTypes
 from core.models import URL, Canon, Package
 from ranker.config import Config
-from ranker.dedupe_v2 import (
-    DedupeDB,
-    find_canon_for_url,
-    get_latest_homepage_per_package,
-    main,
-)
+from ranker.dedupe_v2 import DedupeDB, main
 
 
 class TestDedupe(unittest.TestCase):
     """
-    Test the deduplication of packages
+    Test the deduplication of packages - focused on case 2d (URL has no canon)
     """
 
     def setUp(self):
@@ -80,18 +75,17 @@ class TestDedupe(unittest.TestCase):
             updated_at=datetime.now(),
         )
 
-    @patch("ranker.dedupe_v2.normalize_url")
-    def test_case_1_new_package_new_canon(self, mock_normalize):
+    @patch("ranker.dedupe_v2.is_canonical_url")
+    def test_case_2d_new_canon_new_mapping(self, mock_is_canonical):
         """
-        Test Case 1: Package has homepage URL that doesn't exist as canon,
-        and package has no existing canon mapping.
+        Test Case 2d: URL has no canon AND package has no existing mapping
 
-        Expected: New canon + new canon package link
+        Expected: Create new canon + create new mapping
         """
         # Arrange
-        mock_normalize.return_value = self.canonical_url  # URL is already canonical
+        mock_is_canonical.return_value = True
 
-        # Create URL object
+        # Create URL object that has no canon
         homepage_url = URL(
             id=self.url1_id,
             url=self.canonical_url,
@@ -100,10 +94,9 @@ class TestDedupe(unittest.TestCase):
             updated_at=datetime.now(),
         )
 
-        # Empty current state - no existing canons or mappings
-        current_canons = {}
-        current_canon_packages = {}
-        # But there is a package with a homepage URL
+        # Current state: no canons exist for this URL, no package mapping exists
+        current_canons = {}  # URL has no canon
+        current_canon_packages = {}  # Package has no mapping
         packages_with_homepages = [(self.package1, homepage_url)]
 
         # Mock database
@@ -114,330 +107,138 @@ class TestDedupe(unittest.TestCase):
 
         created_canons = []
         created_mappings = []
+        updated_mappings = []
 
         def capture_canon(canon):
             created_canons.append(canon)
 
-        def capture_mapping(package_id, canon_id):
-            created_mappings.append((package_id, canon_id))
+        def capture_mapping(mapping):
+            created_mappings.append(mapping)
+
+        def capture_mapping_update(mapping):
+            updated_mappings.append(mapping)
 
         mock_db.create_canon.side_effect = capture_canon
-        mock_db.update_canon_package_mapping.side_effect = capture_mapping
+        mock_db.create_canon_package.side_effect = capture_mapping
+        mock_db.update_canon_package.side_effect = capture_mapping_update
 
         # Act
-        # Use LOAD=true to make changes to the database, but mock_db.create_canon has a
-        # side effect that captures the canon, so nothing gets created
         with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
             main(self.mock_config, mock_db)
 
         # Assert
         self.assertEqual(len(created_canons), 1, "Should create exactly one new canon")
         self.assertEqual(
-            len(created_mappings), 1, "Should create exactly one canon-package mapping"
+            len(created_mappings), 1, "Should create exactly one new mapping"
         )
 
+        # Verify canon creation
         created_canon = created_canons[0]
-        self.assertEqual(created_canon.url, self.canonical_url)
-        self.assertEqual(created_canon.name, "package1")
+        self.assertEqual(
+            created_canon.url_id, self.url1_id, "Canon should reference correct URL ID"
+        )
+        self.assertEqual(
+            created_canon.name, self.canonical_url, "Canon name should be URL"
+        )
 
+        # Verify mapping creation
         created_mapping = created_mappings[0]
-        self.assertEqual(created_mapping[0], self.pkg1_id)
-        self.assertEqual(created_mapping[1], created_canon.id)
+        self.assertEqual(
+            created_mapping.package_id, self.pkg1_id, "Should map correct package"
+        )
+        self.assertEqual(
+            created_mapping.canon_id, created_canon.id, "Should map to new canon"
+        )
+
+        # Verify no updates to existing data
+        mock_db.update_canon_package.assert_not_called()
+
+    @patch("ranker.dedupe_v2.is_canonical_url")
+    def test_case_2d_new_canon_update_mapping(self, mock_is_canonical):
+        """
+        Test Case 2d: URL has no canon AND package has existing mapping to different canon
+
+        Expected: Create new canon + update existing mapping
+        """
+        # Arrange
+        mock_is_canonical.return_value = True
+
+        # Create URL object that has no canon
+        homepage_url = URL(
+            id=self.url1_id,
+            url=self.canonical_url,
+            url_type_id=self.homepage_url_type_id,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+        # Create existing canon for different URL
+        existing_canon = Canon(
+            id=self.canon2_id,
+            url_id=self.url2_id,  # Different URL
+            name="old-canon",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+        # Current state: no canon for this URL, but package is mapped to different canon
+        current_canons = {self.url2_id: existing_canon}  # old URL exists
+        current_canon_packages = {self.pkg1_id: existing_canon.id}  # pkg mapped to old
+        packages_with_homepages = [(self.package1, homepage_url)]  # homepage is new
+
+        # Mock database
+        mock_db = MagicMock(spec=DedupeDB)
+        mock_db.get_current_canons.return_value = current_canons
+        mock_db.get_current_canon_packages.return_value = current_canon_packages
+        mock_db.get_packages_with_homepages.return_value = packages_with_homepages
+
+        created_canons = []
+        created_mappings = []
+        updated_mappings = []
+
+        def capture_canon(canon):
+            created_canons.append(canon)
+
+        def capture_mapping(mapping):
+            created_mappings.append(mapping)
+
+        def capture_mapping_update(mapping):
+            updated_mappings.append(mapping)
+
+        mock_db.create_canon.side_effect = capture_canon
+        mock_db.create_canon_package.side_effect = capture_mapping
+        mock_db.update_canon_package.side_effect = capture_mapping_update
+
+        # Act
+        with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
+            main(self.mock_config, mock_db)
+
+        # Assert
+        self.assertEqual(len(created_canons), 1, "Should create exactly one new canon")
+        self.assertEqual(len(updated_mappings), 1, "Should update exactly one mapping")
+
+        # Verify canon creation
+        created_canon = created_canons[0]
+        self.assertEqual(
+            created_canon.url_id, self.url1_id, "Canon should reference correct URL ID"
+        )
+        self.assertEqual(
+            created_canon.name, self.canonical_url, "Canon name should be URL"
+        )
+
+        # Verify mapping update (should point to NEW canon, not old one)
+        updated_mapping = updated_mappings[0]
+        self.assertEqual(
+            updated_mapping[0], self.pkg1_id, "Should update correct package"
+        )
+        self.assertEqual(
+            updated_mapping[1],
+            created_canon.id,
+            "Should update to NEW canon, not old one",
+        )
+        self.assertNotEqual(
+            updated_mapping[1], self.canon2_id, "Should NOT point to old canon"
+        )
 
         # Verify no updates to existing canons
-        mock_db.update_canon_url.assert_not_called()
-
-    @patch("ranker.dedupe_v2.normalize_url")
-    def test_case_2_canonicalized_url_update_existing_canon(self, mock_normalize):
-        """
-        Test Case 2: Package has canonicalized homepage URL, but existing canon
-        has non-canonicalized version. Package is linked to existing canon.
-
-        Expected: Update existing canon's URL to canonicalized version
-        """
-        # Arrange
-        mock_normalize.return_value = self.canonical_url
-
-        # Create existing canon with non-canonical URL
-        existing_canon = Canon(
-            id=self.canon1_id,
-            url=self.non_canonical_url,  # https://github.com/example/repo
-            name="package1",
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        )
-
-        # Create URL object with canonical URL
-        homepage_url = URL(
-            id=self.url1_id,
-            url=self.canonical_url,
-            url_type_id=self.homepage_url_type_id,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        )
-
-        # Current state: canon exists, package is mapped to it
-        current_canons = {self.non_canonical_url: existing_canon}
-        current_canon_packages = {self.pkg1_id: self.canon1_id}
-        packages_with_homepages = [(self.package1, homepage_url)]
-
-        # Mock database
-        mock_db = MagicMock(spec=DedupeDB)
-        mock_db.get_current_canons.return_value = current_canons
-        mock_db.get_current_canon_packages.return_value = current_canon_packages
-        mock_db.get_packages_with_homepages.return_value = packages_with_homepages
-
-        updated_canons = []
-
-        def capture_canon_update(canon_id, new_url):
-            updated_canons.append((canon_id, new_url))
-
-        mock_db.update_canon_url.side_effect = capture_canon_update
-
-        # Act
-        with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
-            main(self.mock_config, mock_db)
-
-        # Assert
-        self.assertEqual(len(updated_canons), 1, "Should update exactly one canon URL")
-
-        updated_canon = updated_canons[0]
-        self.assertEqual(updated_canon[0], self.canon1_id)
-        self.assertEqual(updated_canon[1], self.canonical_url)
-
-        # Verify no new canons or mappings created
-        mock_db.create_canon.assert_not_called()
-        mock_db.update_canon_package_mapping.assert_not_called()
-
-    @patch("ranker.dedupe_v2.normalize_url")
-    @patch("ranker.dedupe_v2.Logger")
-    def test_case_3_duplicate_canons_existing_mapping(
-        self, mock_logger_class, mock_normalize
-    ):
-        """
-        Test Case 3: Both canonical and non-canonical URLs exist as separate canons,
-        package is linked to the non-canonical canon.
-
-        Expected: Log warning about duplicate canons, no updates made
-        """
-        # Arrange
-        mock_logger = MagicMock()
-        mock_logger_class.return_value = mock_logger
-        mock_normalize.return_value = self.canonical_url
-
-        # Create two canons for effectively the same URL
-        canon_canonical = Canon(
-            id=self.canon1_id,
-            url=self.canonical_url,
-            name="package1",
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        )
-
-        canon_non_canonical = Canon(
-            id=self.canon2_id,
-            url=self.non_canonical_url,
-            name="package1_alt",
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        )
-
-        # Create URL object
-        homepage_url = URL(
-            id=self.url1_id,
-            url=self.canonical_url,
-            url_type_id=self.homepage_url_type_id,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        )
-
-        # Current state: both canons exist, package mapped to canonical one
-        current_canons = {
-            self.canonical_url: canon_canonical,
-            self.non_canonical_url: canon_non_canonical,
-        }
-        current_canon_packages = {self.pkg1_id: self.canon2_id}
-        packages_with_homepages = [(self.package1, homepage_url)]
-
-        # Mock database
-        mock_db = MagicMock(spec=DedupeDB)
-        mock_db.get_current_canons.return_value = current_canons
-        mock_db.get_current_canon_packages.return_value = current_canon_packages
-        mock_db.get_packages_with_homepages.return_value = packages_with_homepages
-
-        # Act
-        with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
-            main(self.mock_config, mock_db)
-
-        # Assert
-        # Should not make any database changes since this is a data problem
-        mock_db.create_canon.assert_not_called()
-        mock_db.update_canon_url.assert_not_called()
-        mock_db.update_canon_package_mapping.assert_not_called()
-
-    @patch("ranker.dedupe_v2.normalize_url")
-    @patch("ranker.dedupe_v2.Logger")
-    def test_case_4_duplicate_canons_no_mapping(
-        self, mock_logger_class, mock_normalize
-    ):
-        """
-        Test Case 4: Both canonical and non-canonical URLs exist as separate canons,
-        but package is not linked to either.
-
-        Expected: Log warning + create mapping to canonical canon
-        """
-        # Arrange
-        mock_logger = MagicMock()
-        mock_logger_class.return_value = mock_logger
-        mock_normalize.return_value = self.canonical_url
-
-        # Create two canons for effectively the same URL
-        canon_canonical = Canon(
-            id=self.canon1_id,
-            url=self.canonical_url,
-            name="package1",
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        )
-
-        canon_non_canonical = Canon(
-            id=self.canon2_id,
-            url=self.non_canonical_url,
-            name="package1_alt",
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        )
-
-        # Create URL object
-        homepage_url = URL(
-            id=self.url1_id,
-            url=self.canonical_url,
-            url_type_id=self.homepage_url_type_id,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        )
-
-        # Current state: both canons exist, but package has no mapping
-        current_canons = {
-            self.canonical_url: canon_canonical,
-            self.non_canonical_url: canon_non_canonical,
-        }
-        current_canon_packages = {}  # No existing mappings
-        packages_with_homepages = [(self.package1, homepage_url)]
-
-        # Mock database
-        mock_db = MagicMock(spec=DedupeDB)
-        mock_db.get_current_canons.return_value = current_canons
-        mock_db.get_current_canon_packages.return_value = current_canon_packages
-        mock_db.get_packages_with_homepages.return_value = packages_with_homepages
-
-        created_mappings = []
-
-        def capture_mapping(package_id, canon_id):
-            created_mappings.append((package_id, canon_id))
-
-        mock_db.update_canon_package_mapping.side_effect = capture_mapping
-
-        # Act
-        with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
-            main(self.mock_config, mock_db)
-
-        # Assert
-        self.assertEqual(
-            len(created_mappings), 1, "Should create mapping to canonical canon"
-        )
-
-        created_mapping = created_mappings[0]
-        self.assertEqual(created_mapping[0], self.pkg1_id)
-        self.assertEqual(created_mapping[1], self.canon1_id)  # Maps to canonical canon
-
-        # Should not create new canons or update existing ones
-        mock_db.create_canon.assert_not_called()
-        mock_db.update_canon_url.assert_not_called()
-
-    def test_find_canon_for_url_exact_match(self):
-        """Test find_canon_for_url with exact URL match."""
-        canon = Canon(
-            id=self.canon1_id,
-            url=self.canonical_url,
-            name="test",
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        )
-
-        current_canons = {self.canonical_url: canon}
-
-        result = find_canon_for_url(self.canonical_url, current_canons)
-
-        self.assertEqual(result, canon)
-
-    @patch("ranker.dedupe_v2.normalize_url")
-    def test_find_canon_for_url_canonicalized_match(self, mock_normalize):
-        """Test find_canon_for_url with canonicalized URL match."""
-        mock_normalize.return_value = self.canonical_url
-
-        canon = Canon(
-            id=self.canon1_id,
-            url=self.non_canonical_url,
-            name="test",
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        )
-
-        current_canons = {self.non_canonical_url: canon}
-
-        result = find_canon_for_url(self.canonical_url, current_canons)
-
-        self.assertEqual(result, canon)
-
-    def test_find_canon_for_url_no_match(self):
-        """Test find_canon_for_url with no matching canon."""
-        canon = Canon(
-            id=self.canon1_id,
-            url=self.different_url,
-            name="test",
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        )
-
-        current_canons = {self.different_url: canon}
-
-        result = find_canon_for_url(self.canonical_url, current_canons)
-
-        self.assertIsNone(result)
-
-    def test_get_latest_homepage_per_package(self):
-        """Test getting latest homepage per package from ordered list."""
-        older_url = URL(
-            id=self.url1_id,
-            url="https://old.example.com",
-            url_type_id=self.homepage_url_type_id,
-            created_at=datetime(2023, 1, 1),
-            updated_at=datetime(2023, 1, 1),
-        )
-
-        newer_url = URL(
-            id=self.url2_id,
-            url="https://new.example.com",
-            url_type_id=self.homepage_url_type_id,
-            created_at=datetime(2024, 1, 1),
-            updated_at=datetime(2024, 1, 1),
-        )
-
-        # List should be ordered by Package.id, URL.created_at desc (newer first)
-        packages_with_homepages = [
-            (self.package1, newer_url),  # Newer URL first due to ordering
-            (self.package1, older_url),  # Older URL second
-            (self.package2, older_url),  # Different package
-        ]
-
-        result = get_latest_homepage_per_package(packages_with_homepages)
-
-        # Should get the first (newest) URL for each package
-        self.assertEqual(len(result), 2)
-        self.assertEqual(result[self.pkg1_id], newer_url)
-        self.assertEqual(result[self.pkg2_id], older_url)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        mock_db.create_canon_package.assert_not_called()

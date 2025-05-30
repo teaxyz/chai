@@ -2,6 +2,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from permalint import is_canonical_url, normalize_url
+from sqlalchemy import update
 
 from core.db import DB
 from core.logger import Logger
@@ -44,40 +45,22 @@ class DedupeDB(DB):
                 .all()
             )
 
-    def update_canon_url(self, canon_id: UUID, new_url: str) -> None:
-        """Update an existing canon's URL."""
-        with self.session() as session:
-            canon = session.query(Canon).filter(Canon.id == canon_id).first()
-            if canon:
-                canon.url = new_url
-                session.commit()
-
     def create_canon(self, canon: Canon) -> None:
         """Create a new canon."""
         with self.session() as session:
             session.add(canon)
             session.commit()
 
-    def update_canon_package_mapping(self, package_id: UUID, canon_id: UUID) -> None:
+    def create_canon_package(self, canon_package: CanonPackage) -> None:
+        """Create a new canon-package mapping."""
+        with self.session() as session:
+            session.add(canon_package)
+            session.commit()
+
+    def update_canon_package(self, updated_mapping: tuple[UUID, UUID]) -> None:
         """Update or create canon-package mapping."""
         with self.session() as session:
-            # Check if mapping exists
-            existing = (
-                session.query(CanonPackage)
-                .filter(CanonPackage.package_id == package_id)
-                .first()
-            )
-
-            if existing:
-                existing.canon_id = canon_id
-            else:
-                from uuid import uuid4
-
-                new_mapping = CanonPackage(
-                    id=uuid4(), canon_id=canon_id, package_id=package_id
-                )
-                session.add(new_mapping)
-
+            session.execute(update(CanonPackage), updated_mapping)
             session.commit()
 
 
@@ -125,10 +108,9 @@ def main(config: Config, db: DedupeDB):
     logger.debug(f"Found {len(latest_homepages)} packages with latest homepages")
 
     # 3. Process changes differentially
-    canons_to_update: list[tuple[UUID, str]] = []  # (canon_id, new_url)
     canons_to_create: list[Canon] = []
-    mappings_to_update: list[tuple[UUID, UUID]] = []  # (package_id, canon_id)
-    mappings_to_create: list[tuple[UUID, UUID]] = []  # (package_id, canon_id)
+    mappings_to_update: list[tuple[UUID, UUID]] = []  # (id, new_canon_id)
+    mappings_to_create: list[CanonPackage] = []
 
     for pkg_id, url in latest_homepages.items():
         # does the url have a canon?
@@ -159,7 +141,7 @@ def main(config: Config, db: DedupeDB):
                     created_at=now,
                     updated_at=now,
                 )
-                mappings_to_create.append((pkg_id, new_canon.id))
+                mappings_to_create.append(new_canon_package)
             else:
                 # update the existing canon package row
                 mappings_to_update.append((pkg_id, new_canon.id))
@@ -171,8 +153,8 @@ def main(config: Config, db: DedupeDB):
     # 5. Apply changes
     logger.log("-" * 100)
     logger.log("Changes to apply:")
-    logger.log(f"  Canons to update: {len(canons_to_update)}")
     logger.log(f"  Canons to create: {len(canons_to_create)}")
+    logger.log(f"  Mappings to create: {len(mappings_to_create)}")
     logger.log(f"  Mappings to update: {len(mappings_to_update)}")
     logger.log("-" * 100)
 
@@ -180,20 +162,17 @@ def main(config: Config, db: DedupeDB):
         logger.log("Skipping changes because LOAD is not set")
         return
 
-    # Update existing canon URLs
-    for canon_id, new_url in canons_to_update:
-        logger.debug(f"Updating canon {canon_id} URL to: {new_url}")
-        db.update_canon_url(canon_id, new_url)
-
     # Create new canons
     for canon in canons_to_create:
-        logger.debug(f"Creating new canon {canon.id} for URL: {canon.url}")
         db.create_canon(canon)
 
+    # Create new canon-package mappings
+    for mapping in mappings_to_create:
+        db.create_canon_package(mapping)
+
     # Update canon-package mappings
-    for package_id, canon_id in mappings_to_update:
-        logger.debug(f"Updating package {package_id} to canon {canon_id}")
-        db.update_canon_package_mapping(package_id, canon_id)
+    for mapping in mappings_to_update:
+        db.update_canon_package(mapping)
 
     logger.log("✅ Deduplication process completed")
 
