@@ -241,6 +241,16 @@ def main(config: DedupeConfig, db: DedupeDB):
 
     logger.log("✅ Deduplication process completed")
 
+    if non_canonical_urls:
+        logger.warn(f"Found {len(non_canonical_urls)} non-canonical URLs")
+        non_canonical_urls_str = "\n".join(
+            [f"{url.id}: {url.url}" for url in non_canonical_urls]
+        )
+        msg = f"""Skipped non_canonical URLs to avoid loading bad data into canons:
+        {non_canonical_urls_str}
+        """
+        logger.debug(msg)
+
 
 if __name__ == "__main__":
     config: DedupeConfig = load_dedupe_config()
