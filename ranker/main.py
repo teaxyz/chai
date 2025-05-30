@@ -2,6 +2,8 @@
 
 # /// script
 # dependencies = [
+#   "permalint==0.1.12",
+#   "sqlalchemy==2.0.34",
 #   "numpy==2.2.3",
 #   "rustworkx==0.16.0",
 # ]
@@ -13,9 +15,9 @@ from uuid import UUID
 
 from core.logger import Logger
 from core.models import TeaRank, TeaRankRun
-from ranker.config import Config, load_config
+from ranker.config import Config, DedupeConfig, load_config, load_dedupe_config
 from ranker.db import GraphDB
-from ranker.dedupe import dedupe
+from ranker.dedupe import main as dedupe
 from ranker.rx_graph import CHAI, PackageNode
 
 logger = Logger("ranker.main")
@@ -95,7 +97,8 @@ def load_graph(
 
 def main(config: Config) -> None:
     # Call dedupe first
-    dedupe(db)
+    dedupe_config: DedupeConfig = load_dedupe_config()
+    dedupe(dedupe_config, db)
     logger.log("✅ Deduplication finished, proceeding with TeaRank calculation.")
 
     # get the map of package_id -> canon_id

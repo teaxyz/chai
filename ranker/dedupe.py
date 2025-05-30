@@ -1,3 +1,4 @@
+#!/usr/bin/env uv run --with sqlalchemy==2.0.34 --with permalint==0.1.12
 from datetime import datetime
 from uuid import UUID, uuid4
 
@@ -265,13 +266,6 @@ def main(config: DedupeConfig, db: DedupeDB):
 
     if non_canonical_urls:
         logger.warn(f"Found {len(non_canonical_urls)} non-canonical URLs")
-        non_canonical_urls_str = "\n".join(
-            [f"{url.id}: {url.url}" for url in non_canonical_urls]
-        )
-        msg = f"""Skipped non_canonical URLs to avoid loading bad data into canons:
-        {non_canonical_urls_str}
-        """
-        logger.debug(msg)
 
 
 if __name__ == "__main__":
