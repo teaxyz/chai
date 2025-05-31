@@ -227,7 +227,7 @@ psql "postgresql://postgres:s3cr3t@localhost:5435/chai" -c "SELECT * FROM load_h
 Refreshes table knowledge from the db.
 
 ```sh
-docker-compose restart api
+docker compose restart api
 ```
 
 ### remove-orphans
