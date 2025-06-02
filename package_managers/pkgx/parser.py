@@ -77,7 +77,7 @@ class Test:
 
 @dataclass
 class PkgxPackage:
-    distributable: Distributable | List[Distributable]
+    distributable: List[Distributable]
     versions: Version
     build: Build | None = field(default=None)
     test: Test | None = field(default=None)
@@ -328,9 +328,9 @@ class PkgxParser:
             ]
         elif isinstance(distributable_data, dict):
             # Convert keys just before creating Distributable object
-            return Distributable(**convert_keys_to_snake_case(distributable_data))
+            return [Distributable(**convert_keys_to_snake_case(distributable_data))]
         elif distributable_data is None:
-            return Distributable(url="~")
+            return [Distributable(url="~")]
         else:
             distributable_type = type(distributable_data).__name__
             raise TypeError(f"Distributable in {file_path_str} is {distributable_type}")

@@ -1,4 +1,5 @@
 import gzip
+import json
 import os
 import tarfile
 from dataclasses import dataclass
@@ -39,6 +40,7 @@ class Fetcher:
         # write
         # it can be anything - json, tarball, etc.
         for item in files:
+            self.logger.debug(f"writing {item.file_path}/{item.file_name}")
             file_path = item.file_path
             file_name = item.file_name
             file_content = item.content
@@ -48,7 +50,14 @@ class Fetcher:
             os.makedirs(full_path, exist_ok=True)
 
             with open(os.path.join(full_path, file_name), "wb") as f:
-                self.logger.debug(f"writing {full_path}")
+                if isinstance(file_content, (list, dict)):
+                    # Convert JSON-serializable objects to string
+                    file_content = json.dumps(file_content)
+
+                # Ensure content is bytes before writing
+                if isinstance(file_content, str):
+                    file_content = file_content.encode("utf-8")
+
                 f.write(file_content)
 
         # update the latest symlink

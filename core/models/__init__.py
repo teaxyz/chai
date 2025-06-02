@@ -1,6 +1,9 @@
 # __init__.py
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Dict, Union
+
 from sqlalchemy import (
     Column,
     DateTime,
@@ -23,7 +26,20 @@ naming_convention = {
     "pk": "pk_%(table_name)s",
 }
 metadata = MetaData(naming_convention=naming_convention)
-Base = declarative_base(metadata=metadata)
+
+
+class BaseModel:
+    # we have UUIDs, strings, datetimes, ints, and floats
+    def to_dict_v2(self) -> Dict[str, Union[str, UUID, datetime, int, float]]:
+        """Return a dictionary of all non-None attributes."""
+        return {
+            attr: getattr(self, attr)
+            for attr in self.__table__.columns.keys()
+            if getattr(self, attr) is not None
+        }
+
+
+Base = declarative_base(metadata=metadata, cls=BaseModel)
 
 
 class Package(Base):
@@ -419,6 +435,7 @@ class PackageURL(Base):
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
 
+    # TODO: deprecated
     def to_dict(self):
         return {
             "package_id": self.package_id,
@@ -455,9 +472,19 @@ class LegacyDependency(Base):
 
 class Canon(Base):
     __tablename__ = "canons"
-    id = Column(UUID(as_uuid=True), primary_key=True)
-    url = Column(String, nullable=False, index=True, unique=True)  # the derived key
-    # CanonNames should be its own table, so we collect all aliases of a package!
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=func.uuid_generate_v4(),
+        server_default=func.uuid_generate_v4(),
+    )
+    url_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("urls.id"),
+        nullable=False,
+        index=True,
+        unique=True,
+    )
     name_trgm_idx = Index(
         "ix_canons_name_trgm",
         "name",
@@ -471,6 +498,8 @@ class Canon(Base):
     updated_at = Column(
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
+
+    url: Mapped["URL"] = relationship()
 
 
 class CanonPackage(Base):

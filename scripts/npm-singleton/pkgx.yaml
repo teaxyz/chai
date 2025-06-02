@@ -1,0 +1,3 @@
+dependencies:
+  xcfile.dev: "*"
+  python.org: ^3.11

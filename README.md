@@ -227,7 +227,7 @@ psql "postgresql://postgres:s3cr3t@localhost:5435/chai" -c "SELECT * FROM load_h
 Refreshes table knowledge from the db.
 
 ```sh
-docker-compose restart api
+docker compose restart api
 ```
 
 ### remove-orphans
@@ -239,11 +239,19 @@ docker compose down --remove-orphans
 ### run-pipeline
 
 Inputs: SERVICE
-Requires: build
-Env: CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@localhost:5435/chai
+Env: CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@host.docker.internal:5435/chai
 
 ```sh
-docker compose up $SERVICE
+docker compose up $SERVICE --build
+```
+
+### check
+
+Inputs: FOLDER
+Environment: FOLDER=.
+
+```sh
+pkgx +python@3.13 ty check $FOLDER
 ```
 
 [PostgreSQL]: https://www.postgresql.org
