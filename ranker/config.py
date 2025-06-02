@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal, getcontext
 from typing import List, Tuple
 from uuid import UUID
@@ -8,6 +8,7 @@ from sqlalchemy import func
 from core.db import DB
 from core.logger import Logger
 from core.models import Canon, CanonPackage, Package, PackageManager, Source, URLType
+from core.utils import env_vars
 
 logger = Logger("graph.config")
 SYSTEM_PACKAGE_MANAGERS = ["homebrew", "debian", "pkgx"]
@@ -66,10 +67,11 @@ class ConfigDB(DB):
             return result
 
 
-db = ConfigDB()
-
-
 class TeaRankConfig:
+    def __init__(self, db: ConfigDB) -> None:
+        self.db = db
+        self.map_favorites(SYSTEM_PACKAGE_MANAGERS)
+
     alpha: Decimal = Decimal(0.85)
     favorites: dict[str, Decimal] = {}
     weights: dict[UUID, Decimal] = {}
@@ -82,19 +84,16 @@ class TeaRankConfig:
         for pm in package_managers:
             match pm:
                 case "homebrew":
-                    pm_id = db.get_pm_id_by_name("homebrew")[0][0]
+                    pm_id = self.db.get_pm_id_by_name("homebrew")[0][0]
                     self.favorites[pm_id] = Decimal(0.3)
                 case "debian":
-                    pm_id = db.get_pm_id_by_name("debian")[0][0]
+                    pm_id = self.db.get_pm_id_by_name("debian")[0][0]
                     self.favorites[pm_id] = Decimal(0.6)
                 case "pkgx":
-                    pm_id = db.get_pm_id_by_name("pkgx")[0][0]
+                    pm_id = self.db.get_pm_id_by_name("pkgx")[0][0]
                     self.favorites[pm_id] = Decimal(0.1)
                 case _:
                     raise ValueError(f"Unknown system package manager: {pm}")
-
-    def __init__(self) -> None:
-        self.map_favorites(SYSTEM_PACKAGE_MANAGERS)
 
     def personalize(
         self, canons_with_source_types: List[Tuple[UUID, List[str]]]
@@ -125,14 +124,17 @@ class TeaRankConfig:
         logger.debug(f"Personalization sum: {sum(self.personalization.values())}")
 
     def __str__(self) -> str:
-        return f"TeaRankConfig(alpha={self.alpha}, favorites={self.favorites}, weights={len(self.weights)}, personalization={len(self.personalization)})"  # noqa
+        return f"TeaRankConfig(alpha={self.alpha}, favorites={self.favorites}, weights={len(self.weights)}, personalization={len(self.personalization)})"  # noqa E501
 
 
 class PMConfig:
-    npm_pm_id: UUID = db.get_npm_pm_id()
-    system_pm_ids: List[UUID] = [
-        id[0] for id in db.get_pm_id_by_name(SYSTEM_PACKAGE_MANAGERS)
-    ]
+    def __init__(self, db: ConfigDB) -> None:
+        self.db = db
+        self.npm_pm_id = self.db.get_npm_pm_id()
+        self.system_pm_ids = [
+            id[0] for id in self.db.get_pm_id_by_name(SYSTEM_PACKAGE_MANAGERS)
+        ]
+
     # TODO: we'll add PyPI, rubygems from when we load with legacy data
 
     def __str__(self) -> str:
@@ -142,26 +144,39 @@ class PMConfig:
 
 
 class URLTypes:
-    homepage_url_type_id: UUID = db.get_homepage_url_type_id()
+    def __init__(self, db: ConfigDB) -> None:
+        self.db = db
+        self.homepage_url_type_id = self.db.get_homepage_url_type_id()
 
     def __str__(self) -> str:
         return f"URLTypes(homepage_url_type_id={self.homepage_url_type_id})"
 
 
-@dataclass
-class Config:
-    tearank_config: TeaRankConfig = field(default_factory=TeaRankConfig)
-    pm_config: PMConfig = field(default_factory=PMConfig)
-    url_types: URLTypes = field(default_factory=URLTypes)
+class DedupeConfig:
+    def __init__(self, db: ConfigDB) -> None:
+        self.homepage_url_type_id = db.get_homepage_url_type_id()
+        self.load = env_vars("LOAD", "true")
 
     def __str__(self) -> str:
-        return f"Config(tearank_config={self.tearank_config}, pm_config={self.pm_config}, url_types={self.url_types})"  # noqa
+        return f"DedupeConfig(homepage_url_type_id={self.homepage_url_type_id}, load={self.load})"  # noqa E501
+
+
+@dataclass
+class Config:
+    def __init__(self, db: ConfigDB) -> None:
+        self.db = db
+        self.tearank_config = TeaRankConfig(db=db)
+        self.pm_config = PMConfig(db=db)
+        self.url_types = URLTypes(db=db)
+
+    def __str__(self) -> str:
+        return f"Config(tearank_config={self.tearank_config}, pm_config={self.pm_config}, url_types={self.url_types})"  # noqa E501
 
 
 def load_config() -> Config:
     logger.debug("Loading config")
-    return Config(
-        tearank_config=TeaRankConfig(),
-        pm_config=PMConfig(),
-        url_types=URLTypes(),
-    )
+    return Config(db=ConfigDB())
+
+
+def load_dedupe_config() -> DedupeConfig:
+    return DedupeConfig(db=ConfigDB())

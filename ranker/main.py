@@ -2,6 +2,8 @@
 
 # /// script
 # dependencies = [
+#   "permalint==0.1.12",
+#   "sqlalchemy==2.0.34",
 #   "numpy==2.2.3",
 #   "rustworkx==0.16.0",
 # ]
@@ -13,14 +15,13 @@ from uuid import UUID
 
 from core.logger import Logger
 from core.models import TeaRank, TeaRankRun
-from ranker.config import Config, load_config
+from ranker.config import Config, DedupeConfig, load_config, load_dedupe_config
 from ranker.db import GraphDB
-from ranker.dedupe import dedupe
+from ranker.dedupe import DedupeDB
+from ranker.dedupe import main as dedupe
 from ranker.rx_graph import CHAI, PackageNode
 
 logger = Logger("ranker.main")
-config = load_config()
-db = GraphDB(config.pm_config.npm_pm_id, config.pm_config.system_pm_ids)
 
 
 @dataclass
@@ -31,6 +32,7 @@ class PackageInfo:
 
 def load_graph(
     config: Config,
+    db: GraphDB,
     package_to_canon_mapping: Dict[UUID, UUID],
     packages: List[PackageInfo],
     stop: int = None,
@@ -93,11 +95,7 @@ def load_graph(
     return chai
 
 
-def main(config: Config) -> None:
-    # Call dedupe first
-    dedupe(db)
-    logger.log("✅ Deduplication finished, proceeding with TeaRank calculation.")
-
+def main(config: Config, db: GraphDB) -> None:
     # get the map of package_id -> canon_id
     package_to_canon: Dict[UUID, UUID] = db.get_package_to_canon_mapping()
     logger.log(f"{len(package_to_canon)} package to canon mappings")
@@ -150,8 +148,22 @@ def main(config: Config) -> None:
 
 
 if __name__ == "__main__":
+    # first deduplicate
+    dedupe_config: DedupeConfig = load_dedupe_config()
+    dedupe_db: DedupeDB = DedupeDB(dedupe_config)
     try:
-        main(config)
+        dedupe(dedupe_config, dedupe_db)
     except Exception as e:
-        logger.error(f"Some error occurred: {e}")
+        logger.error(f"Some error occurred when deduplicating: {e}")
+        raise
+
+    # then rank
+    ranker_config = load_config()
+    ranker_db = GraphDB(
+        ranker_config.pm_config.npm_pm_id, ranker_config.pm_config.system_pm_ids
+    )
+    try:
+        main(ranker_config, ranker_db)
+    except Exception as e:
+        logger.error(f"Some error occurred when ranking: {e}")
         raise

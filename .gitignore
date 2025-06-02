@@ -174,3 +174,6 @@ examples/sbom-meta/sbom-meta
 
 # DS Store
 .DS_Store
+
+# Profiling
+*.prof
