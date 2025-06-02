@@ -124,7 +124,7 @@ class TeaRankConfig:
         logger.debug(f"Personalization sum: {sum(self.personalization.values())}")
 
     def __str__(self) -> str:
-        return f"TeaRankConfig(alpha={self.alpha}, favorites={self.favorites}, weights={len(self.weights)}, personalization={len(self.personalization)})"  # noqa
+        return f"TeaRankConfig(alpha={self.alpha}, favorites={self.favorites}, weights={len(self.weights)}, personalization={len(self.personalization)})"  # noqa E501
 
 
 class PMConfig:
@@ -158,7 +158,7 @@ class DedupeConfig:
         self.load = env_vars("LOAD", "true")
 
     def __str__(self) -> str:
-        return f"DedupeConfig(db={self.db})"
+        return f"DedupeConfig(homepage_url_type_id={self.homepage_url_type_id}, load={self.load})"  # noqa E501
 
 
 @dataclass
@@ -170,7 +170,7 @@ class Config:
         self.url_types = URLTypes(db=db)
 
     def __str__(self) -> str:
-        return f"Config(tearank_config={self.tearank_config}, pm_config={self.pm_config}, url_types={self.url_types})"  # noqa
+        return f"Config(tearank_config={self.tearank_config}, pm_config={self.pm_config}, url_types={self.url_types})"  # noqa E501
 
 
 def load_config() -> Config:
