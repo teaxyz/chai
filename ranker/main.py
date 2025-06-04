@@ -6,6 +6,7 @@
 #   "sqlalchemy==2.0.34",
 #   "numpy==2.2.3",
 #   "rustworkx==0.16.0",
+#   "psycopg2-binary==2.9.10",
 # ]
 # ///
 
@@ -107,7 +108,7 @@ def main(config: Config, db: GraphDB) -> None:
     logger.log(f"{len(packages)} packages")
 
     # load the graph
-    chai = load_graph(config, package_to_canon, packages)
+    chai = load_graph(config, db, package_to_canon, packages)
     logger.log(f"CHAI has {len(chai)} nodes and {len(chai.edge_to_index)} edges")
 
     # now, I need to generate the personalization vector
