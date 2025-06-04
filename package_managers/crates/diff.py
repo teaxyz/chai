@@ -90,9 +90,6 @@ class Diff:
                 resolved_url_id = self.caches.url_map[url_key].id
             else:
                 # most will be here because it's the first run of clean data
-                # BIG HONKING TODO: uncomment this later
-                # self.logger.debug(f"URL {url} for {url_type} is entirely new")
-                # end of BIG HONKING TODO
                 new_url = URL(
                     id=uuid4(),
                     url=url,
