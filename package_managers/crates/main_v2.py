@@ -1,7 +1,6 @@
 import csv
 from collections.abc import Generator
 from datetime import datetime
-import sys
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -12,7 +11,6 @@ from core.fetcher import TarballFetcher
 from core.logger import Logger
 from core.models import (
     URL,
-    BaseModel,
     CanonPackage,
     DependsOn,
     LegacyDependency,
@@ -530,9 +528,7 @@ class Diff:
                 # there is an existing link between this URL and this package
                 # let's find it
                 existing_pu = next(
-                    pu
-                    for pu in self.caches.package_url_cache[pkg_id]
-                    if pu.url_id == url_id
+                    pu for pu in self.caches.package_urls[pkg_id] if pu.url_id == url_id
                 )
                 existing_pu.updated_at = self.now
                 updates.append({"id": existing_pu.id, "updated_at": self.now})
