@@ -6,7 +6,7 @@ from uuid import uuid4
 from core.config import Config, DependencyTypes
 from core.models import LegacyDependency, Package
 from core.structs import Cache
-from package_managers.crates.main_v2 import Diff
+from package_managers.crates.main import Diff
 from package_managers.crates.structs import (
     Crate,
     CrateDependency,
