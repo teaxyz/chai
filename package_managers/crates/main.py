@@ -79,30 +79,22 @@ def main(config: Config, db: CratesDB):
     transformer.parse()
     logger.log(f"Parsed {len(transformer.crates)} crates")
 
-    # identify crates we need to delete from CHAI because they are no longer on
-    # cargo
+    # identify crates we need to delete from CHAI because they are no longer on cargo
     deletions = identify_deletions(transformer, db)
     logger.log(f"Identified {len(deletions)} crates to delete")
     if deletions:
         db.delete_packages_by_import_id(deletions)
         logger.log(f"Deleted {len(deletions)} crates")
 
-    # the transformer object has transformer.crates, which has all the info
-    # now, let's build the db's cache
-    # we need the graph object from the db
+    # to build the cache, we need the graph object from the db and the URLs
     db.set_current_graph()
-    logger.log("Set current graph")
-
-    # we need URLs
     crates_urls: set[str] = set()
     for crate in transformer.crates.values():
         crates_urls.add(crate.homepage)
         crates_urls.add(crate.repository)
         crates_urls.add(crate.documentation)
     db.set_current_urls(crates_urls)
-    logger.log("Set current URLs")
 
-    # now, we can build the cache
     cache = Cache(
         db.graph.package_map,
         db.urls.url_map,

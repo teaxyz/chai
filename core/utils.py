@@ -44,4 +44,4 @@ def convert_keys_to_snake_case(data: Dict[str, Any]) -> Dict[str, Any]:
 
 def is_github_url(url: str) -> bool:
     """Assumes the url has been canonicalized by permalint"""
-    return re.search(r"^github\.com/", url) is not None
+    return url.startswith("github.com/")
