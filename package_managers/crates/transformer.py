@@ -108,8 +108,8 @@ class CratesTransformer(Transformer):
                 downloads,
                 license,
                 num,
-                published_by_user,
                 published_at,
+                published_by_user,
             )
 
             # map this LatestVersion to the crate in self.crates

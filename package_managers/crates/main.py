@@ -62,7 +62,7 @@ def main(config: Config, db: CratesDB):
     if config.exec_config.fetch:
         fetcher: TarballFetcher = TarballFetcher(
             "crates",
-            config.pm_config.source,
+            str(config.pm_config.source),
             config.exec_config.no_cache,
             config.exec_config.test,
         )

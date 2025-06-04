@@ -70,8 +70,7 @@ class Diff:
             URLKey(pkg.homepage, self.config.url_types.homepage),
             URLKey(pkg.repository, self.config.url_types.repository),
             URLKey(pkg.documentation, self.config.url_types.documentation),
-            URLKey(pkg.source, self.config.url_types.source),
-        ]
+        ] + ([URLKey(pkg.source, self.config.url_types.source)] if pkg.source else [])
 
         for url_key in urls:
             url = url_key.url
@@ -199,44 +198,49 @@ class Diff:
         }
 
         # Build the map of dependencies, keeping only the highest priority type
-        for dependency in pkg.latest_version.dependencies:
-            dep_crate_id: str = str(dependency.dependency_id)
-            dep_type: DependencyType = dependency.dependency_type
+        if pkg.latest_version:
+            for dependency in pkg.latest_version.dependencies:
+                dep_crate_id: str = str(dependency.dependency_id)
+                dep_type: DependencyType = dependency.dependency_type
 
-            # guard: no dep_id
-            if not dep_crate_id:
-                raise ValueError(f"No dep_id for {dependency}")
+                # guard: no dep_id
+                if not dep_crate_id:
+                    raise ValueError(f"No dep_id for {dependency}")
 
-            # guard: no dep_type
-            if dep_type is None:
-                raise ValueError(f"No dep_type for {dependency}")
+                # guard: no dep_type
+                if dep_type is None:
+                    raise ValueError(f"No dep_type for {dependency}")
 
-            # get the ID from the cache
-            dependency_pkg = self.caches.package_map.get(dep_crate_id)
+                # get the ID from the cache
+                dependency_pkg = self.caches.package_map.get(dep_crate_id)
 
-            # if we don't have the dependency, skip it for now
-            if not dependency_pkg:
-                self.logger.debug(f"{dep_crate_id}, dependency of {pkg.name} is new")
-                continue
-
-            dependency_id = dependency_pkg.id
-
-            # If this dependency already exists in our map, choose the higher priority type
-            if dependency_id in dependency_map:
-                existing_priority = priority_order.get(
-                    dependency_map[dependency_id], 999
-                )
-                new_priority = priority_order.get(dep_type, 999)
-
-                if new_priority < existing_priority:  # Lower number = higher priority
-                    old_type = dependency_map[dependency_id]
-                    dependency_map[dependency_id] = dep_type
+                # if we don't have the dependency, skip it for now
+                if not dependency_pkg:
                     self.logger.debug(
-                        f"Updated dependency type for {dep_crate_id} from "
-                        f"{old_type} to {dep_type} (higher priority)"
+                        f"{dep_crate_id}, dependency of {pkg.name} is new"
                     )
-            else:
-                dependency_map[dependency_id] = dep_type
+                    continue
+
+                dependency_id = dependency_pkg.id
+
+                # If this dependency already exists in our map, choose higher priority
+                if dependency_id in dependency_map:
+                    existing_priority = priority_order.get(
+                        dependency_map[dependency_id], 999
+                    )
+                    new_priority = priority_order.get(dep_type, 999)
+
+                    if (
+                        new_priority < existing_priority
+                    ):  # Lower number = higher priority
+                        old_type = dependency_map[dependency_id]
+                        dependency_map[dependency_id] = dep_type
+                        self.logger.debug(
+                            f"Updated dependency type for {dep_crate_id} from "
+                            f"{old_type} to {dep_type} (higher priority)"
+                        )
+                else:
+                    dependency_map[dependency_id] = dep_type
 
         # Now build the actual set of dependencies with resolved types
         actual: set[tuple[UUID, UUID]] = set()
