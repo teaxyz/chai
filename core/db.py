@@ -390,17 +390,17 @@ class DB:
         with self.session() as session:
             try:
                 # 1. Add all new objects with granular flushes
-                # if new_packages:
-                #     session.add_all(new_packages)
-                #     session.flush()
+                if new_packages:
+                    session.add_all(new_packages)
+                    session.flush()
 
-                # if new_urls:
-                #     session.add_all(new_urls)
-                #     session.flush()
+                if new_urls:
+                    session.add_all(new_urls)
+                    session.flush()
 
-                # if new_package_urls:
-                #     session.add_all(new_package_urls)
-                #     session.flush()
+                if new_package_urls:
+                    session.add_all(new_package_urls)
+                    session.flush()
 
                 # 2. remove all items we need to remove
                 if removed_deps:
