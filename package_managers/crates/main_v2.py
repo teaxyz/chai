@@ -548,6 +548,11 @@ class Diff:
            3. Get this crate's existing dependencies from CHAI
            4. Compare the two sets, and identify new and removed dependencies
 
+        Note: The database has a unique constraint on (package_id, dependency_id),
+        so if a package depends on the same dependency with multiple types (e.g.,
+        both runtime and build), we choose the highest priority type:
+        NORMAL (runtime) > BUILD > DEV
+
         Returns:
             new_deps: list[LegacyDependency], the new dependencies
             removed_deps: list[LegacyDependency], the removed dependencies
@@ -555,10 +560,18 @@ class Diff:
         new_deps: list[LegacyDependency] = []
         removed_deps: list[LegacyDependency] = []
 
-        actual: set[tuple[UUID, UUID]] = set()
+        # First, collect all dependencies and deduplicate by (package_id, dependency_id)
+        # choosing the highest priority dependency type for each unique dependency
+        dependency_map: dict[UUID, DependencyType] = {}
 
-        # first, I need to map the actual dependencies into the
-        # (dep_id, dep_type) tuple
+        # Priority order: NORMAL (runtime) > BUILD > DEV
+        priority_order = {
+            DependencyType.NORMAL: 1,
+            DependencyType.BUILD: 2,
+            DependencyType.DEV: 3,
+        }
+
+        # Build the map of dependencies, keeping only the highest priority type
         for dependency in pkg.latest_version.dependencies:
             dep_crate_id: str = str(dependency.dependency_id)
             dep_type: DependencyType = dependency.dependency_type
@@ -568,26 +581,43 @@ class Diff:
                 raise ValueError(f"No dep_id for {dependency}")
 
             # guard: no dep_type
-            # can't do if not dep_type bceause IntEnums might be 0, which is False
             if dep_type is None:
                 raise ValueError(f"No dep_type for {dependency}")
 
             # get the ID from the cache
-            dependency = self.caches.package_map.get(dep_crate_id)
+            dependency_pkg = self.caches.package_map.get(dep_crate_id)
 
-            # if we don't have the dependency, means there's a package which depends on
-            # something we have not indexed yet
-            # it's not problem, since we'll load the package now, and on the next run,
-            # this will sort itself out
-            if not dependency:
+            # if we don't have the dependency, skip it for now
+            if not dependency_pkg:
                 self.logger.debug(f"{dep_crate_id}, dependency of {pkg.name} is new")
                 continue
 
+            dependency_id = dependency_pkg.id
+
+            # If this dependency already exists in our map, choose the higher priority type
+            if dependency_id in dependency_map:
+                existing_priority = priority_order.get(
+                    dependency_map[dependency_id], 999
+                )
+                new_priority = priority_order.get(dep_type, 999)
+
+                if new_priority < existing_priority:  # Lower number = higher priority
+                    old_type = dependency_map[dependency_id]
+                    dependency_map[dependency_id] = dep_type
+                    self.logger.debug(
+                        f"Updated dependency type for {dep_crate_id} from "
+                        f"{old_type} to {dep_type} (higher priority)"
+                    )
+            else:
+                dependency_map[dependency_id] = dep_type
+
+        # Now build the actual set of dependencies with resolved types
+        actual: set[tuple[UUID, UUID]] = set()
+        for dependency_id, dep_type in dependency_map.items():
             # figure out the dependency type UUID
             dependency_type = self._resolve_dep_type(dep_type)
-
             # add it to the set of actual dependencies
-            actual.add((dependency.id, dependency_type))
+            actual.add((dependency_id, dependency_type))
 
         # establish the package that we are working with
         crate_id: str = str(pkg.id)
@@ -642,7 +672,7 @@ class Diff:
                 cache_deps_str = "\n".join(
                     [
                         f"{dep.dependency_id} / {dep.dependency_type_id}"
-                        for dep in cache_deps.values()
+                        for dep in cache_deps
                     ]
                 )
                 raise ValueError(

@@ -170,10 +170,10 @@ class TestDiffDeps(unittest.TestCase):
 
         # Add dependency to the latest version with NORMAL type (runtime)
         dependency = CrateDependency(
-            start_id=1048221,
+            crate_id=1048221,
             dependency_id=271975,
             dependency_type=DependencyType.NORMAL,  # Changed from BUILD to NORMAL
-            semver="^0.26.1",
+            semver_range="^0.26.1",
         )
         latest_version.dependencies = [dependency]
 
@@ -241,10 +241,10 @@ class TestDiffDeps(unittest.TestCase):
 
         # Add dependency to the latest version
         dependency = CrateDependency(
-            start_id=1048221,
+            crate_id=1048221,
             dependency_id=271975,
             dependency_type=DependencyType.NORMAL,
-            semver="^0.26.1",
+            semver_range="^0.26.1",
         )
         latest_version.dependencies = [dependency]
 
@@ -341,3 +341,175 @@ class TestDiffDeps(unittest.TestCase):
         self.assertEqual(removed_dep.package_id, self.main_pkg_id)
         self.assertEqual(removed_dep.dependency_id, self.dep_pkg_id)
         self.assertEqual(removed_dep.dependency_type_id, self.runtime_type_id)
+
+    def test_multiple_dependency_types_same_package(self):
+        """
+        Test that when a package depends on the same dependency package with
+        multiple dependency types (e.g., both runtime and build), we handle
+        the unique constraint on (package_id, dependency_id) properly.
+
+        This test should expose the current bug where we try to create multiple
+        LegacyDependency records with the same package_id and dependency_id
+        but different dependency_type_id, which violates the DB constraint.
+        """
+        # arrange
+        # Create cache with existing packages but no dependencies
+        cache = Cache(
+            package_map={
+                "1048221": self.main_pkg,  # Main package
+                "271975": self.dep_pkg,  # Dependency package
+            },
+            url_map={},
+            package_urls={},
+            dependencies={},
+        )
+
+        # Create Diff instance with our mock config and cache
+        diff = Diff(self.mock_config, cache)
+
+        # Create a CrateLatestVersion with multiple dependencies to the same package
+        latest_version = CrateLatestVersion(
+            id=9337571,
+            checksum="some-checksum",
+            downloads=1000,
+            license="MIT",
+            num="1.0.0",
+            published_by=None,
+            published_at="2023-01-01",
+        )
+
+        # Add dependencies to the same package with different types
+        runtime_dependency = CrateDependency(
+            crate_id=1048221,
+            dependency_id=271975,
+            dependency_type=DependencyType.NORMAL,  # Runtime dependency
+            semver_range="^0.26.1",
+        )
+
+        build_dependency = CrateDependency(
+            crate_id=1048221,
+            dependency_id=271975,  # Same dependency package
+            dependency_type=DependencyType.BUILD,  # Build dependency
+            semver_range="^0.26.1",
+        )
+
+        latest_version.dependencies = [runtime_dependency, build_dependency]
+
+        # Create a Crate with the latest version
+        crate = Crate(
+            id=1048221,
+            name="main_pkg",
+            readme="Test readme",
+            homepage="",
+            repository="",
+            documentation="",
+            source=None,
+        )
+        crate.latest_version = latest_version
+
+        # act
+        new_deps, removed_deps = diff.diff_deps(crate)
+
+        # assert
+        self.assertEqual(len(removed_deps), 0, "No deps should be removed")
+
+        # With the fix, we should only create 1 dependency record with the
+        # highest priority type (NORMAL > BUILD > DEV)
+        # Since we have both NORMAL and BUILD, NORMAL should win
+        self.assertEqual(
+            len(new_deps), 1, "Should create only 1 dep with highest priority type"
+        )
+
+        # The dependency should have the runtime type (NORMAL has highest priority)
+        new_dep = new_deps[0]
+        self.assertEqual(new_dep.package_id, self.main_pkg_id)
+        self.assertEqual(new_dep.dependency_id, self.dep_pkg_id)
+        self.assertEqual(
+            new_dep.dependency_type_id,
+            self.runtime_type_id,
+            "Should choose NORMAL (runtime) over BUILD as it has higher priority",
+        )
+
+    def test_multiple_dependency_types_build_vs_dev(self):
+        """
+        Test that when a package depends on the same dependency package with
+        BUILD and DEV types (no NORMAL), BUILD type takes precedence.
+
+        Priority order: NORMAL > BUILD > DEV
+        """
+        # arrange
+        # Create cache with existing packages but no dependencies
+        cache = Cache(
+            package_map={
+                "1048221": self.main_pkg,  # Main package
+                "271975": self.dep_pkg,  # Dependency package
+            },
+            url_map={},
+            package_urls={},
+            dependencies={},
+        )
+
+        # Create Diff instance with our mock config and cache
+        diff = Diff(self.mock_config, cache)
+
+        # Create a CrateLatestVersion with BUILD and DEV dependencies to the same package
+        latest_version = CrateLatestVersion(
+            id=9337571,
+            checksum="some-checksum",
+            downloads=1000,
+            license="MIT",
+            num="1.0.0",
+            published_by=None,
+            published_at="2023-01-01",
+        )
+
+        # Add dependencies to the same package with BUILD and DEV types
+        build_dependency = CrateDependency(
+            crate_id=1048221,
+            dependency_id=271975,
+            dependency_type=DependencyType.BUILD,  # Build dependency
+            semver_range="^0.26.1",
+        )
+
+        dev_dependency = CrateDependency(
+            crate_id=1048221,
+            dependency_id=271975,  # Same dependency package
+            dependency_type=DependencyType.DEV,  # Dev dependency
+            semver_range="^0.26.1",
+        )
+
+        latest_version.dependencies = [
+            dev_dependency,
+            build_dependency,
+        ]  # DEV first to test ordering
+
+        # Create a Crate with the latest version
+        crate = Crate(
+            id=1048221,
+            name="main_pkg",
+            readme="Test readme",
+            homepage="",
+            repository="",
+            documentation="",
+            source=None,
+        )
+        crate.latest_version = latest_version
+
+        # act
+        new_deps, removed_deps = diff.diff_deps(crate)
+
+        # assert
+        self.assertEqual(len(removed_deps), 0, "No deps should be removed")
+        self.assertEqual(
+            len(new_deps), 1, "Should create only 1 dep with highest priority type"
+        )
+
+        # The dependency should have the build type (BUILD > DEV)
+        new_dep = new_deps[0]
+        self.assertEqual(new_dep.package_id, self.main_pkg_id)
+        self.assertEqual(new_dep.dependency_id, self.dep_pkg_id)
+        self.assertEqual(
+            new_dep.dependency_type_id,
+            self.build_type_id,
+            "Should choose BUILD over DEV as it has higher priority",
+        )
