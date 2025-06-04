@@ -1,196 +1,175 @@
 import csv
-from typing import Dict, Generator
+from collections.abc import Generator
 
-from core.config import URLTypes, UserTypes
+from core.config import Config
 from core.transformer import Transformer
-from core.utils import safe_int
-from package_managers.crates.structs import DependencyType
+from core.utils import is_github_url
+from package_managers.crates.structs import (
+    Crate,
+    CrateDependency,
+    CrateLatestVersion,
+    CrateUser,
+    DependencyType,
+)
 
 
-# crates provides homepage and repository urls, so we'll initialize this transformer
-# with the ids for those url types
 class CratesTransformer(Transformer):
-    def __init__(self, url_types: URLTypes, user_types: UserTypes):
+    def __init__(self, config: Config):
         super().__init__("crates")
-        self.files = {
-            "projects": "crates.csv",
+        self.config = config
+        self.crates: dict[int, Crate] = {}
+
+        # files we need to parse
+        self.files: dict[str, str] = {
+            "crates": "crates.csv",
+            "latest_versions": "default_versions.csv",
             "versions": "versions.csv",
             "dependencies": "dependencies.csv",
             "users": "users.csv",
-            "urls": "crates.csv",
-            "user_packages": "crate_owners.csv",
-            "user_versions": "versions.csv",
+            "teams": "teams.csv",
         }
-        self.url_types = url_types
-        self.user_types = user_types
 
-    def _read_csv_rows(self, file_key: str) -> Generator[Dict[str, str], None, None]:
-        """
-        Helper method to read rows from a CSV file based on the file key.
-        
-        Args:
-            file_key (str): The key corresponding to the desired CSV file in self.files.
-        
-        Yields:
-            Dict[str, str]: A dictionary representing a row in the CSV file.
-        """
-        file_path = self.finder(self.files[file_key])
+    def _open_csv(self, file_name: str) -> Generator[dict[str, str], None, None]:
         try:
-            with open(file_path, newline='', encoding='utf-8') as f:
+            file_path = self.finder(self.files[file_name])
+            with open(file_path, newline="", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     yield row
+        except KeyError:
+            raise KeyError(f"Missing {file_name} from self.files: {self.files}")
         except FileNotFoundError:
-            self.logger.error(f"File not found: {file_path}")
+            self.logger.error(f"Missing {file_path} from data directory")
+            raise FileNotFoundError(f"Missing {file_path} file")
         except Exception as e:
             self.logger.error(f"Error reading {file_path}: {e}")
+            raise e
 
-    def packages(self) -> Generator[Dict[str, str], None, None]:
-        for row in self._read_csv_rows("projects"):
-            crate_id = row["id"]
+    def parse(self) -> None:
+        # first go through crates.csv to
+        # here, we can get the import_id, name, homepage, documentation, repository
+        # and also source, from repo if it is like GitHub
+        for row in self._open_csv("crates"):
+            crate_id = int(row["id"])
             name = row["name"]
             readme = row["readme"]
 
-            yield {"name": name, "import_id": crate_id, "readme": readme}
+            # URLs:
+            homepage = self.canonicalize(row["homepage"])
+            documentation = self.canonicalize(row["documentation"])
+            repository = self.canonicalize(row["repository"])
 
-    def versions(self) -> Generator[Dict[str, str], None, None]:
-        for row in self._read_csv_rows("versions"):
-            crate_id = row["crate_id"]
-            version_num = row["num"]
-            version_id = row["id"]
-            crate_size = safe_int(row["crate_size"])
-            created_at = row["created_at"]
-            license = row["license"]
-            downloads = safe_int(row["downloads"])
+            source: str | None = None
+            if is_github_url(repository):
+                source = repository
+
+            crate = Crate(
+                crate_id, name, readme, homepage, repository, documentation, source
+            )
+            self.crates[crate_id] = crate
+
+        self.logger.log(f"Parsed {len(self.crates)} crates")
+
+        # populate the map of crate_id to latest_version_id & all latest_version_ids
+        latest_versions: set[int]
+        latest_versions_map: dict[int, int]
+        latest_versions, latest_versions_map = self._load_latest_versions()
+        self.logger.log(f"Loaded {len(latest_versions)} latest versions")
+
+        # also build the map of user_id to CrateUser object
+        users: dict[int, CrateUser] = self._load_users()
+        self.logger.log(f"Loaded {len(users)} users")
+
+        # now, iterate through the versions.csv, and populate LatestVersion objects,
+        # only if the version_id is in the latest_versions set
+        for row in self._open_csv("versions"):
+            version_id = int(row["id"])
+            crate_id = int(row["crate_id"])
+
+            # ignore if this version is not the latest
+            if version_id not in latest_versions:
+                continue
+
             checksum = row["checksum"]
+            downloads = int(row["downloads"])
+            license = row["license"]
+            num = row["num"]
+            published_at = row["created_at"]
 
-            yield {
-                "crate_id": crate_id,
-                "version": version_num,
-                "import_id": version_id,
-                "size": crate_size,
-                "published_at": created_at,
-                "license": license,
-                "downloads": downloads,
-                "checksum": checksum,
-            }
+            # make a CrateUser object from the published_by
+            published_by = row["published_by"]
+            published_by_user: CrateUser | None = (
+                users[int(published_by)] if published_by else None
+            )
 
-    def dependencies(self) -> Generator[Dict[str, str], None, None]:
-        for row in self._read_csv_rows("dependencies"):
-            start_id = row["version_id"]
-            end_id = row["crate_id"]
-            req = row["req"]
+            latest_version = CrateLatestVersion(
+                version_id,
+                checksum,
+                downloads,
+                license,
+                num,
+                published_at,
+                published_by_user,
+            )
+
+            # map this LatestVersion to the crate in self.crates
+            self.crates[crate_id].latest_version = latest_version
+
+        self.logger.log("Parsed the latest versions for each crate")
+
+        # finally, parse through the dependencies.csv
+        # again, we only care about the dependencies for the latest version
+        for row in self._open_csv("dependencies"):
+            start_id = int(row["version_id"])
+
+            # ignore if this version is not the latest
+            if start_id not in latest_versions:
+                continue
+
+            # map both ids to crates
+            end_crate_id = int(row["crate_id"])
+            start_crate_id = int(latest_versions_map[start_id])
+
+            # guard
+            if start_crate_id not in self.crates.keys():
+                raise ValueError(f"Crate {start_crate_id} not found in self.crates")
+
             kind = int(row["kind"])
 
+            # guard
+            if kind not in [0, 1, 2]:
+                raise ValueError(f"Unknown dependency kind: {kind}")
 
-            try:
-                # map string to enum
-                dependency_type = DependencyType(kind)
-            except ValueError:
-                self.logger.warn(f"Unknown dependency kind: {kind}")
-                continue
+            dependency_type = DependencyType(kind)
+            semver = row["req"]
 
-            yield {
-                "version_id": start_id,
-                "crate_id": end_id,
-                "semver_range": req,
-                "dependency_type": dependency_type,
-            }
+            dependency = CrateDependency(
+                start_crate_id, end_crate_id, dependency_type, semver
+            )
 
-    # gh_id is unique to github, and is from GitHub
-    # our users table is unique on import_id and source_id
-    # so, we actually get some github data for free here!
-    def users(self) -> Generator[Dict[str, str], None, None]:
-        usernames = set()
-        for row in self._read_csv_rows("users"):
-            gh_login = row["gh_login"]
-            user_id = row["id"]
+            # add this dependency to the crate
+            self.crates[start_crate_id].latest_version.dependencies.append(dependency)
 
-            # Deduplicate based on gh_login
-            if gh_login in usernames:
-                self.logger.warn(f"Duplicate username detected: ID={user_id}, Username={gh_login}")
-                continue
-            usernames.add(gh_login)
+        self.logger.log("Parsed the dependencies for each crate")
 
-            # gh_login is a non-nullable column in crates, so we'll always be
-            # able to load this
-            source_id = self.user_types.github
-            yield {"import_id": user_id, "username": gh_login, "source_id": source_id}
+    def _load_latest_versions(self) -> tuple[set[int], dict[int, int]]:
+        latest_versions: set[int] = set()
+        latest_versions_map: dict[int, int] = {}
+        for row in self._open_csv("latest_versions"):
+            crate_id = int(row["crate_id"])
+            version_id = int(row["version_id"])
+            latest_versions.add(version_id)
+            latest_versions_map[version_id] = crate_id
 
-    # for crate_owners, owner_id and created_by are foreign keys on users.id
-    # and owner_kind is 0 for user and 1 for team
-    # secondly, created_at is nullable. we'll ignore for now and focus on owners
-    def user_packages(self) -> Generator[Dict[str, str], None, None]:
-        for row in self._read_csv_rows("user_packages"):
-            owner_kind = int(row["owner_kind"])
-            if owner_kind == 1:
-                continue  # Skip if owner is a team
+        return latest_versions, latest_versions_map
 
-            crate_id = row["crate_id"]
-            owner_id = row["owner_id"]
+    def _load_users(self) -> dict[int, CrateUser]:
+        users: dict[int, CrateUser] = {}
+        for row in self._open_csv("users"):
+            user_id = int(row["id"])
+            name = row["name"]
+            github_username = row["gh_login"]
+            user = CrateUser(user_id, name, github_username)
+            users[user_id] = user
 
-            yield {
-                "crate_id": crate_id,
-                "owner_id": owner_id,
-            }
-
-    # TODO: reopening files: versions.csv contains all the published_by ids
-    def user_versions(self) -> Generator[Dict[str, str], None, None]:
-        for row in self._read_csv_rows("user_versions"):
-            version_id = row["id"]
-            published_by = row["published_by"]
-
-            if published_by == "":
-                continue
-
-            yield {"version_id": version_id, "published_by": published_by}
-
-    # crates provides three urls for each crate: homepage, repository, and documentation
-    # however, any of these could be null, so we should check for that
-    # also, we're not going to deduplicate here
-    def urls(self) -> Generator[Dict[str, str], None, None]:
-        for row in self._read_csv_rows("urls"):
-            homepage = row.get("homepage", "").strip()
-            repository = row.get("repository", "").strip()
-            documentation = row.get("documentation", "").strip()
-
-            if homepage:
-                yield {"url": homepage, "url_type_id": self.url_types.homepage}
-
-            if repository:
-                yield {"url": repository, "url_type_id": self.url_types.repository}
-
-            if documentation:
-                yield {
-                    "url": documentation,
-                    "url_type_id": self.url_types.documentation,
-                }
-
-    # TODO: reopening files: crates.csv contains all the urls
-    def package_urls(self) -> Generator[Dict[str, str], None, None]:
-        for row in self._read_csv_rows("urls"):
-            crate_id = row["id"]
-            homepage = row.get("homepage", "").strip()
-            repository = row.get("repository", "").strip()
-            documentation = row.get("documentation", "").strip()
-
-            if homepage:
-                yield {
-                    "import_id": crate_id,
-                    "url": homepage,
-                    "url_type_id": self.url_types.homepage,
-                }
-
-            if repository:
-                yield {
-                    "import_id": crate_id,
-                    "url": repository,
-                    "url_type_id": self.url_types.repository,
-                }
-
-            if documentation:
-                yield {
-                    "import_id": crate_id,
-                    "url": documentation,
-                    "url_type_id": self.url_types.documentation,
-                }
+        return users

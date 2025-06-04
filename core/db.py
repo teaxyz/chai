@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 from uuid import UUID, uuid4
 
-from sqlalchemy import Insert, Update, create_engine, select, update
+from sqlalchemy import Insert, Result, Update, create_engine, select, update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, sessionmaker
@@ -12,8 +12,10 @@ from sqlalchemy.orm import Session, sessionmaker
 from core.logger import Logger
 from core.models import (
     URL,
+    Base,
     BaseModel,
     DependsOnType,
+    LegacyDependency,
     LoadHistory,
     Package,
     PackageManager,
@@ -21,15 +23,10 @@ from core.models import (
     Source,
     URLType,
 )
+from core.structs import CurrentGraph, CurrentURLs, URLKey
 
 CHAI_DATABASE_URL = os.getenv("CHAI_DATABASE_URL")
 DEFAULT_BATCH_SIZE = 10000
-
-
-@dataclass
-class CurrentURLs:
-    url_map: Dict[Tuple[str, UUID], URL]  # URL and URL Type ID to URL object
-    package_urls: Dict[UUID, Set[PackageURL]]  # Package ID to PackageURL rows
 
 
 class DB:
@@ -83,6 +80,70 @@ class DB:
                 for name in package_names
                 if name in name_to_url
             ]
+
+    def current_graph(self, package_manager_id: UUID) -> CurrentGraph:
+        """Get the Homebrew packages and dependencies"""
+        package_map: Dict[str, Package] = {}  # name to package
+        dependencies: Dict[UUID, Set[LegacyDependency]] = {}
+
+        stmt = (
+            select(Package, LegacyDependency)
+            .select_from(Package)
+            .join(
+                LegacyDependency,
+                onclause=Package.id == LegacyDependency.package_id,
+                isouter=True,
+            )
+            .where(Package.package_manager_id == package_manager_id)
+        )
+
+        with self.session() as session:
+            result: Result[Tuple[Package, LegacyDependency]] = session.execute(stmt)
+
+            for pkg, dep in result:
+                # add to the package map, by import_id, which is usually name
+                if pkg.import_id not in package_map:
+                    package_map[pkg.import_id] = pkg
+
+                # and add to the dependencies map as well
+                if dep:  # check because it's an outer join
+                    if pkg.id not in dependencies:
+                        dependencies[pkg.id] = set()
+                    dependencies[pkg.id].add(dep)
+
+        self.logger.debug(f"Cached {len(package_map)} packages")
+
+        return CurrentGraph(package_map, dependencies)
+
+    def current_urls(self, urls: Set[str]) -> CurrentURLs:
+        stmt = (
+            select(Package, PackageURL, URL)
+            .select_from(URL)
+            .join(PackageURL, PackageURL.url_id == URL.id, isouter=True)
+            .join(Package, Package.id == PackageURL.package_id, isouter=True)
+            .where(URL.url.in_(urls))
+        )
+
+        with self.session() as session:
+            result = session.execute(stmt)
+
+            url_map: Dict[URLKey, URL] = {}
+            package_urls: Dict[UUID, Set[PackageURL]] = {}
+
+            for pkg, pkg_url, url in result:
+                url_key = URLKey(url.url, url.url_type_id)
+                url_map[url_key] = url
+
+                # since it's a left join, we need to check if pkg is None
+                if pkg is not None:
+                    if pkg.id not in package_urls:
+                        package_urls[pkg.id] = set()
+                    package_urls[pkg.id].add(pkg_url)
+
+            self.logger.debug(f"Cached {len(url_map)} URLs")
+            self.logger.debug(f"Cached {len(package_urls)} package URLs")
+
+            return CurrentURLs(url_map=url_map, package_urls=package_urls)
 
     # TODO: we should add the Cache class to the core structure, and have the individual
     # transfomers inherit from it. For now, keeping this as `Any`
@@ -280,34 +341,91 @@ class DB:
             value_stmt = stmt.values(batch)
             session.execute(value_stmt)
 
-    def get_current_urls(self, urls: Set[str]) -> CurrentURLs:
-        stmt = (
-            select(Package, PackageURL, URL)
-            .select_from(URL)
-            .join(PackageURL, PackageURL.url_id == URL.id, isouter=True)
-            .join(Package, Package.id == PackageURL.package_id, isouter=True)
-            .where(URL.url.in_(urls))
-        )
+    def ingest(
+        self,
+        new_packages: List[Package],
+        new_urls: List[URL],
+        new_package_urls: List[PackageURL],
+        new_deps: List[LegacyDependency],
+        removed_deps: List[LegacyDependency],
+        updated_packages: List[Dict[str, UUID | str | datetime]],
+        updated_package_urls: List[Dict[str, UUID | datetime]],
+    ) -> None:
+        """
+        Ingests a list of new, updated, and deleted objects from the database.
+
+        It flushes after after each insert, to ensure that the database is in a valid
+        state prior to the next batch of ingestions.
+
+        TODO: if pkey is set in the values provided, then sqlalchemy will use
+        psycopg2.executemany(...), which is quicker, but still the slowest of all
+        execution options provided by psycopg2. The best one is execute_values, which
+        is **only** available for inserts, and can be used as follows:
+
+        looks like sqlalchemy^2 has a native support for insertmanyvalues, but
+        **I think** we need to pass the data in as a list[dict] instead of objects.
+        See: https://docs.sqlalchemy.org/en/20/core/connections.html#engine-insertmanyvalues
+
+
+        Inputs:
+        - new_packages: a list of new Package objects
+        - new_urls: a list of new URL objects
+        - new_package_urls: a list of new PackageURL objects
+        - updated_packages: a list of updated Package objects
+        - updated_package_urls: a list of updated PackageURL objects
+        - new_deps: a list of new LegacyDependency objects
+        - removed_deps: a list of removed LegacyDependency objects
+        """
+        self.logger.log("-" * 100)
+        self.logger.log("Going to load")
+        self.logger.log(f"New packages: {len(new_packages)}")
+        self.logger.log(f"New URLs: {len(new_urls)}")
+        self.logger.log(f"New package URLs: {len(new_package_urls)}")
+        self.logger.log(f"Updated packages: {len(updated_packages)}")
+        self.logger.log(f"Updated package URLs: {len(updated_package_urls)}")
+        self.logger.log(f"New dependencies: {len(new_deps)}")
+        self.logger.log(f"Removed dependencies: {len(removed_deps)}")
+        self.logger.log("-" * 100)
 
         with self.session() as session:
-            result = session.execute(stmt)
+            try:
+                # 1. Add all new objects with granular flushes
+                if new_packages:
+                    session.add_all(new_packages)
+                    session.flush()
 
-            url_map: Dict[Tuple[str, UUID], URL] = {}
-            package_urls: Dict[UUID, Set[PackageURL]] = {}
+                if new_urls:
+                    session.add_all(new_urls)
+                    session.flush()
 
-            for pkg, pkg_url, url in result:
-                url_map[(url.url, url.url_type_id)] = url
+                if new_package_urls:
+                    session.add_all(new_package_urls)
+                    session.flush()
 
-                # since it's a left join, we need to check if pkg is None
-                if pkg is not None:
-                    if pkg.id not in package_urls:
-                        package_urls[pkg.id] = set()
-                    package_urls[pkg.id].add(pkg_url)
+                # 2. remove all items we need to remove
+                if removed_deps:
+                    for dep in removed_deps:
+                        session.delete(dep)
+                    session.flush()
 
-            self.logger.debug(f"Length of url_map: {len(url_map)}")
-            self.logger.debug(f"Length of package_urls: {len(package_urls)}")
+                if new_deps:
+                    session.add_all(new_deps)
+                    session.flush()
 
-            return CurrentURLs(url_map=url_map, package_urls=package_urls)
+                # 2. Perform updates (these will now operate on a flushed state)
+                if updated_packages:
+                    session.execute(update(Package), updated_packages)
+
+                if updated_package_urls:
+                    session.execute(update(PackageURL), updated_package_urls)
+
+                # 3. Commit all changes
+                session.commit()
+                self.logger.log("✅ Successfully ingested")
+            except Exception as e:
+                self.logger.error(f"Error during batched ingest: {e}")
+                session.rollback()
+                raise e
 
 
 class ConfigDB(DB):

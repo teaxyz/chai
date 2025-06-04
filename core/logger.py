@@ -50,3 +50,9 @@ class Logger:
         self.print(f"{exc_type.__name__}: {exc_value}")
         self.print("***** TRACEBACK *****")
         print(f"{''.join(traceback.format_tb(exc_traceback))}")
+
+    def info(self, message):
+        self.log(message)
+
+    def warning(self, message):
+        self.warn(message)

@@ -129,11 +129,14 @@ docker compose up -d
 
 ### test
 
+Inputs: PACKAGE_MANAGER
+Env: PYTHONPATH=.
+Env: FETCH=false
 Env: TEST=true
 Env: DEBUG=true
 
 ```sh
-docker compose up
+pkgx uv run package_managers/$PACKAGE_MANAGER/main_v2.py
 ```
 
 ### full-test

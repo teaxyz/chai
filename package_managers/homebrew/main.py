@@ -7,10 +7,10 @@ from uuid import UUID
 from core.config import Config, PackageManager
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
+from core.structs import Cache
 from package_managers.homebrew.db import HomebrewDB
 from package_managers.homebrew.diff import Diff
 from package_managers.homebrew.formulae import HomebrewFetcher
-from package_managers.homebrew.structs import Cache
 
 
 def main(config: Config, db: HomebrewDB) -> None:
@@ -27,10 +27,10 @@ def main(config: Config, db: HomebrewDB) -> None:
 
     # get the caches here
     cache = Cache(
-        db.package_map,
-        db.current_urls.url_map,
-        db.current_urls.package_urls,
-        db.dependencies,
+        db.graph.package_map,
+        db.urls.url_map,
+        db.urls.package_urls,
+        db.graph.dependencies,
     )
 
     # total set of updates we'll make are:
