@@ -14,7 +14,6 @@ from uuid import UUID
 
 import pytest
 
-from core.config import Config, URLTypes
 from core.models import URL, Package
 from package_managers.pkgx.loader import PkgxLoader
 from package_managers.pkgx.transformer import Cache, Dependencies
@@ -26,8 +25,6 @@ def test_scenarios():
     Collection of test scenarios for URL loading.
     Each scenario represents a different case we want to test.
     """
-    # TODO; add a scenario to check if there's no URLs in the db, but the transformer
-    # found some
     scenarios = {
         "new_urls": {
             "import_id": "github.com/certifi/python-certifi",
@@ -38,6 +35,11 @@ def test_scenarios():
             ],
             # What's in DB (nothing, completely new)
             "db_state": {"urls": {}, "package_urls": {}},
+            "expected_behavior": {
+                "new_urls_created": 2,  # homepage and source
+                "new_package_urls_created": 2,
+                "urls_updated": 0,
+            },
         },
         "existing_package_some_urls": {
             "import_id": "github.com/pyca/cryptography",
@@ -62,6 +64,11 @@ def test_scenarios():
                         }
                     ]
                 },
+            },
+            "expected_behavior": {
+                "new_urls_created": 2,  # source and repository
+                "new_package_urls_created": 2,
+                "urls_updated": 1,  # homepage timestamp updated
             },
         },
         "all_urls_exist": {
@@ -96,55 +103,102 @@ def test_scenarios():
                     ]
                 },
             },
+            "expected_behavior": {
+                "new_urls_created": 0,
+                "new_package_urls_created": 0,
+                "urls_updated": 2,  # Both timestamps updated
+            },
+        },
+        "no_urls_in_db": {
+            "import_id": "github.com/numpy/numpy",
+            "package_id": UUID("b0b18184-e743-40fb-8add-a5ccaac026a7"),
+            # Transformer found URLs but DB has no record of this package
+            "transformer_urls": [
+                ("github.com/numpy/numpy", ["homepage", "repository", "documentation"])
+            ],
+            # DB is empty for this package
+            "db_state": {"urls": {}, "package_urls": {}},
+            "expected_behavior": {
+                "new_urls_created": 3,
+                "new_package_urls_created": 3,
+                "urls_updated": 0,
+            },
         },
     }
 
     return scenarios
 
 
-def test_load_urls(mock_config, mock_db, test_scenarios):
-    """Test URL loading for different scenarios"""
+@pytest.mark.loader
+class TestPkgxLoader:
+    """Test the PkgxLoader URL loading functionality."""
 
-    for scenario_name, scenario in test_scenarios.items():
-        # Set up cache for this scenario
-        cache = Cache(
-            package=Package(id=scenario["package_id"], import_id=scenario["import_id"]),
-            urls=[
-                URL(url=url, url_type_id=mock_db.select_url_types_by_name(url_type).id)
-                for url, url_types in scenario["transformer_urls"]
-                for url_type in url_types
-            ],
-            dependencies=Dependencies(),
-        )
+    def test_load_urls(self, mock_config, test_scenarios):
+        """Test URL loading for different scenarios."""
+        for scenario_name, scenario in test_scenarios.items():
+            # Set up cache for this scenario
+            cache = Cache(
+                package=Package(id=scenario["package_id"], import_id=scenario["import_id"]),
+                urls=[
+                    URL(url=url, url_type_id=mock_config.db.select_url_types_by_name(url_type).id)
+                    for url, url_types in scenario["transformer_urls"]
+                    for url_type in url_types
+                ],
+                dependencies=Dependencies(),
+            )
 
-        # Create cache map as expected by loader
-        cache_map = {scenario["import_id"]: cache}
+            # Create cache map as expected by loader
+            cache_map = {scenario["import_id"]: cache}
 
-        # Create loader with our test data
-        loader = PkgxLoader(mock_config, cache_map)
+            # Create loader with our test data
+            loader = PkgxLoader(mock_config, cache_map)
 
-        # Mock DB state for this scenario
-        current_urls_mock = MagicMock()
-        current_urls_mock.url_map = scenario["db_state"]["urls"]
-        current_urls_mock.package_urls = scenario["db_state"]["package_urls"]
+            # Mock DB state for this scenario
+            current_urls_mock = MagicMock()
+            current_urls_mock.url_map = scenario["db_state"]["urls"]
+            current_urls_mock.package_urls = scenario["db_state"]["package_urls"]
 
-        # define the function get_current_urls
-        mock_db.get_current_urls = MagicMock()
-        mock_db.get_current_urls.side_effect = lambda urls: current_urls_mock
+            # Mock the get_current_urls method
+            mock_config.db.get_current_urls = MagicMock()
+            mock_config.db.get_current_urls.return_value = current_urls_mock
 
-        # also mock the session, since loader doesn't return stuff, just loads
-        mock_db.session = MagicMock()
-        mock_db.session.return_value.__enter__.return_value = mock_db.session
+            # Mock the session for loader operations
+            mock_config.db.session = MagicMock()
+            mock_session = MagicMock()
+            mock_config.db.session.return_value.__enter__.return_value = mock_session
 
-        loader.load_urls()
+            # Track calls to verify behavior
+            urls_added = []
+            package_urls_added = []
+            urls_updated = []
 
-        # Test logic specific to each scenario
-        if scenario_name == "new_package_new_urls":
-            # TODO: Assert new URLs and relationships are created
-            pass
-        elif scenario_name == "existing_package_some_urls":
-            # TODO: Assert only missing URLs and relationships are created
-            pass
-        elif scenario_name == "all_urls_exist":
-            # TODO: Assert no new URLs created, only timestamps updated
-            pass
+            def track_add(obj):
+                if hasattr(obj, 'url'):  # It's a URL object
+                    urls_added.append(obj)
+                else:  # It's a PackageURL object
+                    package_urls_added.append(obj)
+
+            def track_bulk_update(mapper, mappings):
+                urls_updated.extend(mappings)
+
+            mock_session.add.side_effect = track_add
+            mock_session.bulk_update_mappings.side_effect = track_bulk_update
+
+            # Run the loader
+            loader.load_urls()
+
+            # Verify expected behavior
+            expected = scenario["expected_behavior"]
+            assert len(urls_added) == expected["new_urls_created"], \
+                f"Scenario {scenario_name}: Expected {expected['new_urls_created']} new URLs, got {len(urls_added)}"
+            assert len(package_urls_added) == expected["new_package_urls_created"], \
+                f"Scenario {scenario_name}: Expected {expected['new_package_urls_created']} new PackageURLs, got {len(package_urls_added)}"
+            
+            # URLs updated is tracked through bulk_update_mappings calls
+            if expected["urls_updated"] > 0:
+                assert mock_session.bulk_update_mappings.called, \
+                    f"Scenario {scenario_name}: Expected bulk_update_mappings to be called"
+                # Check that the right number of URLs were updated
+                total_updated = sum(len(call[0][1]) for call in mock_session.bulk_update_mappings.call_args_list)
+                assert total_updated == expected["urls_updated"], \
+                    f"Scenario {scenario_name}: Expected {expected['urls_updated']} URLs updated, got {total_updated}"

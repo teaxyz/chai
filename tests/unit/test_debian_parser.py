@@ -1,8 +1,17 @@
 # ruff: noqa: E501
+"""
+Test Debian package parser functionality.
+
+This module tests the DebianParser class which parses Debian package
+and source entries from Packages and Sources files.
+"""
+
+import pytest
 
 from package_managers.debian.parser import DebianParser, handle_maintainer
 
 
+@pytest.mark.parser
 class TestDebianParser:
     """Test the Debian parser functionality."""
 
@@ -127,6 +136,7 @@ Testsuite-Triggers: g++, pyrex
         assert source.testsuite_triggers == "g++, pyrex"
 
     def test_handle_uploaders(self):
+        """Test handling of uploaders with special characters and edge cases."""
         maintainer = """Package: example
 Uploaders: "Adam C. Powell, IV" <hazelsct@debian.org>, Drew Parsons <dparsons@debian.org>"""
         parser = DebianParser(maintainer)
