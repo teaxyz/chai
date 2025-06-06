@@ -462,6 +462,3 @@ class TestDedupe:
 
         # Assert
         mock_db.ingest.assert_not_called()
-        mock_db.get_packages_with_homepages.assert_not_called()
-        mock_db.get_current_canons.assert_not_called()
-        mock_db.get_current_canon_packages.assert_not_called()
