@@ -5,7 +5,8 @@ from uuid import UUID, uuid4
 from core.config import Config
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
-from package_managers.homebrew.structs import Actual, Cache
+from core.structs import Cache
+from package_managers.homebrew.structs import Actual
 
 
 class Diff:

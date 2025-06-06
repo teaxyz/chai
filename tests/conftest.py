@@ -27,23 +27,18 @@ from core.models import Source, URLType
 def mock_url_types():
     """
     Mock URL types with consistent UUIDs for testing.
-    
+
     Returns a mock URLTypes object that returns consistent URL type objects
     for common URL type names.
     """
     url_types = MagicMock(spec=URLTypes)
-    
-    # Define URL types with consistent UUIDs
-    url_type_mapping = {
-        "homepage": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000001")),
-        "repository": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000002")),
-        "documentation": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000003")),
-        "source": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000004")),
-    }
-    
-    # Mock the __getattr__ method to return URL types by name
-    url_types.__getattr__.side_effect = lambda name: url_type_mapping.get(name)
-    
+
+    # Set up URL type attributes directly
+    url_types.homepage = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000001"))
+    url_types.repository = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000002"))
+    url_types.documentation = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000003"))
+    url_types.source = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000004"))
+
     return url_types
 
 
@@ -51,22 +46,20 @@ def mock_url_types():
 def mock_dependency_types():
     """
     Mock dependency types for testing.
-    
+
     Returns a mock DependencyTypes object with common dependency types.
     """
     dep_types = MagicMock(spec=DependencyTypes)
-    
-    # Define dependency types with consistent UUIDs
-    dep_type_mapping = {
-        "runtime": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000010")),
-        "build": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000011")),
-        "dev": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000012")),
-        "test": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000013")),
-    }
-    
-    # Mock the __getattr__ method
-    dep_types.__getattr__.side_effect = lambda name: dep_type_mapping.get(name)
-    
+
+    # Set up dependency type attributes directly
+    dep_types.runtime = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000010"))
+    dep_types.build = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000011"))
+    dep_types.dev = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000012"))
+    dep_types.test = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000013"))
+    dep_types.development = dep_types.dev  # Alias for development
+    dep_types.recommended = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000014"))
+    dep_types.optional = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000015"))
+
     return dep_types
 
 
@@ -74,14 +67,22 @@ def mock_dependency_types():
 def mock_sources():
     """
     Mock sources with consistent UUIDs for testing.
-    
+
     Returns a dict mapping source names to mock Source objects.
     """
     return {
-        "github": Mock(spec=Source, id=uuid.UUID("00000000-0000-0000-0000-000000000020")),
-        "crates": Mock(spec=Source, id=uuid.UUID("00000000-0000-0000-0000-000000000021")),
-        "homebrew": Mock(spec=Source, id=uuid.UUID("00000000-0000-0000-0000-000000000022")),
-        "debian": Mock(spec=Source, id=uuid.UUID("00000000-0000-0000-0000-000000000023")),
+        "github": Mock(
+            spec=Source, id=uuid.UUID("00000000-0000-0000-0000-000000000020")
+        ),
+        "crates": Mock(
+            spec=Source, id=uuid.UUID("00000000-0000-0000-0000-000000000021")
+        ),
+        "homebrew": Mock(
+            spec=Source, id=uuid.UUID("00000000-0000-0000-0000-000000000022")
+        ),
+        "debian": Mock(
+            spec=Source, id=uuid.UUID("00000000-0000-0000-0000-000000000023")
+        ),
         "pkgx": Mock(spec=Source, id=uuid.UUID("00000000-0000-0000-0000-000000000024")),
     }
 
@@ -90,22 +91,19 @@ def mock_sources():
 def mock_package_managers():
     """
     Mock package managers for testing.
-    
+
     Returns a mock PackageManagers object.
     """
     package_managers = MagicMock(spec=PackageManagers)
-    
-    # Define package manager mappings
-    pm_mapping = {
-        "crates": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000030")),
-        "homebrew": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000031")),
-        "debian": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000032")),
-        "pkgx": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000033")),
-    }
-    
-    # Mock the __getattr__ method
-    package_managers.__getattr__.side_effect = lambda name: pm_mapping.get(name)
-    
+
+    # Set up package manager attributes directly
+    package_managers.crates = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000030"))
+    package_managers.homebrew = Mock(
+        id=uuid.UUID("00000000-0000-0000-0000-000000000031")
+    )
+    package_managers.debian = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000032"))
+    package_managers.pkgx = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000033"))
+
     return package_managers
 
 
@@ -113,7 +111,7 @@ def mock_package_managers():
 def mock_pm_config(mock_package_managers):
     """
     Mock PMConf (Package Manager Configuration) for testing.
-    
+
     Returns a mock PMConf object with a default package manager ID.
     """
     pm_config = MagicMock(spec=PMConf)
@@ -122,26 +120,28 @@ def mock_pm_config(mock_package_managers):
 
 
 @pytest.fixture
-def mock_config(mock_url_types, mock_dependency_types, mock_package_managers, mock_pm_config):
+def mock_config(
+    mock_url_types, mock_dependency_types, mock_package_managers, mock_pm_config
+):
     """
     Mock Config object with all necessary sub-configurations.
-    
+
     This is the main configuration fixture that most tests will use.
     """
     config = MagicMock(spec=Config)
-    
+
     # Set up execution configuration
     config.exec_config = MagicMock()
     config.exec_config.test = True
     config.exec_config.no_cache = True
     config.exec_config.debug = False
-    
+
     # Set up sub-configurations
     config.url_types = mock_url_types
     config.dependency_types = mock_dependency_types
     config.package_managers = mock_package_managers
     config.pm_config = mock_pm_config
-    
+
     # Mock DB that returns consistent source objects
     mock_db = MagicMock()
     mock_sources_dict = {
@@ -151,12 +151,19 @@ def mock_config(mock_url_types, mock_dependency_types, mock_package_managers, mo
         "debian": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000023")),
         "pkgx": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000024")),
     }
-    
+
     mock_db.select_source_by_name.side_effect = lambda name: mock_sources_dict.get(name)
-    mock_db.select_url_types_by_name.side_effect = lambda name: mock_url_types.__getattr__(name)
-    
+
+    # Create a function to get URL types by name
+    def get_url_type_by_name(name):
+        if hasattr(mock_url_types, name):
+            return getattr(mock_url_types, name)
+        return None
+
+    mock_db.select_url_types_by_name.side_effect = get_url_type_by_name
+
     config.db = mock_db
-    
+
     return config
 
 
@@ -164,20 +171,16 @@ def mock_config(mock_url_types, mock_dependency_types, mock_package_managers, mo
 def mock_user_types():
     """
     Mock user types for testing.
-    
+
     Returns a mock UserTypes object.
     """
     user_types = MagicMock(spec=UserTypes)
-    
-    # Define user type mappings
-    user_type_mapping = {
-        "admin": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000040")),
-        "maintainer": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000041")),
-        "contributor": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000042")),
-    }
-    
-    user_types.__getattr__.side_effect = lambda name: user_type_mapping.get(name)
-    
+
+    # Set up user type attributes directly
+    user_types.admin = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000040"))
+    user_types.maintainer = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000041"))
+    user_types.contributor = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000042"))
+
     return user_types
 
 
@@ -185,7 +188,7 @@ def mock_user_types():
 def sample_package_data():
     """
     Provides sample package data for testing transformers and parsers.
-    
+
     Returns a dict with sample data for different package managers.
     """
     return {
@@ -228,24 +231,26 @@ def sample_package_data():
 def mock_csv_reader():
     """
     Creates a mock CSV reader for testing transformers that read CSV files.
-    
+
     Returns a function that creates mock readers with specific data.
     """
+
     def create_mock_reader(data):
         """
         Create a mock reader that returns the specified data.
-        
+
         Args:
             data: List of rows to return from the CSV reader
-            
+
         Returns:
             A mock function that returns an iterator over the data
         """
+
         def mock_reader(file_key):
             return iter([data])
-        
+
         return mock_reader
-    
+
     return create_mock_reader
 
 
