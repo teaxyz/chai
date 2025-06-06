@@ -82,15 +82,19 @@ def get_latest_homepage_per_package(
         # Since we ordered by Package.id, URL.created_at.desc(),
         # the first URL we see for each package is the latest
         if pkg.id not in latest_homepages:
+            # skip empty or whitespace-only urls
+            if not url.url or url.url.strip() == "":
+                continue
+
             # guard against non-canonicalized URLs
             try:
                 if not is_canonical_url(url.url):
                     non_canonical_urls.append(url)
+                else:
+                    latest_homepages[pkg.id] = url
             except Exception as e:
                 logger.warn(f"Error checking if {url.url} is canonical: {e}")
                 non_canonical_urls.append(url)
-            else:
-                latest_homepages[pkg.id] = url
 
     if non_canonical_urls:
         logger.warn(f"Found {len(non_canonical_urls)} non-canonicalized URLs in URLs")
