@@ -8,7 +8,7 @@ and source entries from Packages and Sources files.
 
 import pytest
 
-from package_managers.debian.parser import DebianParser, handle_maintainer
+from package_managers.debian.parser import DebianParser
 
 
 @pytest.mark.parser

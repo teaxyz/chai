@@ -2,7 +2,7 @@
 Test the CHAI graph ranking algorithm.
 
 This module tests the rx_graph module which implements a custom graph-based
-ranking algorithm for packages. The tests focus on verifying that the 
+ranking algorithm for packages. The tests focus on verifying that the
 distribute function conserves weight appropriately.
 """
 
@@ -44,8 +44,9 @@ def large_chai_graph() -> tuple[CHAI, dict[uuid.UUID, Decimal]]:
         uid: weight / total_weight
         for uid, weight in initial_personalization_raw.items()
     }
-    assert abs(sum(personalization.values()) - Decimal(1.0)) <= TOLERANCE, \
-        "Initial personalization should sum to 1 within tolerance"
+    assert (
+        abs(sum(personalization.values()) - Decimal(1.0)) <= TOLERANCE
+    ), "Initial personalization should sum to 1 within tolerance"
 
     # Add random edges (potential cycles)
     node_indices = list(G.node_indices())
@@ -61,7 +62,7 @@ def large_chai_graph() -> tuple[CHAI, dict[uuid.UUID, Decimal]]:
 @pytest.mark.slow
 class TestDistributeConservation:
     """Test the CHAI graph distribute function for weight conservation."""
-    
+
     def test_distribute_conservation(
         self,
         large_chai_graph: tuple[CHAI, dict[uuid.UUID, Decimal]],

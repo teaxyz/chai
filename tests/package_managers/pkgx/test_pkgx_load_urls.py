@@ -8,7 +8,6 @@ Tests verify:
 4. Existing PackageURLs are updated with latest datetime
 """
 
-from typing import Dict, List, Set, Tuple
 from unittest.mock import MagicMock
 from uuid import UUID
 
@@ -138,9 +137,16 @@ class TestPkgxLoader:
         for scenario_name, scenario in test_scenarios.items():
             # Set up cache for this scenario
             cache = Cache(
-                package=Package(id=scenario["package_id"], import_id=scenario["import_id"]),
+                package=Package(
+                    id=scenario["package_id"], import_id=scenario["import_id"]
+                ),
                 urls=[
-                    URL(url=url, url_type_id=mock_config.db.select_url_types_by_name(url_type).id)
+                    URL(
+                        url=url,
+                        url_type_id=mock_config.db.select_url_types_by_name(
+                            url_type
+                        ).id,
+                    )
                     for url, url_types in scenario["transformer_urls"]
                     for url_type in url_types
                 ],
@@ -173,7 +179,7 @@ class TestPkgxLoader:
             urls_updated = []
 
             def track_add(obj):
-                if hasattr(obj, 'url'):  # It's a URL object
+                if hasattr(obj, "url"):  # It's a URL object
                     urls_added.append(obj)
                 else:  # It's a PackageURL object
                     package_urls_added.append(obj)
@@ -189,16 +195,21 @@ class TestPkgxLoader:
 
             # Verify expected behavior
             expected = scenario["expected_behavior"]
-            assert len(urls_added) == expected["new_urls_created"], \
-                f"Scenario {scenario_name}: Expected {expected['new_urls_created']} new URLs, got {len(urls_added)}"
-            assert len(package_urls_added) == expected["new_package_urls_created"], \
-                f"Scenario {scenario_name}: Expected {expected['new_package_urls_created']} new PackageURLs, got {len(package_urls_added)}"
-            
+            assert (
+                len(urls_added) == expected["new_urls_created"]
+            ), f"Scenario {scenario_name}: Expected {expected['new_urls_created']} new URLs, got {len(urls_added)}"
+            assert (
+                len(package_urls_added) == expected["new_package_urls_created"]
+            ), f"Scenario {scenario_name}: Expected {expected['new_package_urls_created']} new PackageURLs, got {len(package_urls_added)}"
+
             # URLs updated is tracked through bulk_update_mappings calls
             if expected["urls_updated"] > 0:
-                assert mock_session.bulk_update_mappings.called, \
-                    f"Scenario {scenario_name}: Expected bulk_update_mappings to be called"
+                assert mock_session.bulk_update_mappings.called, f"Scenario {scenario_name}: Expected bulk_update_mappings to be called"
                 # Check that the right number of URLs were updated
-                total_updated = sum(len(call[0][1]) for call in mock_session.bulk_update_mappings.call_args_list)
-                assert total_updated == expected["urls_updated"], \
-                    f"Scenario {scenario_name}: Expected {expected['urls_updated']} URLs updated, got {total_updated}"
+                total_updated = sum(
+                    len(call[0][1])
+                    for call in mock_session.bulk_update_mappings.call_args_list
+                )
+                assert (
+                    total_updated == expected["urls_updated"]
+                ), f"Scenario {scenario_name}: Expected {expected['urls_updated']} URLs updated, got {total_updated}"

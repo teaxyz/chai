@@ -20,7 +20,7 @@ from core.config import (
     URLTypes,
     UserTypes,
 )
-from core.models import Source, URLType
+from core.models import Source
 
 
 @pytest.fixture
