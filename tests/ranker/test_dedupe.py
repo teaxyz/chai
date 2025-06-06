@@ -464,3 +464,54 @@ class TestDedupe:
 
         # Assert
         mock_db.ingest.assert_not_called()
+
+
+def test_empty_urls(self):
+    """
+    A lot of packages in CHAI have no URLs, and we should not deduplicate them
+    with each other. This test case ensures that if two packages have no URLs, they
+    do not get deduplicated.
+    """
+    # Arrange
+    shared_homepage_url = URL(
+        id=self.url1_id,
+        url="",
+        url_type_id=self.homepage_url_type_id,
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+
+    # Current state: no canons exist for this URL, no package mappings exist
+    current_canons = {}  # URL has no canon
+    current_canon_packages = {}  # Neither package has mapping
+    packages_with_homepages = [
+        (self.package1, shared_homepage_url),  # Both packages point to same URL
+        (self.package2, shared_homepage_url),
+    ]
+
+    # Mock database
+    mock_db = MagicMock(spec=DedupeDB)
+    mock_db.get_current_canons.return_value = current_canons
+    mock_db.get_current_canon_packages.return_value = current_canon_packages
+    mock_db.get_packages_with_homepages.return_value = packages_with_homepages
+
+    # Capture ingest call arguments
+    ingest_calls = []
+
+    def capture_ingest(new_canons, new_canon_packages, updated_canon_packages):
+        ingest_calls.append((new_canons, new_canon_packages, updated_canon_packages))
+
+    mock_db.ingest.side_effect = capture_ingest
+
+    # Act
+    with patch.dict("os.environ", {"LOAD": "true", "TEST": "false"}):
+        main(self.mock_dedupe_config, mock_db)
+
+    # Assert
+    self.assertEqual(len(ingest_calls), 1, "Should call ingest exactly once")
+
+    new_canons, new_canon_packages, updated_canon_packages = ingest_calls[0]
+
+    self.assertEqual(len(new_canons), 0, "Should not create any canons")
+    self.assertEqual(len(new_canon_packages), 0, "Should not create any mappings")
+    self.assertEqual(len(updated_canon_packages), 0, "Should not update any mappings")
