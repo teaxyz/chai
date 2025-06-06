@@ -43,6 +43,10 @@ class DedupeDB(DB):
                 .all()
             )
 
+    def get_all_package_names(self) -> dict[UUID, str]:
+        with self.session() as session:
+            return {pkg.id: pkg.name for pkg in session.query(Package).all()}
+
     # TODO: first to be optimized
     def ingest(
         self,
@@ -131,6 +135,7 @@ def process_deduplication_changes(
     """
     now = datetime.now()
     canons_to_create: dict[UUID, Canon] = {}  # indexed by url_id for deduplication
+    canons_to_update: dict[UUID, Canon] = {}
     mappings_to_update: list[dict[str, UUID | datetime]] = []
     mappings_to_create: list[CanonPackage] = []
 
@@ -172,6 +177,7 @@ def process_deduplication_changes(
                 )
                 mappings_to_create.append(new_canon_package)
             else:
+                # update the mapping for this particular canon
                 update_payload = build_update_payload(
                     current_canon_packages,
                     pkg_id,
@@ -184,6 +190,10 @@ def process_deduplication_changes(
                     mappings_to_update.append(update_payload)
         else:
             # this canon exists, OR we've already created it for this URL
+
+            # before doing the mappings, let's check if its name is different
+            # TODO: how do we do the name checks?
+
             # let's check if the package is linked to anything
             if linked_canon_id is None:
                 # time to create a new canon package
@@ -217,7 +227,7 @@ def process_deduplication_changes(
 
 
 def main(config: DedupeConfig, db: DedupeDB):
-    logger = Logger("ranker.dedupe_v2")
+    logger = Logger("ranker.dedupe")
     now = datetime.now()
     logger.log(f"Starting deduplication process at {now}")
 
@@ -234,6 +244,8 @@ def main(config: DedupeConfig, db: DedupeDB):
         db.get_packages_with_homepages()
     )
     logger.debug(f"Found {len(packages_with_homepages)} packages with homepages")
+
+    name_map: dict[UUID, str] = db.get_all_package_names()
 
     # 2. Get latest homepage per package
     latest_homepages, non_canonical_urls = get_latest_homepage_per_package(
