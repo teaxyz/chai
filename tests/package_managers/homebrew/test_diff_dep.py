@@ -167,8 +167,8 @@ class TestDiffDeps:
 
         # Create diff with existing dependency
         diff = diff_instance(
-            package_cache=packages,
-            dependency_cache={package_ids["foo"]: {existing_dep}},
+            package_map=packages,
+            dependencies={package_ids["foo"]: {existing_dep}},
         )
 
         # Create formula with existing dependency plus a new one
@@ -216,8 +216,8 @@ class TestDiffDeps:
 
         # Create diff with both dependencies
         diff = diff_instance(
-            package_cache=packages,
-            dependency_cache={package_ids["foo"]: {existing_dep, to_be_removed_dep}},
+            package_map=packages,
+            dependencies={package_ids["foo"]: {existing_dep, to_be_removed_dep}},
         )
 
         # Create formula with only one of the previous dependencies
@@ -258,11 +258,11 @@ class TestDiffDeps:
 
         # Create diff with existing dependency
         diff = diff_instance(
-            package_cache={
+            package_map={
                 "foo": packages["foo"],
                 "bar": packages["bar"],
             },
-            dependency_cache={package_ids["foo"]: {existing_dep}},
+            dependencies={package_ids["foo"]: {existing_dep}},
         )
 
         # Create formula with same dependency but changed type
@@ -309,11 +309,11 @@ class TestDiffDeps:
 
         # Create diff with existing dependency
         diff = diff_instance(
-            package_cache={
+            package_map={
                 "foo": packages["foo"],
                 "bar": packages["bar"],
             },
-            dependency_cache={package_ids["foo"]: {existing_dep}},
+            dependencies={package_ids["foo"]: {existing_dep}},
         )
 
         # Create formula with same dependency and type
@@ -350,11 +350,11 @@ class TestDiffDeps:
 
         # Create diff with existing dependency
         diff = diff_instance(
-            package_cache={
+            package_map={
                 "foo": packages["foo"],
                 "bar": packages["bar"],
             },
-            dependency_cache={package_ids["foo"]: {existing_dep}},
+            dependencies={package_ids["foo"]: {existing_dep}},
         )
 
         # Create formula with same dependency multiple times
@@ -393,11 +393,11 @@ class TestDiffDeps:
 
         # Create diff with existing dependency
         diff = diff_instance(
-            package_cache={
+            package_map={
                 "foo": packages["foo"],
                 "bar": packages["bar"],
             },
-            dependency_cache={package_ids["foo"]: {existing_dep}},
+            dependencies={package_ids["foo"]: {existing_dep}},
         )
 
         # Create formula with same dependency multiple times
