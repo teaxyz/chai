@@ -1,3 +1,5 @@
+# TODO: need to fix this test, since it depends on the DB URL being available
+
 """
 Unit tests for pkgx URL loading functionality.
 
