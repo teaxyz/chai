@@ -178,7 +178,8 @@ class TestDedupe:
         self, ids, test_packages, test_urls, mock_dedupe_config, mock_db
     ):
         """
-        Test Case 2d: URL has no canon AND package has existing mapping to different canon
+        Test Case 2d: URL has no canon AND package has existing mapping to different
+        canon
 
         Expected: Create new canon + update existing mapping
         """
@@ -395,7 +396,8 @@ class TestDedupe:
         self, ids, test_packages, test_urls, mock_dedupe_config, mock_db
     ):
         """
-        Test deduplication: Multiple packages with same homepage URL should create only one canon
+        Test deduplication: Multiple packages with same homepage URL should create only
+        one canon
 
         This tests the core deduplication logic where:
         - Package 1 points to URL X (no existing canon)

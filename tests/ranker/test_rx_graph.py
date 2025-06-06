@@ -46,7 +46,7 @@ def large_chai_graph() -> tuple[CHAI, dict[uuid.UUID, Decimal]]:
     }
     assert (
         abs(sum(personalization.values()) - Decimal(1.0)) <= TOLERANCE
-    ), f"Initial personalization should sum to 1 within tolerance: {sum(personalization.values())}"
+    ), f"Initial personalization should sum to 1 within tolerance: {sum(personalization.values())}"  # noqa: E501
 
     # Add random edges (potential cycles)
     node_indices = list(G.node_indices())
