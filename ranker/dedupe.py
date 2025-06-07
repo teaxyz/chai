@@ -103,25 +103,32 @@ def get_latest_homepage_per_package(
     return latest_homepages, non_canonical_urls
 
 
+def build_canon_update_payload(
+    url_id: UUID, current_canons: dict[UUID, Canon], new_name: str, now: datetime
+) -> dict[str, str | datetime | UUID]:
+    canon_data: Canon = current_canons.get(url_id)
+
+    if canon_data is None:
+        raise ValueError(f"No canon for {url_id} when dealing with {new_name}")
+
+    return {"id": canon_data.id, "name": new_name, "updated_at": now}
+
+
 def build_canon_package_update_payload(
     current_canon_packages: dict[UUID, dict[str, UUID]],
     pkg_id: UUID,
     new_canon_id: UUID,
     now: datetime,
-    logger: Logger,
-) -> dict[str, UUID | datetime] | None:
+) -> dict[str, UUID | datetime]:
     """Build an update payload for a canon package."""
     canon_package_data = current_canon_packages.get(pkg_id)
+
     if canon_package_data is None:
-        logger.warn(f"Package {pkg_id} not found in current canon packages")
-        return None
+        raise ValueError(f"No canon package mappings for {pkg_id}")
 
     current_canon_package_id = canon_package_data.get("id")
     if current_canon_package_id is None:
-        logger.warn(
-            f"Package {pkg_id} has no canon package ID but canon: {new_canon_id}"
-        )
-        return None
+        raise ValueError(f"{pkg_id} has no canon package ID but canon: {new_canon_id}")
 
     return {"id": current_canon_package_id, "canon_id": new_canon_id, "updated_at": now}
 
@@ -141,7 +148,7 @@ def process_deduplication_changes(
     """
     now = datetime.now()
     canons_to_create: dict[UUID, Canon] = {}  # indexed by url_id for deduplication
-    canons_to_update: dict[UUID, Canon] = {}
+    canons_to_update: list[dict[str, UUID | datetime | str]] = {}
     mappings_to_update: list[dict[str, UUID | datetime]] = []
     mappings_to_create: list[CanonPackage] = []
 
@@ -203,6 +210,9 @@ def process_deduplication_changes(
             existing_name = actual_canon.name
             pkg_name = name_map.get(pkg_id)
             desired_name = compute_canon_name(url.url, pkg_name, existing_name)
+
+            if desired_name != existing_name:
+                canons_to_update.append(build_canon_update_payload(current_canons))
 
             # let's check if the package is linked to anything
             if linked_canon_id is None:

@@ -76,7 +76,7 @@ def test_check_if_better(name, best_guess, package_name, expected):
             "gfscott.com/embed-everything",
             "eleventy-plugin-embed-ted",
             "eleventy-plugin-embed-everything",
-            "eleventy-plugin-embed-ted",
+            "eleventy-plugin-embed-everything",
         ),
     ],
 )

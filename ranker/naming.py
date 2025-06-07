@@ -17,6 +17,10 @@ def compute_canon_name(url: str, package_name: str, existing_name: str = "") -> 
     best_guess = extract_repo_name_from_url(url)
 
     if existing_name:
+        # guard
+        if url == existing_name:
+            return package_name
+
         return check_if_better(best_guess, package_name, existing_name)
 
     return package_name
@@ -27,11 +31,6 @@ def check_if_better(best_guess: str, package_name: str, existing_name: str) -> s
     if best_guess == package_name:
         # boom, this is the ideal case. the repo and the package share a name!
         return package_name
-
-    # if not, we need to do some heuristics on the package_name to determine if it's
-    # better than our best_guess
-    # remember, best_guess is a guess at its name. our fallback will **always** be the
-    # original name, not the best_guess.
 
     package_name_score = score_name(package_name, best_guess)
     existing_name_score = score_name(existing_name, best_guess)
