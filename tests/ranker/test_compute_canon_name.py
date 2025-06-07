@@ -1,7 +1,11 @@
 #!/usr/bin/env uv run --with pytest
 import pytest
 
-from ranker.canon_names import compute_canon_name_v2, extract_repo_name_from_url
+from ranker.canon_names import (
+    compute_canon_name,
+    extract_repo_name_from_url,
+    score_name,
+)
 
 
 @pytest.mark.parametrize(
@@ -16,6 +20,19 @@ from ranker.canon_names import compute_canon_name_v2, extract_repo_name_from_url
 )
 def test_extract_repo_name_from_url(url, best_guess):
     assert extract_repo_name_from_url(url) == best_guess
+
+
+@pytest.mark.parametrize(
+    "name, best_guess, expected_score",
+    [
+        ("@user/repo", "repo", 8),
+        ("test3js", "web3.js", 13),
+        ("web3", "web3.js", 16),
+        ("@platonenterprise/web3", "web3.js", -3),
+    ],
+)
+def test_score_name(name, best_guess, expected_score):
+    assert score_name(name, best_guess) == expected_score
 
 
 @pytest.mark.parametrize(
@@ -45,4 +62,4 @@ def test_extract_repo_name_from_url(url, best_guess):
     ],
 )
 def test_compute_canon_name_v2(url, package_name, existing_name, expected):
-    assert compute_canon_name_v2(url, package_name, existing_name) == expected
+    assert compute_canon_name(url, package_name, existing_name) == expected
