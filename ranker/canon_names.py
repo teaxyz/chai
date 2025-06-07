@@ -1,4 +1,5 @@
-#!/usr/bin/env uv run --with sqlalchemy==2.0.34 --with permalint==0.1.12
+#!/usr/bin/env uv run --with permalint==0.1.12
+
 from typing import Optional
 
 from permalint import possible_names
@@ -6,17 +7,95 @@ from permalint import possible_names
 from core.logger import Logger
 
 
+def compute_canon_name_v2(url: str, package_name: str, existing_name: str = "") -> str:
+    """
+    In general:
+
+    1. It always compares an existing name with a new potential name
+    2. It is given a homepage URL, an existing name, and an optional existing canon name
+    3. It computes a best name, and if different from the existing name, it returns the
+    new name. Otherwise, it returns the existing name.
+    NOTE: the logic for determining whether it's an update or not, is left to the caller
+    4. It DOES NOT do anything for monorepos.
+    5. As a fallback, it always returns the canon URL as the name.
+
+    Also, if we have a reason to pick the package registry name, let's do that, rather
+    than select our best guess
+    """
+    if not url or not package_name:
+        raise ValueError(
+            "URL / package name are required: url={url}, package_name={package_name}"
+        )
+
+    best_guess = extract_repo_name_from_url(url)
+
+    if existing_name:
+        return check_if_we_have_something_better(
+            best_guess, package_name, existing_name
+        )
+    else:
+        return new_name(best_guess, package_name, url)
+
+
+def check_if_we_have_something_better(
+    best_guess: str, package_name: str, existing_name: str
+) -> str:
+    """
+    Check if we have a better name than the existing name.
+    """
+    # TODO: implement this
+    return existing_name
+
+
+def new_name(best_guess: str, package_name: str, url: str) -> str:
+    """
+    Compute a new name for a canon.
+    """
+
+    if best_guess == package_name:
+        # boom, this is the ideal case. the repo and the package share a name!
+        return package_name
+
+    # if not, we need to do some heuristics on the package_name to determine if it's
+    # better than our best_guess
+    # remember, best_guess is a guess at its name. our fall back will **always** be the
+    # homepage URL, not the best_guess. so, it's unlikely that we return that
+
+    # we don't like scoped packages, because they are generally forks of something else
+    if package_name.startswith("@"):
+        unscoped_name: str = package_name.split("/")[-1]
+
+        # if our best guess is in the unscoped name, we can use package name, else
+        # return the homepage URL
+        if best_guess in unscoped_name:
+            return package_name
+        else:
+            return url
+
+    # if the best guess is inside the package name, let's use that one
+    if best_guess in package_name:
+        return package_name
+
+    # fallback to the URL name
+    return url
+
+
 def extract_repo_name_from_url(url: str) -> str:
     """
     Extract a reasonable name from a URL, typically the repository name.
 
-    For GitHub URLs like 'https://github.com/user/repo', returns 'repo'.
-    For other URLs, returns nothing.
+    We're trusting permalint's rules for guessing a package's name based on
+    the homepage URL here. Note that the fallback is always to retrieve the full URL
+    name, which will be the only element in the result
     """
-    if url.startswith("github.com/"):
-        return possible_names(url)[1]
-    else:
+    if not url:
         return url
+
+    names: list[str] = possible_names(url)
+    if len(names) > 1:
+        return names[1].lower()
+    else:
+        return names[0].lower()
 
 
 def find_best_package_name(package_names: list[str], url: str) -> Optional[str]:
