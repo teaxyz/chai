@@ -77,7 +77,7 @@ def score_name(name: str, best_guess: str) -> int:
         score += 1
 
     # Prefer shorter names
-    score += max(0, 20 - len(clean))
+    score += max(0, 15 - len(clean))
 
     # Penalize scoped packages
     if clean.startswith("@"):

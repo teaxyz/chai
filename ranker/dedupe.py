@@ -10,6 +10,7 @@ from core.db import DB
 from core.logger import Logger
 from core.models import URL, BaseModel, Canon, CanonPackage, Package, PackageURL
 from ranker.config import DedupeConfig, load_dedupe_config
+from ranker.naming import compute_canon_name
 
 
 class DedupeDB(DB):
@@ -102,7 +103,7 @@ def get_latest_homepage_per_package(
     return latest_homepages, non_canonical_urls
 
 
-def build_update_payload(
+def build_canon_package_update_payload(
     current_canon_packages: dict[UUID, dict[str, UUID]],
     pkg_id: UUID,
     new_canon_id: UUID,
@@ -129,6 +130,7 @@ def process_deduplication_changes(
     latest_homepages: dict[UUID, URL],
     current_canons: dict[UUID, Canon],
     current_canon_packages: dict[UUID, dict[str, UUID]],
+    name_map: dict[UUID, str],
     logger: Logger,
 ) -> tuple[list[Canon], list[CanonPackage], list[dict[str, UUID | datetime]]]:
     """
@@ -160,10 +162,12 @@ def process_deduplication_changes(
 
         if actual_canon_id is None:
             # this URL has no canon and we're not already creating one
+            pkg_name = name_map.get(pkg_id)
+            name = compute_canon_name(url.url, pkg_name)
             new_canon = Canon(
                 id=uuid4(),
                 url_id=url.id,
-                name=url.url,
+                name=name,
                 created_at=now,
                 updated_at=now,
             )
@@ -182,7 +186,7 @@ def process_deduplication_changes(
                 mappings_to_create.append(new_canon_package)
             else:
                 # update the mapping for this particular canon
-                update_payload = build_update_payload(
+                update_payload = build_canon_package_update_payload(
                     current_canon_packages,
                     pkg_id,
                     new_canon.id,
@@ -196,7 +200,9 @@ def process_deduplication_changes(
             # this canon exists, OR we've already created it for this URL
 
             # before doing the mappings, let's check if its name is different
-            # TODO: how do we do the name checks?
+            existing_name = actual_canon.name
+            pkg_name = name_map.get(pkg_id)
+            desired_name = compute_canon_name(url.url, pkg_name, existing_name)
 
             # let's check if the package is linked to anything
             if linked_canon_id is None:
@@ -213,7 +219,7 @@ def process_deduplication_changes(
             # what if it's linked to something, that's not actual_canon_id
             elif linked_canon_id != actual_canon_id:
                 # time to update the existing canon package row
-                update_payload = build_update_payload(
+                update_payload = build_canon_package_update_payload(
                     current_canon_packages,
                     pkg_id,
                     actual_canon_id,
@@ -260,7 +266,7 @@ def main(config: DedupeConfig, db: DedupeDB):
     # 3. Process changes differentially
     canons_to_create, mappings_to_create, mappings_to_update = (
         process_deduplication_changes(
-            latest_homepages, current_canons, current_canon_packages, logger
+            latest_homepages, current_canons, current_canon_packages, name_map, logger
         )
     )
 
