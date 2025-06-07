@@ -2,6 +2,7 @@
 import pytest
 
 from ranker.canon_names import (
+    check_if_better,
     compute_canon_name,
     extract_repo_name_from_url,
     score_name,
@@ -33,6 +34,23 @@ def test_extract_repo_name_from_url(url, best_guess):
 )
 def test_score_name(name, best_guess, expected_score):
     assert score_name(name, best_guess) == expected_score
+
+
+@pytest.mark.parametrize(
+    "name, best_guess, package_name, expected",
+    [
+        (
+            "web3.js",
+            "test3js",
+            "https://github.com/ethereum/web3.js#readmeweb3.js",
+            "test3js",
+        ),
+        ("web3.js", "web3", "test3js", "web3"),
+        ("web3.js", "@platonenterprise/web3", "web3", "web3"),
+    ],
+)
+def test_check_if_better(name, best_guess, package_name, expected):
+    assert check_if_better(name, best_guess, package_name) == expected
 
 
 @pytest.mark.parametrize(

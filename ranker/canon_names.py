@@ -17,16 +17,12 @@ def compute_canon_name(url: str, package_name: str, existing_name: str = "") -> 
     best_guess = extract_repo_name_from_url(url)
 
     if existing_name:
-        return check_if_we_have_something_better(
-            best_guess, package_name, existing_name
-        )
+        return check_if_better(best_guess, package_name, existing_name)
 
     return package_name
 
 
-def check_if_we_have_something_better(
-    best_guess: str, package_name: str, existing_name: str
-) -> str:
+def check_if_better(best_guess: str, package_name: str, existing_name: str) -> str:
     """Check if we have a better name than the existing name."""
     if best_guess == package_name:
         # boom, this is the ideal case. the repo and the package share a name!
