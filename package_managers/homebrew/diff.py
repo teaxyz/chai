@@ -5,7 +5,8 @@ from uuid import UUID, uuid4
 from core.config import Config
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
-from package_managers.homebrew.structs import Actual, Cache
+from core.structs import Cache
+from package_managers.homebrew.structs import Actual
 
 
 class Diff:
@@ -26,7 +27,7 @@ class Diff:
         """
         self.logger.debug(f"Diffing package: {pkg.formula}")
         pkg_id: UUID
-        if pkg.formula not in self.caches.package_cache:
+        if pkg.formula not in self.caches.package_map:
             # new package
             p = Package(
                 id=uuid4(),
@@ -42,7 +43,7 @@ class Diff:
             # no update payload, so that's empty
             return pkg_id, p, {}
         else:
-            p = self.caches.package_cache[pkg.formula]
+            p = self.caches.package_map[pkg.formula]
             pkg_id = p.id
             # check for changes
             # right now, that's just the readme
@@ -196,7 +197,7 @@ class Diff:
                 if name in processed:
                     continue
 
-                dependency = self.caches.package_cache.get(name)
+                dependency = self.caches.package_map.get(name)
 
                 # guard: no dependency
                 if not dependency:
@@ -222,7 +223,7 @@ class Diff:
             process(pkg.optional_dependencies, self.config.dependency_types.optional)
 
         # get the package ID for what we are working with
-        package = self.caches.package_cache.get(pkg.formula)
+        package = self.caches.package_map.get(pkg.formula)
         if not package:
             # TODO: handle this case, though it fixes itself on the next run
             self.logger.warn(f"New package {pkg.formula}, will grab its deps next time")
@@ -235,7 +236,7 @@ class Diff:
         # 1. something in that same structure as `actual`, to track what's in CHAI
         existing: Set[Tuple[UUID, UUID]] = set()
         # 2. set of LegacyDependency objects
-        legacy_links: Set[LegacyDependency] = self.caches.dependency_cache.get(
+        legacy_links: Set[LegacyDependency] = self.caches.dependencies.get(
             pkg_id, set()
         )
         # 3. easy look up to get to legacy_links to go from 1 to 2
