@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import IntEnum
+from typing import TypedDict
+from uuid import UUID
 
 
 class DependencyType(IntEnum):
@@ -67,3 +69,19 @@ class Crate:
     source: str | None = None
     # from versions.csv
     latest_version: CrateLatestVersion | None = None
+
+
+class CanonUpdatePayload(TypedDict):
+    """Type-safe structure for canon update operations."""
+
+    id: UUID
+    name: str
+    updated_at: datetime
+
+
+class CanonPackageUpdatePayload(TypedDict):
+    """Type-safe structure for canon package update operations."""
+
+    id: UUID
+    canon_id: UUID
+    updated_at: datetime

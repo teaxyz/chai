@@ -1,5 +1,10 @@
 #!/usr/bin/env uv run --with permalint==0.1.12
+from uuid import UUID
+
 from permalint import possible_names
+
+from core.models import Canon
+from package_managers.crates.structs import CanonUpdatePayload
 
 
 def compute_canon_name(url: str, package_name: str, existing_name: str = "") -> str:
@@ -83,3 +88,17 @@ def score_name(name: str, best_guess: str) -> int:
         score -= 3
 
     return score
+
+
+def get_effective_canon_name(
+    canon: Canon, pending_updates: dict[UUID, CanonUpdatePayload]
+) -> str:
+    """
+    Get the effective name for a canon, considering both current and pending updates.
+
+    This ensures we always work with the most up-to-date name when processing
+    multiple canons that might reference each other.
+    """
+    if canon.id in pending_updates:
+        return pending_updates[canon.id]["name"]
+    return canon.name
