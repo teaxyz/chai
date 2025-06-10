@@ -146,7 +146,7 @@ class DB:
             return CurrentURLs(url_map=url_map, package_urls=package_urls)
 
     # TODO: we should add the Cache class to the core structure, and have the individual
-    # transfomers inherit from it. For now, keeping this as `Any`
+    # transformers inherit from it. For now, keeping this as `Any`
     def load_urls(self, data: Dict[str, Any]) -> None:
         """
         Better way to load URLs by actually calculating the diff instead of relying on
