@@ -74,7 +74,7 @@ class DB:
             name_to_url = {result.Package.name: result.URL.url for result in results}
 
             # return in the order preserved by the input (bc its relevant)
-            # and account for the fact that some
+            # and account for the fact that some names might not have a URL
             return [
                 name_to_url.get(name, None)
                 for name in package_names

@@ -40,7 +40,7 @@ tests/
 Install test dependencies:
 
 ```bash
-pip install -r tests/requirements.txt
+uv pip install -r tests/requirements.txt
 ```
 
 ### Running All Tests
@@ -109,6 +109,7 @@ pytest -l tests/
 ### 1. Create a Test File
 
 Test files should:
+
 - Be placed in the appropriate directory based on what's being tested
 - Follow the naming convention `test_*.py`
 - Include a module docstring explaining what's being tested
@@ -158,7 +159,7 @@ Apply appropriate markers to your tests:
 @pytest.mark.unit
 class TestNewParser:
     """Test the new package manager parser."""
-    
+
     def test_parse_valid_data(self):
         """Test parsing valid package data."""
         # test implementation
@@ -314,11 +315,13 @@ pytest --markers
 ### Common Issues
 
 1. **Import Errors**: Ensure `PYTHONPATH` includes the project root:
+
    ```bash
    export PYTHONPATH=/workspace:$PYTHONPATH
    ```
 
 2. **Missing Dependencies**: Install test requirements:
+
    ```bash
    pip install -r tests/requirements.txt
    ```
