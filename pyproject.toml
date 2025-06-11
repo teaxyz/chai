@@ -31,7 +31,6 @@ markers = ["unit"]
 
 [tool.ruff]
 line-length = 88
-indent-width = 4
 exclude = ["__pycache__", ".venv"]
 
 [tool.ruff.lint]
@@ -58,7 +57,6 @@ fixable = ["ALL"]
 
 [tool.ruff.format]
 quote-style = "double"
-indent-style = "tab"
-skip-magic-trailing-comma = true
+indent-style = "space"
 docstring-code-format = true
 docstring-code-line-length = "dynamic"

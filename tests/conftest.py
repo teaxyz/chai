@@ -198,9 +198,7 @@ def sample_package_data():
             "description": "A generic serialization/deserialization framework",
             "homepage": "https://serde.rs",
             "repository": "https://github.com/serde-rs/serde",
-            "dependencies": {
-                "serde_derive": "1.0.130",
-            },
+            "dependencies": {"serde_derive": "1.0.130"},
         },
         "homebrew": {
             "name": "wget",
@@ -219,10 +217,7 @@ def sample_package_data():
             "full_name": "gnu.org/wget",
             "version": "1.21.2",
             "homepage": "https://www.gnu.org/software/wget/",
-            "dependencies": {
-                "gnu.org/gettext": "^0.21",
-                "openssl.org": "^1.1",
-            },
+            "dependencies": {"gnu.org/gettext": "^0.21", "openssl.org": "^1.1"},
         },
     }
 
