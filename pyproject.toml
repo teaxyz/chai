@@ -31,7 +31,7 @@ markers = ["unit"]
 
 [tool.ruff]
 line-length = 88
-exclude = ["__pycache__", ".venv"]
+exclude = ["__pycache__", ".venv", ".git", ".pytest_cache"]
 
 [tool.ruff.lint]
 select = [
@@ -58,5 +58,3 @@ fixable = ["ALL"]
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
-docstring-code-format = true
-docstring-code-line-length = "dynamic"

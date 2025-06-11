@@ -3,14 +3,13 @@
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, List
+from typing import Any
 from uuid import UUID
 
 import rustworkx as rx
 
 from core.logger import Logger
 from ranker.config import Config
-from ranker.db import GraphDB
 
 logger = Logger("ranker.chai_graph")
 
@@ -21,7 +20,7 @@ class PackageNode:
     This is based on canons!"""
 
     canon_id: UUID
-    package_manager_ids: List[UUID] = field(default_factory=list)
+    package_manager_ids: list[UUID] = field(default_factory=list)
     weight: Decimal = field(default_factory=Decimal)
     index: int = field(default_factory=lambda: -1)
 

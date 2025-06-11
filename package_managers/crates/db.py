@@ -143,7 +143,7 @@ class CratesDB(DB):
                 self.logger.debug(f"{user_versions_deleted} user versions")
                 self.logger.debug(f"{depends_on_deleted} direct dependencies")
                 self.logger.debug(
-                    f"{legacy_deps_package_deleted + legacy_deps_dependency_deleted} legacy deps"  # noqa E501
+                    f"{legacy_deps_package_deleted + legacy_deps_dependency_deleted} legacy deps"  # E501
                 )
                 self.logger.debug(f"{user_packages_deleted} user packages")
                 self.logger.debug(f"{canon_packages_deleted} canon packages")

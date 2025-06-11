@@ -1,4 +1,3 @@
-from typing import List, Tuple
 from uuid import UUID
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -22,7 +21,7 @@ BATCH_SIZE = 20000
 
 
 class GraphDB(DB):
-    def __init__(self, legacy_pm_id: UUID, system_pm_ids: List[UUID]):
+    def __init__(self, legacy_pm_id: UUID, system_pm_ids: list[UUID]):
         super().__init__("graph.db")
         self.legacy_pm_id = legacy_pm_id
         self.system_pm_ids = system_pm_ids
@@ -39,9 +38,9 @@ class GraphDB(DB):
         """Fetch all existing canons as a map from URL to Canon ID."""
         with self.session() as session:
             results = session.query(Canon.url, Canon.id).all()
-            return {url: canon_id for url, canon_id in results}
+            return dict(results)
 
-    def get_packages_with_urls(self) -> List[Tuple[UUID, str, str, str]]:
+    def get_packages_with_urls(self) -> list[tuple[UUID, str, str, str]]:
         """
         Retrieve packages with their associated URLs and URL types.
 
@@ -59,7 +58,7 @@ class GraphDB(DB):
                 .all()
             )
 
-    def load_canonical_packages(self, data: List[Canon]) -> None:
+    def load_canonical_packages(self, data: list[Canon]) -> None:
         """
         Load canonical packages into the database in batches, handling conflicts.
 
@@ -93,7 +92,7 @@ class GraphDB(DB):
 
             session.commit()
 
-    def load_canonical_package_mappings(self, data: List[CanonPackage]) -> None:
+    def load_canonical_package_mappings(self, data: list[CanonPackage]) -> None:
         """
         Load canonical package mappings into the database in batches, updating on
         conflict.
@@ -139,7 +138,7 @@ class GraphDB(DB):
 
             session.commit()
 
-    def get_packages(self) -> List[Tuple[UUID, UUID]]:
+    def get_packages(self) -> list[tuple[UUID, UUID]]:
         """Gets all packages for the run"""
         self.logger.debug(f"Getting packages for {self.system_pm_ids} package managers")
         with self.session() as session:
@@ -149,7 +148,7 @@ class GraphDB(DB):
                 .all()
             )
 
-    def get_dependencies(self, package_id: UUID) -> List[Tuple[UUID]]:
+    def get_dependencies(self, package_id: UUID) -> list[tuple[UUID]]:
         """Gets all the dependencies based on the CHAI data model"""
         with self.session() as session:
             return (
@@ -170,7 +169,7 @@ class GraphDB(DB):
                 .where(Package.package_manager_id != self.legacy_pm_id)
             }
 
-    def get_legacy_dependencies(self, package_id: UUID) -> List[Tuple[UUID]]:
+    def get_legacy_dependencies(self, package_id: UUID) -> list[tuple[UUID]]:
         """Gets all the legacy dependencies based on the legacy CHAI data model"""
         with self.session() as session:
             return (
@@ -180,13 +179,13 @@ class GraphDB(DB):
                 .all()
             )
 
-    def load_tea_ranks(self, data: List[TeaRank]) -> None:
+    def load_tea_ranks(self, data: list[TeaRank]) -> None:
         """Loads tea ranks into the database"""
         with self.session() as session:
             session.add_all(data)
             session.commit()
 
-    def load_tea_rank_runs(self, data: List[TeaRankRun]) -> None:
+    def load_tea_rank_runs(self, data: list[TeaRankRun]) -> None:
         """Loads tea rank runs into the database"""
         with self.session() as session:
             session.add_all(data)

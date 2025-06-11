@@ -2,7 +2,7 @@
 import argparse
 import re
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from packaging import version as packaging_version
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -42,7 +42,7 @@ def preprocess_version_string(version_str: str) -> str:
     # Handle X.Y.Z-<string>.<number> -> X.Y.Z+<string>.<number> (Vendor Build)
     match_vendor_build = re.fullmatch(r"(\d+(\.\d+)+)-([a-zA-Z]+)\.(\d+)", version_str)
     if match_vendor_build:
-        return f"{match_vendor_build.group(1)}+{match_vendor_build.group(3)}.{match_vendor_build.group(4)}"  # noqa
+        return f"{match_vendor_build.group(1)}+{match_vendor_build.group(3)}.{match_vendor_build.group(4)}"
 
     # Handle X.Y.Z-git<build> -> X.Y.Z+git<build>
     match_git_build = re.fullmatch(r"(\d+(\.\d+)+)-(git[\da-zA-Z]+)", version_str)
@@ -100,8 +100,8 @@ def preprocess_version_string(version_str: str) -> str:
         r"(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})Z", version_str
     )
     if match_iso_subset:
-        date_part = f"{match_iso_subset.group(1)}.{match_iso_subset.group(2)}.{match_iso_subset.group(3)}"  # noqa
-        time_part = f"{match_iso_subset.group(4)}{match_iso_subset.group(5)}{match_iso_subset.group(6)}Z"  # noqa
+        date_part = f"{match_iso_subset.group(1)}.{match_iso_subset.group(2)}.{match_iso_subset.group(3)}"
+        time_part = f"{match_iso_subset.group(4)}{match_iso_subset.group(5)}{match_iso_subset.group(6)}Z"
         return f"{date_part}+{time_part}"
 
     # YYYY_MM_DD.commit_hash -> YYYY.MM.DD+commit_hash
@@ -153,7 +153,7 @@ def preprocess_version_string(version_str: str) -> str:
     if match_version_letter_suffix:
         base_version_part = match_version_letter_suffix.group(1)
         if base_version_part.count(".") > 0:  # Ensures at least X.Y.Z format
-            return f"{match_version_letter_suffix.group(1)}+{match_version_letter_suffix.group(3)}"  # noqa
+            return f"{match_version_letter_suffix.group(1)}+{match_version_letter_suffix.group(3)}"
 
     # Handle X.Y<single_letter_suffix> / X.Y<two_letter_suffix> -> X.Y+suffix
     match_letter_suffix = re.fullmatch(r"(\d+\.\d+)([a-zA-Z]{1,2})", version_str)
@@ -173,7 +173,7 @@ def preprocess_version_string(version_str: str) -> str:
     return version_str
 
 
-def get_latest_version_info(versions: List[Version]) -> Optional[Version]:
+def get_latest_version_info(versions: list[Version]) -> Version | None:
     """
     Identifies the latest version from a list using packaging.version for robust parsing
     unless there is only one version provided.
@@ -211,12 +211,12 @@ def get_latest_version_info(versions: List[Version]) -> Optional[Version]:
                 latest_version_obj = version_obj
         except packaging_version.InvalidVersion as e_invalid:
             logger.warn(
-                f"Invalid version: '{original_version_str}' -> '{preprocessed_str}' -> {e_invalid}"  # noqa
+                f"Invalid version: '{original_version_str}' -> '{preprocessed_str}' -> {e_invalid}"
             )
             continue
         except Exception as e_general:
             logger.error(
-                f"Unexpected error: '{original_version_str}' -> '{preprocessed_str}' -> {e_general}"  # noqa
+                f"Unexpected error: '{original_version_str}' -> '{preprocessed_str}' -> {e_general}"
             )
             continue
 
@@ -230,7 +230,7 @@ def get_latest_version_info(versions: List[Version]) -> Optional[Version]:
 
 
 def insert_legacy_dependencies(
-    session: Session, data_batch: List[Dict[str, Any]]
+    session: Session, data_batch: list[dict[str, Any]]
 ) -> None:
     """
     Inserts a batch of legacy dependency records into the database,
@@ -270,7 +270,7 @@ def insert_legacy_dependencies(
 
 
 def process_package_dependencies(config: Config, session: Session) -> None:
-    legacy_deps_to_insert: List[Dict[str, Any]] = []
+    legacy_deps_to_insert: list[dict[str, Any]] = []
     total_packages_processed = 0
     total_dependencies_found = 0
     default_dependency_type_id = config.dependency_types.runtime
@@ -279,7 +279,7 @@ def process_package_dependencies(config: Config, session: Session) -> None:
 
     # --- Fetch ALL packages for the manager ---
     logger.log("Fetching all packages for the specified manager...")
-    all_packages: List[Package] = (
+    all_packages: list[Package] = (
         session.query(Package)
         .filter(Package.package_manager_id == config.pm_config.pm_id)
         .all()

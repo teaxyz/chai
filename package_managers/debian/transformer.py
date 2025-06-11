@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Dict
 
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -47,7 +46,7 @@ class DebianTransformer(Transformer):
         self.depends_on_types = config.dependency_types
         self.test = config.exec_config.test
         self.files = {"packages": "packages", "sources": "sources"}
-        self.cache_map: Dict[str, Cache] = {}
+        self.cache_map: dict[str, Cache] = {}
 
     def summary(self) -> None:
         print("********* SUMMARY *********")

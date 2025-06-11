@@ -5,7 +5,6 @@ import csv
 import os
 import uuid
 from datetime import datetime
-from typing import List, Optional, Set, Tuple
 
 import psycopg2
 import psycopg2.extras
@@ -39,9 +38,9 @@ class ChaiDB:
 
     def batch_insert_urls(
         self,
-        url_data_tuples: List[Tuple[str, uuid.UUID, datetime, datetime]],
+        url_data_tuples: list[tuple[str, uuid.UUID, datetime, datetime]],
         dump_output: bool,
-    ) -> Optional[List[Tuple[uuid.UUID, str, uuid.UUID]]]:
+    ) -> list[tuple[uuid.UUID, str, uuid.UUID]] | None:
         """
         Batch insert URLs into the database.
 
@@ -101,7 +100,7 @@ def process_urls_for_batch_insert(
     batch_size: int,
     script_execution_time: datetime,
     dump_output: bool,
-    stop_at: Optional[int] = None,
+    stop_at: int | None = None,
 ) -> None:
     """
     Reads URLs from a CSV file, prepares them, and batch inserts them into the database.
@@ -118,7 +117,7 @@ def process_urls_for_batch_insert(
     logger.log(
         f"Batch size: {batch_size}, Dump output: {dump_output}, Stop at: {stop_at}"
     )
-    cache: Set[Tuple[str, uuid.UUID]] = set()
+    cache: set[tuple[str, uuid.UUID]] = set()
 
     try:
         config = Config(PackageManager.NPM)
@@ -140,13 +139,13 @@ def process_urls_for_batch_insert(
         logger.error(f"Failed to initialize ChaiDB: {e}")
         return  # Exit if DB connection fails
 
-    url_data_to_insert: List[Tuple[str, uuid.UUID, datetime, datetime]] = []
-    all_inserted_data_for_dump: List[Tuple[uuid.UUID, str, uuid.UUID]] = []
+    url_data_to_insert: list[tuple[str, uuid.UUID, datetime, datetime]] = []
+    all_inserted_data_for_dump: list[tuple[uuid.UUID, str, uuid.UUID]] = []
     processed_csv_rows = 0
     total_urls_prepared = 0
 
     try:
-        with open(file_path, "r", newline="", encoding="utf-8") as csvfile:
+        with open(file_path, newline="", encoding="utf-8") as csvfile:
             reader = csv.reader(csvfile)
             header = next(reader, None)  # Skip header
             if not header:
@@ -206,7 +205,7 @@ def process_urls_for_batch_insert(
                         all_inserted_data_for_dump.extend(results)
                     url_data_to_insert = []
                     logger.log(
-                        f"Processed batch. Total CSV rows read: {processed_csv_rows}, Total URLs prepared: {total_urls_prepared}"  # noqa
+                        f"Processed batch. Total CSV rows read: {processed_csv_rows}, Total URLs prepared: {total_urls_prepared}"
                     )
 
                 if stop_at and processed_csv_rows >= stop_at:
@@ -219,7 +218,7 @@ def process_urls_for_batch_insert(
             if dump_output and results:
                 all_inserted_data_for_dump.extend(results)
             logger.log(
-                f"Processed final batch. Total CSV rows read: {processed_csv_rows}, Total URLs prepared: {total_urls_prepared}"  # noqa
+                f"Processed final batch. Total CSV rows read: {processed_csv_rows}, Total URLs prepared: {total_urls_prepared}"
             )
 
         if dump_output:
@@ -230,11 +229,11 @@ def process_urls_for_batch_insert(
                 writer.writerow(["id", "url", "url_type_id"])  # Header for output CSV
                 writer.writerows(all_inserted_data_for_dump)
             logger.log(
-                f"Dumped {len(all_inserted_data_for_dump)} records to {OUTPUT_CSV_FILENAME}"  # noqa
+                f"Dumped {len(all_inserted_data_for_dump)} records to {OUTPUT_CSV_FILENAME}"
             )
 
         logger.log(
-            f"URL batch processing complete. Total CSV rows processed: {processed_csv_rows}. Total URLs prepared/processed: {total_urls_prepared}."  # noqa
+            f"URL batch processing complete. Total CSV rows processed: {processed_csv_rows}. Total URLs prepared/processed: {total_urls_prepared}."
         )
 
     except FileNotFoundError:

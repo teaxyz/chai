@@ -11,7 +11,6 @@
 # ///
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
 from uuid import UUID
 
 from core.logger import Logger
@@ -34,12 +33,12 @@ class PackageInfo:
 def load_graph(
     config: Config,
     db: GraphDB,
-    package_to_canon_mapping: Dict[UUID, UUID],
-    packages: List[PackageInfo],
-    stop: int = None,
+    package_to_canon_mapping: dict[UUID, UUID],
+    packages: list[PackageInfo],
+    stop: int | None = None,
 ) -> CHAI:
     chai = CHAI()
-    missing: set[Tuple[UUID, UUID]] = set()
+    missing: set[tuple[UUID, UUID]] = set()
     npm_pm_id = config.pm_config.npm_pm_id
 
     for i, package in enumerate(packages):
@@ -98,7 +97,7 @@ def load_graph(
 
 def main(config: Config, db: GraphDB) -> None:
     # get the map of package_id -> canon_id
-    package_to_canon: Dict[UUID, UUID] = db.get_package_to_canon_mapping()
+    package_to_canon: dict[UUID, UUID] = db.get_package_to_canon_mapping()
     logger.log(f"{len(package_to_canon)} package to canon mappings")
 
     # get the list of packages
@@ -112,7 +111,7 @@ def main(config: Config, db: GraphDB) -> None:
     logger.log(f"CHAI has {len(chai)} nodes and {len(chai.edge_to_index)} edges")
 
     # now, I need to generate the personalization vector
-    canons_with_source_types: List[Tuple[UUID, List[UUID]]] = []
+    canons_with_source_types: list[tuple[UUID, list[UUID]]] = []
     for idx in chai.node_indexes():
         node = chai[idx]
         canons_with_source_types.append((node.canon_id, node.package_manager_ids))

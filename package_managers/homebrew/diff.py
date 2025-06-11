@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Dict, List, Optional, Set, Tuple
 from uuid import UUID, uuid4
 
 from core.config import Config
@@ -16,7 +15,7 @@ class Diff:
         self.caches = caches
         self.logger = Logger("homebrew_diff")
 
-    def diff_pkg(self, pkg: Actual) -> Tuple[UUID, Optional[Package], Optional[Dict]]:
+    def diff_pkg(self, pkg: Actual) -> tuple[UUID, Package | None, dict | None]:
         """
         Checks if the given pkg is in the package_cache.
 
@@ -59,10 +58,10 @@ class Diff:
                 return pkg_id, None, None
 
     def diff_url(
-        self, pkg: Actual, new_urls: Dict[Tuple[str, UUID], URL]
-    ) -> Dict[UUID, UUID]:
+        self, pkg: Actual, new_urls: dict[tuple[str, UUID], URL]
+    ) -> dict[UUID, UUID]:
         """Given a package's URLs, returns the resolved URL or this specific formula"""
-        resolved_urls: Dict[UUID, UUID] = {}
+        resolved_urls: dict[UUID, UUID] = {}
 
         # we need to check if (a) URLs are in our cache, or (b) if we've already handled
         # them before. if so, we should use that
@@ -103,8 +102,8 @@ class Diff:
         return resolved_urls
 
     def diff_pkg_url(
-        self, pkg_id: UUID, resolved_urls: Dict[UUID, UUID]
-    ) -> Tuple[List[PackageURL], List[Dict]]:
+        self, pkg_id: UUID, resolved_urls: dict[UUID, UUID]
+    ) -> tuple[list[PackageURL], list[dict]]:
         """Takes in a package_id and resolved URLs from diff_url, and generates
         new PackageURL objects as well as a list of changes to existing ones
 
@@ -120,16 +119,16 @@ class Diff:
           - We're updating every single package_url entity, which takes time. We should
             check if the latest URL has changed, and if so, only update that one.
         """
-        new_links: List[PackageURL] = []
-        updates: List[Dict] = []
+        new_links: list[PackageURL] = []
+        updates: list[dict] = []
 
         # what are the existing links?
-        existing: Set[UUID] = {
+        existing: set[UUID] = {
             pu.url_id for pu in self.caches.package_url_cache.get(pkg_id, set())
         }
 
         # for the correct URL type / URL for this package:
-        for url_type, url_id in resolved_urls.items():
+        for _url_type, url_id in resolved_urls.items():
             if url_id not in existing:
                 # new link!
                 new_links.append(
@@ -157,7 +156,7 @@ class Diff:
 
     def diff_deps(
         self, pkg: Actual
-    ) -> Tuple[List[LegacyDependency], List[LegacyDependency]]:
+    ) -> tuple[list[LegacyDependency], list[LegacyDependency]]:
         """
         Takes in a Homebrew formula and figures out what dependencies have changed. Also
         uses the LegacyDependency table, because that is package to package.
@@ -173,14 +172,14 @@ class Diff:
           - new_deps: a list of new dependencies
           - removed_deps: a list of removed dependencies
         """
-        new_deps: List[LegacyDependency] = []
-        removed_deps: List[LegacyDependency] = []
+        new_deps: list[LegacyDependency] = []
+        removed_deps: list[LegacyDependency] = []
 
         # serialize the actual dependencies into a set of tuples
-        actual: Set[Tuple[UUID, UUID]] = set()
-        processed: Set[str] = set()
+        actual: set[tuple[UUID, UUID]] = set()
+        processed: set[str] = set()
 
-        def process(dep_names: Optional[List[str]], dep_type: UUID) -> None:
+        def process(dep_names: list[str] | None, dep_type: UUID) -> None:
             """Helper to process dependencies of a given type"""
             # guard: no dependencies
             if not dep_names:
@@ -234,13 +233,13 @@ class Diff:
         # now, we need to figure out what's new / removed
         # we need:
         # 1. something in that same structure as `actual`, to track what's in CHAI
-        existing: Set[Tuple[UUID, UUID]] = set()
+        existing: set[tuple[UUID, UUID]] = set()
         # 2. set of LegacyDependency objects
-        legacy_links: Set[LegacyDependency] = self.caches.dependencies.get(
+        legacy_links: set[LegacyDependency] = self.caches.dependencies.get(
             pkg_id, set()
         )
         # 3. easy look up to get to legacy_links to go from 1 to 2
-        existing_legacy_map: Dict[Tuple[UUID, UUID], LegacyDependency] = {}
+        existing_legacy_map: dict[tuple[UUID, UUID], LegacyDependency] = {}
 
         for legacy in legacy_links:
             key = (legacy.dependency_id, legacy.dependency_type_id)
@@ -248,8 +247,8 @@ class Diff:
             existing.add(key)
 
         # calculate our diffs
-        added_tuples: Set[Tuple[UUID, UUID]] = actual - existing
-        removed_tuples: Set[Tuple[UUID, UUID]] = existing - actual
+        added_tuples: set[tuple[UUID, UUID]] = actual - existing
+        removed_tuples: set[tuple[UUID, UUID]] = existing - actual
 
         # convert these to LegacyDependency objects
         for dep_id, type_id in added_tuples:

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, Union
 
 from sqlalchemy import (
     Column,
@@ -30,11 +29,11 @@ metadata = MetaData(naming_convention=naming_convention)
 
 class BaseModel:
     # we have UUIDs, strings, datetimes, ints, and floats
-    def to_dict_v2(self) -> Dict[str, Union[str, UUID, datetime, int, float]]:
+    def to_dict_v2(self) -> dict[str, str | UUID | datetime | int | float]:
         """Return a dictionary of all non-None attributes."""
         return {
             attr: getattr(self, attr)
-            for attr in self.__table__.columns.keys()
+            for attr in self.__table__.columns
             if getattr(self, attr) is not None
         }
 
@@ -134,8 +133,8 @@ class Version(Base):
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
 
-    package: Mapped["Package"] = relationship()
-    license: Mapped["License"] = relationship()
+    package: Mapped[Package] = relationship()
+    license: Mapped[License] = relationship()
 
     def to_dict(self):
         return {
@@ -201,9 +200,9 @@ class DependsOn(Base):
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
 
-    version: Mapped["Version"] = relationship()
-    dependency: Mapped["Package"] = relationship()
-    dependency_type: Mapped["DependsOnType"] = relationship()
+    version: Mapped[Version] = relationship()
+    dependency: Mapped[Package] = relationship()
+    dependency_type: Mapped[DependsOnType] = relationship()
 
     def to_dict(self):
         return {
@@ -321,9 +320,6 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("source_id", "import_id", name="uq_source_import_id"),
-    )
-    __table_args__ = (
-        UniqueConstraint("source_id", "username", name="uq_source_username"),
     )
     id = Column(
         UUID(as_uuid=True),
@@ -499,7 +495,7 @@ class Canon(Base):
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
 
-    url: Mapped["URL"] = relationship()
+    url: Mapped[URL] = relationship()
 
 
 class CanonPackage(Base):
