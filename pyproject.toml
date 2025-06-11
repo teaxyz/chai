@@ -1,0 +1,64 @@
+[project]
+name = "chai"
+version = "1.0.0"
+description = "An open-source data pipeline for all package managers"
+authors = [
+    { name = "Sanchit Ram Arvind", email = "sanchitram@gmail.com" },
+    { name = "Jacob Heider", email = "jhheider@pkgx.dev" },
+]
+keywords = ["data", "pipeline"]
+readme = "README.md"
+requires-python = ">= 3.11"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/teaxyz/chai"
+Repository = "https://github.com/teaxyz/chai"
+Source = "https://github.com/teaxyz/chai"
+
+[tool.uv]
+managed = true
+dev-dependencies = ["pytest", "ruff", "ty"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+minversion = "8.0"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_"]
+addopts = ["--ra", "--strict-markers", "--disable-warnings", "--tb=short"]
+markers = ["unit"]
+
+[tool.ruff]
+line-length = 88
+indent-width = 4
+exclude = ["__pycache__", ".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle (error)
+    "F",   # pyflakes
+    "B",   # bugbear
+    "B9",
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+    "I",   # isort
+    "UP",  # pyupgrade
+    "PIE", # flake8-pie
+    "PGH", # pygrep-hooks
+    "PYI", # flake8-pyi
+    "RUF",
+]
+ignore = [
+    # leave it to the formatter to split long lines and
+    # the judgement of all of us.
+    "E501",
+]
+fixable = ["ALL"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "tab"
+skip-magic-trailing-comma = true
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
