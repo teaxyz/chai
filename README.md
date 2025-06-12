@@ -35,16 +35,19 @@ Use [Docker](https://docker.com)
 
 Specify these eg. `FOO=bar docker compose up`:
 
+- `ENABLE_SCHEDULER`: When true, the pipeline runs on a schedule set by `FREQUENCY`.
 - `FREQUENCY`: Sets how often (in hours) the pipeline should run.
-- `TEST`: Runs the loader in test mode when set to true, skipping certain data
+- `TEST`: Useful for running in a test code
   insertions.
-- `FETCH`: Determines whether to fetch new data from the source when set to true.
-- `NO_CACHE`: When set to true, deletes temporary files after processing.
+- `FETCH`: Determines whether to fetch new data or use whatever was saved locally.
+- `NO_CACHE`: When true, deletes temporary files after processing.
 
 > [!NOTE]
 > The flag `NO_CACHE` does not mean that files will not get downloaded to your local
 > storage (specifically, the ./data directory). It only means that we'll
 > delete these temporary files from ./data once we're done processing them.
+> If `FETCH` is false, the pipeline looks for source data in the cache, so this
+> will fail if you run `NO_CACHE` first, and `FETCH` false second.
 
 These arguments are all configurable in the `docker-compose.yml` file.
 
