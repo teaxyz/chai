@@ -33,7 +33,7 @@ class BaseModel:
         """Return a dictionary of all non-None attributes."""
         return {
             attr: getattr(self, attr)
-            for attr in self.__table__.columns
+            for attr in self.__table__.columns.keys()  # noqa: SIM118
             if getattr(self, attr) is not None
         }
 
