@@ -24,10 +24,7 @@ from package_managers.crates.structs import (
 @pytest.fixture
 def package_ids():
     """Fixture providing consistent package IDs for testing."""
-    return {
-        "main": uuid4(),
-        "dep": uuid4(),
-    }
+    return {"main": uuid4(), "dep": uuid4()}
 
 
 @pytest.fixture
@@ -136,10 +133,7 @@ class TestDiffDeps:
 
         # Create diff with existing dependency
         diff = diff_instance(
-            package_map={
-                "1048221": packages["main"],
-                "271975": packages["dep"],
-            },
+            package_map={"1048221": packages["main"], "271975": packages["dep"]},
             dependencies={package_ids["main"]: {existing_dep}},
         )
 
@@ -178,10 +172,7 @@ class TestDiffDeps:
 
         # Create diff with existing dependency
         diff = diff_instance(
-            package_map={
-                "1048221": packages["main"],
-                "271975": packages["dep"],
-            },
+            package_map={"1048221": packages["main"], "271975": packages["dep"]},
             dependencies={package_ids["main"]: {existing_dep}},
         )
 
@@ -222,10 +213,7 @@ class TestDiffDeps:
         """
         # Create diff with no existing dependencies
         diff = diff_instance(
-            package_map={
-                "1048221": packages["main"],
-                "271975": packages["dep"],
-            },
+            package_map={"1048221": packages["main"], "271975": packages["dep"]}
         )
 
         # Create crate with a new dependency
@@ -269,10 +257,7 @@ class TestDiffDeps:
 
         # Create diff with existing dependency
         diff = diff_instance(
-            package_map={
-                "1048221": packages["main"],
-                "271975": packages["dep"],
-            },
+            package_map={"1048221": packages["main"], "271975": packages["dep"]},
             dependencies={package_ids["main"]: {existing_dep}},
         )
 
@@ -306,10 +291,7 @@ class TestDiffDeps:
         """
         # Create diff with no existing dependencies
         diff = diff_instance(
-            package_map={
-                "1048221": packages["main"],
-                "271975": packages["dep"],
-            },
+            package_map={"1048221": packages["main"], "271975": packages["dep"]}
         )
 
         # Create crate with multiple dependency types to the same package
@@ -357,10 +339,7 @@ class TestDiffDeps:
         """
         # Create diff with no existing dependencies
         diff = diff_instance(
-            package_map={
-                "1048221": packages["main"],
-                "271975": packages["dep"],
-            },
+            package_map={"1048221": packages["main"], "271975": packages["dep"]}
         )
 
         # Create crate with BUILD and DEV dependencies to the same package

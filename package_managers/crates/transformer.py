@@ -34,13 +34,14 @@ class CratesTransformer(Transformer):
             file_path = self.finder(self.files[file_name])
             with open(file_path, newline="", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
-                for row in reader:
-                    yield row
-        except KeyError:
-            raise KeyError(f"Missing {file_name} from self.files: {self.files}")
-        except FileNotFoundError:
+                yield from reader
+        except KeyError as exc:
+            raise KeyError(
+                f"Missing {file_name} from self.files: {self.files}"
+            ) from exc
+        except FileNotFoundError as exc:
             self.logger.error(f"Missing {file_path} from data directory")
-            raise FileNotFoundError(f"Missing {file_path} file")
+            raise FileNotFoundError(f"Missing {file_path} file") from exc
         except Exception as e:
             self.logger.error(f"Error reading {file_path}: {e}")
             raise e
@@ -131,7 +132,7 @@ class CratesTransformer(Transformer):
             start_crate_id = int(latest_versions_map[start_id])
 
             # guard
-            if start_crate_id not in self.crates.keys():
+            if start_crate_id not in self.crates:
                 raise ValueError(f"Crate {start_crate_id} not found in self.crates")
 
             kind = int(row["kind"])

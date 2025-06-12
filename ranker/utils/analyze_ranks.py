@@ -12,7 +12,6 @@ import argparse
 import json
 import os
 from pathlib import Path
-from typing import Dict, Optional
 
 import pandas as pd
 from sqlalchemy import create_engine, distinct, func, select
@@ -34,7 +33,7 @@ def get_latest_rank_file() -> Path:
     return latest_symlink.resolve()
 
 
-def get_rank_file(filename: Optional[str] = None) -> Path:
+def get_rank_file(filename: str | None = None) -> Path:
     """Get the path to the rank file.
 
     Args:
@@ -55,7 +54,7 @@ def get_rank_file(filename: Optional[str] = None) -> Path:
     return get_latest_rank_file()
 
 
-def load_rank_data(file_path: Path) -> Dict[str, float]:
+def load_rank_data(file_path: Path) -> dict[str, float]:
     """Load rank data from JSON file."""
     with open(file_path) as f:
         return json.load(f)
@@ -65,17 +64,14 @@ def get_output_filename(input_path: Path) -> Path:
     """Generate output filename based on input filename."""
     # Extract the rank number from filenames like "ranks_37_0.7"
     parts = input_path.stem.split("_")
-    if len(parts) >= 2:
-        rank_num = "_".join(parts[1:])
-    else:
-        rank_num = input_path.stem
+    rank_num = "_".join(parts[1:]) if len(parts) >= 2 else input_path.stem
 
     output_dir = Path("data/ranker/analysis")
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir / f"formatted_ranks_{rank_num}.csv"
 
 
-def get_package_data(ranks: Dict[str, float], db_session: Session) -> pd.DataFrame:
+def get_package_data(ranks: dict[str, float], db_session: Session) -> pd.DataFrame:
     """Query database for package information and combine with ranks."""
     # Query for package data including URLs and aggregated package info
     query = (

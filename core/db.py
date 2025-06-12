@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import Insert, Result, Update, create_engine, select, update
@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from core.logger import Logger
 from core.models import (
     URL,
-    Base,
     BaseModel,
     DependsOnType,
     LegacyDependency,
@@ -54,8 +53,8 @@ class DB:
         self.engine.dispose()
 
     def search_names(
-        self, package_names: List[str], package_managers: List[UUID]
-    ) -> List[str]:
+        self, package_names: list[str], package_managers: list[UUID]
+    ) -> list[str]:
         """Return Homepage URLs for packages with these names"""
 
         with self.session() as session:
@@ -76,15 +75,13 @@ class DB:
             # return in the order preserved by the input (bc its relevant)
             # and account for the fact that some names might not have a URL
             return [
-                name_to_url.get(name, None)
-                for name in package_names
-                if name in name_to_url
+                name_to_url.get(name) for name in package_names if name in name_to_url
             ]
 
     def current_graph(self, package_manager_id: UUID) -> CurrentGraph:
         """Get the Homebrew packages and dependencies"""
-        package_map: Dict[str, Package] = {}  # name to package
-        dependencies: Dict[UUID, Set[LegacyDependency]] = {}
+        package_map: dict[str, Package] = {}  # name to package
+        dependencies: dict[UUID, set[LegacyDependency]] = {}
 
         stmt = (
             select(Package, LegacyDependency)
@@ -98,7 +95,7 @@ class DB:
         )
 
         with self.session() as session:
-            result: Result[Tuple[Package, LegacyDependency]] = session.execute(stmt)
+            result: Result[tuple[Package, LegacyDependency]] = session.execute(stmt)
 
             for pkg, dep in result:
                 # add to the package map, by import_id, which is usually name
@@ -115,7 +112,7 @@ class DB:
 
         return CurrentGraph(package_map, dependencies)
 
-    def current_urls(self, urls: Set[str]) -> CurrentURLs:
+    def current_urls(self, urls: set[str]) -> CurrentURLs:
         stmt = (
             select(Package, PackageURL, URL)
             .select_from(URL)
@@ -127,8 +124,8 @@ class DB:
         with self.session() as session:
             result = session.execute(stmt)
 
-            url_map: Dict[URLKey, URL] = {}
-            package_urls: Dict[UUID, Set[PackageURL]] = {}
+            url_map: dict[URLKey, URL] = {}
+            package_urls: dict[UUID, set[PackageURL]] = {}
 
             for pkg, pkg_url, url in result:
                 url_key = URLKey(url.url, url.url_type_id)
@@ -147,7 +144,7 @@ class DB:
 
     # TODO: we should add the Cache class to the core structure, and have the individual
     # transformers inherit from it. For now, keeping this as `Any`
-    def load_urls(self, data: Dict[str, Any]) -> None:
+    def load_urls(self, data: dict[str, Any]) -> None:
         """
         Better way to load URLs by actually calculating the diff instead of relying on
         the db **not** to do something on a conflict
@@ -162,13 +159,13 @@ class DB:
 
         @dataclass
         class DiffResult:
-            new_urls: List[URL]
-            new_package_urls: List[PackageURL]
-            urls_to_update: List[PackageURL]
+            new_urls: list[URL]
+            new_package_urls: list[PackageURL]
+            urls_to_update: list[PackageURL]
 
-        def get_desired_state() -> Dict[UUID, Set[URL]]:
+        def get_desired_state() -> dict[UUID, set[URL]]:
             """Based on the cache, return the map of package ID to URLs"""
-            desired_state: Dict[UUID, Set[URL]] = {}
+            desired_state: dict[UUID, set[URL]] = {}
             for cache in data.values():
                 # first, a check
                 if not hasattr(cache.package, "id") or cache.package.id is None:
@@ -187,7 +184,7 @@ class DB:
             return desired_state
 
         def diff(
-            current_state: CurrentURLs, desired_state: Dict[UUID, Set[URL]]
+            current_state: CurrentURLs, desired_state: dict[UUID, set[URL]]
         ) -> DiffResult:
             """
             Returns a DiffResult object with the new URLs, new package-URL links,
@@ -195,13 +192,13 @@ class DB:
             """
             # define all results as dictionaries, to prevent uniqueness constraints
             # from being violated
-            new_urls: Dict[Tuple[str, UUID], URL] = {}
-            new_package_urls: Dict[Tuple[UUID, UUID], PackageURL] = {}
-            urls_to_update: Dict[Tuple[UUID, UUID], PackageURL] = {}
+            new_urls: dict[tuple[str, UUID], URL] = {}
+            new_package_urls: dict[tuple[UUID, UUID], PackageURL] = {}
+            urls_to_update: dict[tuple[UUID, UUID], PackageURL] = {}
 
             for pkg_id, urls in desired_state.items():
                 # what are the current URLs for this package?
-                current_package_urls: Optional[Set[PackageURL]] = (
+                current_package_urls: set[PackageURL] | None = (
                     current_state.package_urls.get(pkg_id)
                 )
 
@@ -210,7 +207,7 @@ class DB:
                 # to update later
                 # create it now, so it could be empty if the package has no URLs
                 # from the desired state loaded into the table
-                current_urls: Dict[UUID, PackageURL] = {}
+                current_urls: dict[UUID, PackageURL] = {}
 
                 if current_package_urls:
                     current_urls = {
@@ -270,7 +267,7 @@ class DB:
         self.logger.debug(f"Length of desired state: {len(desired_state)}")
 
         # check if the URL strings from the above exist in the current state
-        desired_urls = set(url.url for urls in desired_state.values() for url in urls)
+        desired_urls = {url.url for urls in desired_state.values() for url in urls}
         current_state = self.get_current_urls(desired_urls)
 
         # now, let's do the diff
@@ -307,11 +304,11 @@ class DB:
                 raise e
 
     def load(
-        self, session: Session, data: List[BaseModel], stmt: Insert | Update
+        self, session: Session, data: list[BaseModel], stmt: Insert | Update
     ) -> None:
         """Smart batching utility"""
         if data:
-            values: List[Dict[str, str | UUID | datetime]] = [
+            values: list[dict[str, str | UUID | datetime]] = [
                 obj.to_dict_v2() for obj in data
             ]
             self.batch(session, stmt, values, DEFAULT_BATCH_SIZE)
@@ -320,7 +317,7 @@ class DB:
         self,
         session: Session,
         stmt: Insert | Update,
-        values: List[Dict[str, str | UUID | datetime]],
+        values: list[dict[str, str | UUID | datetime]],
         batch_size: int = DEFAULT_BATCH_SIZE,
     ):
         """
@@ -336,20 +333,20 @@ class DB:
         for i in range(0, len(values), batch_size):
             batch = values[i : i + batch_size]
             self.logger.log(
-                f"Processing batch {i//batch_size + 1}/{(len(values)-1)//batch_size + 1} ({len(batch)})"  # noqa
+                f"Processing batch {i//batch_size + 1}/{(len(values)-1)//batch_size + 1} ({len(batch)})"
             )
             value_stmt = stmt.values(batch)
             session.execute(value_stmt)
 
     def ingest(
         self,
-        new_packages: List[Package],
-        new_urls: List[URL],
-        new_package_urls: List[PackageURL],
-        new_deps: List[LegacyDependency],
-        removed_deps: List[LegacyDependency],
-        updated_packages: List[Dict[str, UUID | str | datetime]],
-        updated_package_urls: List[Dict[str, UUID | datetime]],
+        new_packages: list[Package],
+        new_urls: list[URL],
+        new_package_urls: list[PackageURL],
+        new_deps: list[LegacyDependency],
+        removed_deps: list[LegacyDependency],
+        updated_packages: list[dict[str, UUID | str | datetime]],
+        updated_package_urls: list[dict[str, UUID | datetime]],
     ) -> None:
         """
         Ingests a list of new, updated, and deleted objects from the database.

@@ -22,7 +22,7 @@ FETCH = env_vars("FETCH", "true")
 NO_CACHE = env_vars("NO_CACHE", "true")
 SOURCES = {
     PackageManager.CRATES: "https://static.crates.io/db-dump.tar.gz",
-    PackageManager.HOMEBREW: "https://formulae.brew.sh/api/formula.json",  # noqa
+    PackageManager.HOMEBREW: "https://formulae.brew.sh/api/formula.json",
     # for debian, sources contains the urls, packages is tied to the linux distribution
     PackageManager.DEBIAN: [
         "https://ftp.debian.org/debian/dists/stable/main/binary-amd64/Packages.gz",
@@ -81,7 +81,7 @@ class URLTypes:
         self.source = db.select_url_types_by_name("source").id
 
     def __str__(self) -> str:
-        return f"URLs(homepage={self.homepage},repo={self.repository},docs={self.documentation},src={self.source})"  # noqa
+        return f"URLs(homepage={self.homepage},repo={self.repository},docs={self.documentation},src={self.source})"
 
 
 class UserTypes:
@@ -113,7 +113,7 @@ class DependencyTypes:
         self.recommended = db.select_dependency_type_by_name("recommended").id
 
     def __str__(self) -> str:
-        return f"DependencyTypes(build={self.build},development={self.development},runtime={self.runtime},test={self.test},optional={self.optional},recommended={self.recommended})"  # noqa
+        return f"DependencyTypes(build={self.build},development={self.development},runtime={self.runtime},test={self.test},optional={self.optional},recommended={self.recommended})"
 
 
 class PackageManagers:
@@ -149,4 +149,4 @@ class Config:
         self.package_managers = PackageManagers(db)
 
     def __str__(self):
-        return f"Config(exec_config={self.exec_config}, pm_config={self.pm_config}, url_types={self.url_types}, user_types={self.user_types}, dependency_types={self.dependency_types}, package_managers={self.package_managers})"  # noqa
+        return f"Config(exec_config={self.exec_config}, pm_config={self.pm_config}, url_types={self.url_types}, user_types={self.user_types}, dependency_types={self.dependency_types}, package_managers={self.package_managers})"

@@ -1,7 +1,6 @@
 #!/usr/bin/env pkgx +python@3.11 uv run --with requests==2.31.0 --with permalint==0.1.9
 import argparse
 import sys
-from typing import Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
 import requests
@@ -69,7 +68,7 @@ class ChaiDB(DB):
             session.commit()
 
 
-def get_package_info(npm_package: str) -> Tuple[bool, dict, Optional[str]]:
+def get_package_info(npm_package: str) -> tuple[bool, dict, str | None]:
     url = NPM_API_URL.format(name=npm_package)
     try:
         response = requests.get(url)
@@ -81,10 +80,10 @@ def get_package_info(npm_package: str) -> Tuple[bool, dict, Optional[str]]:
             )
         return True, response.json(), None
     except Exception as e:
-        return False, {}, f"Request failed: {str(e)}"
+        return False, {}, f"Request failed: {e!s}"
 
 
-def get_homepage(package_info: dict) -> Tuple[bool, Optional[str]]:
+def get_homepage(package_info: dict) -> tuple[bool, str | None]:
     try:
         return True, canonicalize(package_info["homepage"])
     except KeyError:
@@ -93,7 +92,7 @@ def get_homepage(package_info: dict) -> Tuple[bool, Optional[str]]:
         return False, str(e)
 
 
-def get_repository_url(package_info: dict) -> Tuple[bool, Optional[str]]:
+def get_repository_url(package_info: dict) -> tuple[bool, str | None]:
     try:
         return True, canonicalize(package_info["repository"]["url"])
     except KeyError:
@@ -102,7 +101,7 @@ def get_repository_url(package_info: dict) -> Tuple[bool, Optional[str]]:
         return False, str(e)
 
 
-def get_source_url(package_info: dict) -> Tuple[bool, Optional[str]]:
+def get_source_url(package_info: dict) -> tuple[bool, str | None]:
     try:
         repository_obj = package_info["repository"]
         if repository_obj["type"] == "git":
@@ -119,7 +118,7 @@ def canonicalize(url: str) -> str:
     return normalize_url(url)
 
 
-def get_latest_version(package_info: dict) -> Tuple[bool, Optional[str]]:
+def get_latest_version(package_info: dict) -> tuple[bool, str | None]:
     try:
         dist_tags = package_info["dist-tags"]
         return True, dist_tags["latest"]
@@ -127,7 +126,7 @@ def get_latest_version(package_info: dict) -> Tuple[bool, Optional[str]]:
         return False, None
 
 
-def get_version_info(package_info: dict, version: str) -> Tuple[bool, Optional[dict]]:
+def get_version_info(package_info: dict, version: str) -> tuple[bool, dict | None]:
     try:
         return True, package_info["versions"][version]
     except KeyError:
@@ -136,7 +135,7 @@ def get_version_info(package_info: dict, version: str) -> Tuple[bool, Optional[d
 
 def get_latest_version_dependencies(
     latest_version: dict,
-) -> Tuple[bool, Dict[str, str]]:
+) -> tuple[bool, dict[str, str]]:
     """Gets the dependencies from a version object from NPM's Registry API
 
     Returns:
@@ -152,7 +151,7 @@ def get_latest_version_dependencies(
 
 def get_latest_version_dev_dependencies(
     latest_version: dict,
-) -> Tuple[bool, Dict[str, str]]:
+) -> tuple[bool, dict[str, str]]:
     """Gets the development dependencies from a version object from NPM's Registry API
 
     Returns:
@@ -167,8 +166,8 @@ def get_latest_version_dev_dependencies(
 
 
 def check_dependencies_on_chai(
-    db: ChaiDB, deps: Dict[str, str]
-) -> List[Tuple[str, str, bool]]:
+    db: ChaiDB, deps: dict[str, str]
+) -> list[tuple[str, str, bool]]:
     """Check if dependencies exist on CHAI
 
     Args:
@@ -193,9 +192,9 @@ def generate_url(url_type_id: UUID, url: str) -> URL:
 
 def generate_legacy_dependencies(
     db: ChaiDB, pkg: Package, deps: dict[str, str], dependency_type_id: UUID
-) -> Tuple[List[LegacyDependency], List[Tuple[str, str, bool]]]:
+) -> tuple[list[LegacyDependency], list[tuple[str, str, bool]]]:
     legacy_deps: list[LegacyDependency] = []
-    dep_status: List[Tuple[str, str, bool]] = []
+    dep_status: list[tuple[str, str, bool]] = []
 
     for dep_name, dep_range in deps.items():
         derived_id = f"npm/{dep_name}"
@@ -221,13 +220,13 @@ def print_status_report(
     package_name: str,
     exists_on_chai: bool,
     npm_response_ok: bool,
-    npm_error: Optional[str],
-    homepage_result: Tuple[bool, Optional[str]],
-    repository_result: Tuple[bool, Optional[str]],
-    source_result: Tuple[bool, Optional[str]],
-    runtime_deps: List[Tuple[str, str, bool]],
-    dev_deps: List[Tuple[str, str, bool]],
-    changes_summary: Optional[Dict[str, int]] = None,
+    npm_error: str | None,
+    homepage_result: tuple[bool, str | None],
+    repository_result: tuple[bool, str | None],
+    source_result: tuple[bool, str | None],
+    runtime_deps: list[tuple[str, str, bool]],
+    dev_deps: list[tuple[str, str, bool]],
+    changes_summary: dict[str, int] | None = None,
     dry_run: bool = False,
 ):
     """Print a formatted status report of the package processing"""
@@ -439,7 +438,7 @@ def process_package(package_name: str, dry_run: bool = False) -> bool:
         chai_db.load(pkg, urls, runtime_deps, dev_deps)
         print("✅ Successfully committed changes to database")
     else:
-        print("ℹ️ Dry run: No changes committed to database")
+        print("🌵 Dry run: No changes committed to database")
 
     return True
 

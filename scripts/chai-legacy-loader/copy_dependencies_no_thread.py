@@ -3,7 +3,6 @@ import argparse
 import io
 import os
 import uuid
-from typing import Dict, List
 
 import psycopg2
 import psycopg2.errors
@@ -14,7 +13,7 @@ from core.logger import Logger
 LEGACY_CHAI_DATABASE_URL = os.environ.get("LEGACY_CHAI_DATABASE_URL")
 CHAI_DATABASE_URL = os.environ.get("CHAI_DATABASE_URL")
 BATCH_SIZE = 20000
-LEGACY_CHAI_PACKAGE_MANAGER_MAP: Dict[PackageManager, str] = {
+LEGACY_CHAI_PACKAGE_MANAGER_MAP: dict[PackageManager, str] = {
     PackageManager.NPM: "npm",
     PackageManager.CRATES: "crates",
     PackageManager.HOMEBREW: "brew",
@@ -47,7 +46,7 @@ class LegacyDB:
         sql_file_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "sql", filename
         )
-        with open(sql_file_path, "r") as f:
+        with open(sql_file_path) as f:
             return f.read()
 
     def create_server_cursor(self, sql_file: str, cursor_name: str) -> None:
@@ -75,7 +74,7 @@ class LegacyDB:
                 f"Created server-side cursor '{cursor_name}' for {sql_file}"
             )
 
-    def fetch_batch(self, cursor_name: str, batch_size: int) -> List[tuple]:
+    def fetch_batch(self, cursor_name: str, batch_size: int) -> list[tuple]:
         """Fetch a batch of records using the server-side cursor."""
         cursor = self.conn.cursor()
         cursor.execute(f"FETCH {batch_size} FROM {cursor_name}")
@@ -129,7 +128,7 @@ class ChaiDB:
         self.processed_pairs = set()
         self._load_existing_dependencies()
 
-    def _get_package_map(self) -> Dict[str, uuid.UUID]:
+    def _get_package_map(self) -> dict[str, uuid.UUID]:
         """Get a map of package import_ids to their UUIDs for the configured package
         manager"""
         query = """SELECT import_id, id 
@@ -159,21 +158,19 @@ class ChaiDB:
         total_loaded = 0
 
         # Use a transaction context for the server-side cursor
-        with self.conn:
-            # Use a named cursor (server-side)
-            with self.conn.cursor(name=cursor_name) as named_cursor:
-                named_cursor.execute(query)
-                while True:
-                    batch = named_cursor.fetchmany(batch_size)
-                    if not batch:
-                        break
-                    # Convert batch of tuples to set for efficient update
-                    self.processed_pairs.update(batch)
-                    total_loaded += len(batch)
-                    if total_loaded % (batch_size * 20000) == 0:
-                        self.logger.debug(
-                            f"Loaded {total_loaded} existing dependency pairs..."
-                        )
+        with self.conn, self.conn.cursor(name=cursor_name) as named_cursor:
+            named_cursor.execute(query)
+            while True:
+                batch = named_cursor.fetchmany(batch_size)
+                if not batch:
+                    break
+                # Convert batch of tuples to set for efficient update
+                self.processed_pairs.update(batch)
+                total_loaded += len(batch)
+                if total_loaded % (batch_size * 20000) == 0:
+                    self.logger.debug(
+                        f"Loaded {total_loaded} existing dependency pairs..."
+                    )
 
         self.logger.log(
             f"Finished loading {total_loaded} existing dependency pairs into memory."
@@ -185,7 +182,7 @@ class ChaiDB:
         self.columns_str = ", ".join(self.legacy_dependency_columns)
         self.logger.debug("Copy buffer initialized")
 
-    def add_rows_to_copy_expert(self, rows: List[tuple]) -> int:
+    def add_rows_to_copy_expert(self, rows: list[tuple]) -> int:
         """Add rows to the StringIO buffer for later COPY operation"""
         rows_added = 0
         for row in rows:
@@ -220,7 +217,7 @@ class ChaiDB:
 
         return rows_added
 
-    def add_rows_with_flush(self, rows: List[tuple], max_buffer_size=100000) -> int:
+    def add_rows_with_flush(self, rows: list[tuple], max_buffer_size=100000) -> int:
         """Add rows to the StringIO buffer for later COPY operation"""
         rows_added = self.add_rows_to_copy_expert(rows)
         self.logger.log(f"Added {rows_added} rows to the copy expert")

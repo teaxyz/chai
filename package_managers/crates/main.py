@@ -42,7 +42,7 @@ def identify_deletions(transformer: CratesTransformer, db: CratesDB) -> set[int]
     cargo_id_to_chai_id: dict[str, UUID] = db.get_cargo_id_to_chai_id()
 
     transformer_import_ids: set[int] = {int(c.id) for c in transformer.crates.values()}
-    db_import_ids: set[int] = {int(p) for p in cargo_id_to_chai_id.keys()}
+    db_import_ids: set[int] = {int(p) for p in cargo_id_to_chai_id}
 
     # calculate deletions
     deletions: set[int] = db_import_ids - transformer_import_ids

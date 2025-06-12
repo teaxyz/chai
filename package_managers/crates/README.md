@@ -18,37 +18,56 @@ docker compose run crates
 
 The crates loader goes through the following steps when executed:
 
-1. Initialization: The loader starts by initializing the configuration and database
-   connection.
-2. Fetching: If the `FETCH` flag is set to true, the loader downloads the latest crates
-   data from the configured source.
-3. Transformation: The downloaded data is transformed into a format compatible with the
-   CHAI database schema.
-4. Loading: The transformed data is loaded into the database. This includes:
-   - Packages
-   - Users
-   - User Packages
-   - URLs
-   - Package URLs
-   - Versions
-   - Dependencies
-5. Cleanup: After successful loading, temporary files are cleaned up if the `NO_CACHE` flag is set.
+1. **Initialization**: The loader starts by initializing the configuration and database
+   connection using `Config` and `CratesDB`.
+2. **Fetching**: If the `FETCH` flag is set to true, the loader downloads the latest
+   cargo data from the source using `TarballFetcher`. If needed, it saves to disk.
+3. **Transformation**: The downloaded data is parsed and transformed using
+   `CratesTransformer.parse()` into a format compatible with the CHAI database schema.
+4. **Deletion**: The loader identifies crates that exist in the database
+   but are no longer in the registry (crates.io allows deletion _sometimes_).
+5. **Cache Building**: The loader builds a cache by setting the current graph and URLs
+   from the database, then creates a `Cache` object for efficient diffing.
+6. **Diff Process**: The loader performs a diff operation to categorize data into:
+   - New packages vs updated packages
+   - New URLs vs existing URLs
+   - New package URLs vs updated package URLs
+   - New dependencies vs removed dependencies
+7. **Data Ingestion**: All categorized data is loaded into the database via a single
+   `db.ingest()` call.
 
-The main execution logic is in the `run_pipeline` function in [main.py](main.py).
+The main execution logic is in the `main` function in [main.py](main.py):
 
 ```python
-def run_pipeline(db: DB, config: Config) -> None:
-    fetcher = fetch(config)
-    transformer = CratesTransformer(config.url_types, config.user_types)
-    load(db, transformer, config)
-    fetcher.cleanup(config)
+def main(config: Config, db: CratesDB):
+    logger = Logger("crates_main")
+    logger.log("Starting crates_main")
 
-    coda = (
-        "validate by running "
-        + '`psql "postgresql://postgres:s3cr3t@localhost:5435/chai" '
-        + '-c "SELECT * FROM load_history;"`'
-    )
-    logger.log(coda)
+    # fetch, write, transform
+    if config.exec_config.fetch:
+        fetcher = TarballFetcher(...)
+        files = fetcher.fetch()
+    if not config.exec_config.no_cache:
+        fetcher.write(files)
+
+    transformer = CratesTransformer(config)
+    transformer.parse()
+
+    # identify and handle deletions
+    deletions = identify_deletions(transformer, db)
+    if deletions:
+        db.delete_packages_by_import_id(deletions)
+
+    # build cache and diff
+    db.set_current_graph()
+    db.set_current_urls(crates_urls)
+    cache = Cache(...)
+
+    # perform diff and ingest
+    diff = Diff(config, cache)
+    # ... diff process ...
+    db.ingest(new_packages, final_new_urls, new_package_urls,
+              new_deps, removed_deps, updated_packages, updated_package_urls)
 ```
 
 ### Configuration Flags
@@ -78,12 +97,8 @@ crates:
     - NO_CACHE=${NO_CACHE:-false}
 ```
 
-## Notes
+## TODOs
 
-- We're reopening the same files multiple times, which is not efficient.
-  - `versions.csv` contains all the `published_by` ids
-  - `crates.csv` contains all the `urls`
-- The cache logic in the database client is super complicated, and needs some better
-  explanation...it does work though.
-- Licenses are non-standardized.
-- Warnings on missing users are because `gh_login` in the source data is non-unique.
+- [ ] `versions.csv` contains all the `published_by` ids, who are the users, who'd need to
+      be loaded as well
+- [ ] `versions.csv` also contains licenses

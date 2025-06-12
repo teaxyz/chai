@@ -1,7 +1,7 @@
 #! /usr/bin/env pkgx +python@3.12 uv run
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from requests import Response, get
 
@@ -45,7 +45,7 @@ class PkgxTransformer(Transformer):
         self.package_manager_id = config.pm_config.pm_id
         self.url_types: URLTypes = config.url_types
         self.depends_on_types = config.dependency_types
-        self.cache_map: Dict[str, Cache] = {}
+        self.cache_map: dict[str, Cache] = {}
         self.db = db
         self.package_managers = config.package_managers
 
@@ -78,7 +78,7 @@ class PkgxTransformer(Transformer):
 
         return package
 
-    def ask_pkgx(self, import_id: str) -> Optional[str]:
+    def ask_pkgx(self, import_id: str) -> str | None:
         """
         ask max's scraping work for the homepage of a package
         Homepage comes from the pkgxdev/www repo
@@ -87,12 +87,12 @@ class PkgxTransformer(Transformer):
         """
         response: Response = get(HOMEPAGE_URL.format(name=import_id))
         if response.status_code == 200:
-            data: Dict[str, Any] = response.json()
+            data: dict[str, Any] = response.json()
             if "homepage" in data:
                 return data["homepage"]
 
-    def special_case(self, import_id: str) -> Optional[str]:
-        homepage: Optional[str] = None
+    def special_case(self, import_id: str) -> str | None:
+        homepage: str | None = None
 
         # if no slashes, then pkgx used the homepage as the name
         # if two slashes, then probably github / gitlab
@@ -121,13 +121,13 @@ class PkgxTransformer(Transformer):
 
         return homepage
 
-    def generate_chai_url(self, import_id: str, pkgx_package: PkgxPackage) -> List[URL]:
-        urls: Set[URL] = set()
+    def generate_chai_url(self, import_id: str, pkgx_package: PkgxPackage) -> list[URL]:
+        urls: set[URL] = set()
 
         # handle homepage first
 
         # get possible homepage URLs
-        maybe: List[str] = self.guess(
+        maybe: list[str] = self.guess(
             self.db,
             import_id,
             [self.package_managers.homebrew, self.package_managers.debian],

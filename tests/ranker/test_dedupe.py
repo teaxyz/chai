@@ -120,10 +120,7 @@ def capture_ingest_calls(mock_db):
     ingest_calls = []
 
     def capture_ingest(
-        new_canons,
-        updated_canons,
-        new_canon_packages,
-        updated_canon_packages,
+        new_canons, updated_canons, new_canon_packages, updated_canon_packages
     ):
         ingest_calls.append(
             (new_canons, updated_canons, new_canon_packages, updated_canon_packages)

@@ -19,12 +19,7 @@ from package_managers.homebrew.structs import Actual
 @pytest.fixture
 def package_ids():
     """Fixture providing consistent package IDs for testing."""
-    return {
-        "foo": uuid4(),
-        "bar": uuid4(),
-        "baz": uuid4(),
-        "qux": uuid4(),
-    }
+    return {"foo": uuid4(), "bar": uuid4(), "baz": uuid4(), "qux": uuid4()}
 
 
 @pytest.fixture
@@ -131,17 +126,12 @@ class TestDiffDeps:
         """
         # Create cache without the package we'll look for
         diff = diff_instance(
-            package_map={
-                "bar": packages["bar"],
-                "baz": packages["baz"],
-            }
+            package_map={"bar": packages["bar"], "baz": packages["baz"]}
         )
 
         # Create an Actual package that's not in the cache
         new_pkg = homebrew_formula(
-            "new_package",
-            dependencies=["baz"],
-            build_dependencies=["bar"],
+            "new_package", dependencies=["baz"], build_dependencies=["bar"]
         )
 
         # Execute
@@ -167,8 +157,7 @@ class TestDiffDeps:
 
         # Create diff with existing dependency
         diff = diff_instance(
-            package_map=packages,
-            dependencies={package_ids["foo"]: {existing_dep}},
+            package_map=packages, dependencies={package_ids["foo"]: {existing_dep}}
         )
 
         # Create formula with existing dependency plus a new one
@@ -258,10 +247,7 @@ class TestDiffDeps:
 
         # Create diff with existing dependency
         diff = diff_instance(
-            package_map={
-                "foo": packages["foo"],
-                "bar": packages["bar"],
-            },
+            package_map={"foo": packages["foo"], "bar": packages["bar"]},
             dependencies={package_ids["foo"]: {existing_dep}},
         )
 
@@ -309,10 +295,7 @@ class TestDiffDeps:
 
         # Create diff with existing dependency
         diff = diff_instance(
-            package_map={
-                "foo": packages["foo"],
-                "bar": packages["bar"],
-            },
+            package_map={"foo": packages["foo"], "bar": packages["bar"]},
             dependencies={package_ids["foo"]: {existing_dep}},
         )
 
@@ -350,19 +333,12 @@ class TestDiffDeps:
 
         # Create diff with existing dependency
         diff = diff_instance(
-            package_map={
-                "foo": packages["foo"],
-                "bar": packages["bar"],
-            },
+            package_map={"foo": packages["foo"], "bar": packages["bar"]},
             dependencies={package_ids["foo"]: {existing_dep}},
         )
 
         # Create formula with same dependency multiple times
-        pkg = homebrew_formula(
-            "foo",
-            dependencies=["bar"],
-            build_dependencies=["bar"],
-        )
+        pkg = homebrew_formula("foo", dependencies=["bar"], build_dependencies=["bar"])
 
         # Execute
         new_deps, removed_deps = diff.diff_deps(pkg)
@@ -393,10 +369,7 @@ class TestDiffDeps:
 
         # Create diff with existing dependency
         diff = diff_instance(
-            package_map={
-                "foo": packages["foo"],
-                "bar": packages["bar"],
-            },
+            package_map={"foo": packages["foo"], "bar": packages["bar"]},
             dependencies={package_ids["foo"]: {existing_dep}},
         )
 

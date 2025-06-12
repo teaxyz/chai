@@ -15,7 +15,7 @@ from uuid import UUID
 
 import pytest
 
-from core.models import URL, Package
+from core.models import URL, Package, PackageURL
 from package_managers.pkgx.loader import PkgxLoader
 from package_managers.pkgx.transformer import Cache, Dependencies
 
@@ -180,13 +180,17 @@ class TestPkgxLoader:
             package_urls_added = []
             urls_updated = []
 
-            def track_add(obj):
+            def track_add(
+                obj: URL | PackageURL,
+                urls_added=urls_added,
+                package_urls_added=package_urls_added,
+            ):
                 if hasattr(obj, "url"):  # It's a URL object
                     urls_added.append(obj)
                 else:  # It's a PackageURL object
                     package_urls_added.append(obj)
 
-            def track_bulk_update(mapper, mappings):
+            def track_bulk_update(mapper, mappings, urls_updated=urls_updated):
                 urls_updated.extend(mappings)
 
             mock_session.add.side_effect = track_add
@@ -199,14 +203,14 @@ class TestPkgxLoader:
             expected = scenario["expected_behavior"]
             assert (
                 len(urls_added) == expected["new_urls_created"]
-            ), f"Scenario {scenario_name}: Expected {expected['new_urls_created']} new URLs, got {len(urls_added)}"  # noqa: E501
+            ), f"Scenario {scenario_name}: Expected {expected['new_urls_created']} new URLs, got {len(urls_added)}"
             assert (
                 len(package_urls_added) == expected["new_package_urls_created"]
-            ), f"Scenario {scenario_name}: Expected {expected['new_package_urls_created']} new PackageURLs, got {len(package_urls_added)}"  # noqa: E501
+            ), f"Scenario {scenario_name}: Expected {expected['new_package_urls_created']} new PackageURLs, got {len(package_urls_added)}"
 
             # URLs updated is tracked through bulk_update_mappings calls
             if expected["urls_updated"] > 0:
-                assert mock_session.bulk_update_mappings.called, f"Scenario {scenario_name}: Expected bulk_update_mappings to be called"  # noqa: E501
+                assert mock_session.bulk_update_mappings.called, f"Scenario {scenario_name}: Expected bulk_update_mappings to be called"
                 # Check that the right number of URLs were updated
                 total_updated = sum(
                     len(call[0][1])
@@ -214,4 +218,4 @@ class TestPkgxLoader:
                 )
                 assert (
                     total_updated == expected["urls_updated"]
-                ), f"Scenario {scenario_name}: Expected {expected['urls_updated']} URLs updated, got {total_updated}"  # noqa: E501
+                ), f"Scenario {scenario_name}: Expected {expected['urls_updated']} URLs updated, got {total_updated}"

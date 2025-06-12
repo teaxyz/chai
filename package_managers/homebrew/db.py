@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Dict, List, Set, Union
 from uuid import UUID
 
 from sqlalchemy import update
@@ -21,20 +20,20 @@ class HomebrewDB(DB):
         self.graph: CurrentGraph = self.current_graph(self.config.pm_config.pm_id)
         self.logger.log(f"Loaded {len(self.graph.package_map)} Homebrew packages")
 
-    def set_current_urls(self, urls: Set[str]) -> None:
+    def set_current_urls(self, urls: set[str]) -> None:
         """Wrapper for setting current urls"""
         self.urls: CurrentURLs = self.current_urls(urls)
         self.logger.log(f"Found {len(self.urls.url_map)} Homebrew URLs")
 
     def ingest(
         self,
-        new_packages: List[Package],
-        new_urls: List[URL],
-        new_package_urls: List[PackageURL],
-        updated_packages: List[Dict[str, Union[UUID, str, datetime]]],
-        updated_package_urls: List[Dict[str, Union[UUID, datetime]]],
-        new_deps: List[LegacyDependency],
-        removed_deps: List[LegacyDependency],
+        new_packages: list[Package],
+        new_urls: list[URL],
+        new_package_urls: list[PackageURL],
+        updated_packages: list[dict[str, UUID | str | datetime]],
+        updated_package_urls: list[dict[str, UUID | datetime]],
+        new_deps: list[LegacyDependency],
+        removed_deps: list[LegacyDependency],
     ) -> None:
         """
         Ingest the diffs by first adding all new entities, then updating existing ones.

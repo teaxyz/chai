@@ -1,5 +1,3 @@
-from typing import Dict
-
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -12,9 +10,9 @@ BATCH_SIZE = 10000
 
 
 class DebianLoader(DB):
-    def __init__(self, config: Config, data: Dict[str, Cache]):
+    def __init__(self, config: Config, data: dict[str, Cache]):
         super().__init__("debian_db")
-        self.data: Dict[str, Cache] = data
+        self.data: dict[str, Cache] = data
         self.debug: bool = config.exec_config.test
         self.logger.debug(f"Initialized DebianLoader with {len(data)} cache entries")
 
@@ -45,7 +43,7 @@ class DebianLoader(DB):
             try:
                 package_dicts.append(pkg.to_dict())
             except Exception as e:
-                self.logger.error(f"Error in to_dict for package {pkg.name}: {str(e)}")
+                self.logger.error(f"Error in to_dict for package {pkg.name}: {e!s}")
 
         if not package_dicts:
             self.logger.log("No packages to insert")
@@ -75,7 +73,7 @@ class DebianLoader(DB):
                 # For packages that weren't inserted due to conflicts, fetch their IDs
                 missing_derived_ids = [
                     derived_id
-                    for derived_id in unique_packages.keys()
+                    for derived_id in unique_packages
                     if derived_id not in inserted_packages
                 ]
 
@@ -101,7 +99,7 @@ class DebianLoader(DB):
                 self.logger.log(f"Updated cache with IDs for {updated_count} records")
 
             except Exception as e:
-                self.logger.error(f"Error inserting packages: {str(e)}")
+                self.logger.error(f"Error inserting packages: {e!s}")
                 self.logger.error(f"Error type: {type(e)}")
                 raise
 
@@ -156,7 +154,7 @@ class DebianLoader(DB):
             try:
                 version_dicts.append(version.to_dict())
             except Exception as e:
-                self.logger.error(f"Error converting version to dict: {str(e)}")
+                self.logger.error(f"Error converting version to dict: {e!s}")
                 raise e
 
         # Use batch processing for better performance
@@ -170,7 +168,7 @@ class DebianLoader(DB):
                 for i in range(0, len(version_dicts), BATCH_SIZE):
                     batch = version_dicts[i : i + BATCH_SIZE]
                     self.logger.log(
-                        f"Processing batch {i//BATCH_SIZE + 1}/{(len(version_dicts)-1)//BATCH_SIZE + 1} ({len(batch)} versions)"  # noqa
+                        f"Processing batch {i//BATCH_SIZE + 1}/{(len(version_dicts)-1)//BATCH_SIZE + 1} ({len(batch)} versions)"
                     )
 
                     # Use PostgreSQL dialect insert with returning clause
@@ -244,7 +242,7 @@ class DebianLoader(DB):
                 self.logger.log(f"Updated cache with IDs for {updated_count} versions")
 
             except Exception as e:
-                self.logger.error(f"Error inserting versions: {str(e)}")
+                self.logger.error(f"Error inserting versions: {e!s}")
                 self.logger.error(f"Error type: {type(e)}")
                 raise e
 
@@ -327,7 +325,7 @@ class DebianLoader(DB):
             try:
                 dependency_dicts.append(dep.to_dict())
             except Exception as e:
-                self.logger.error(f"Error converting dependency to dict: {str(e)}")
+                self.logger.error(f"Error converting dependency to dict: {e!s}")
 
         # Use batch processing for better performance
         self.logger.log(f"Using batch size of {BATCH_SIZE} for dependency insertion")
@@ -338,7 +336,7 @@ class DebianLoader(DB):
                 for i in range(0, len(dependency_dicts), BATCH_SIZE):
                     batch = dependency_dicts[i : i + BATCH_SIZE]
                     self.logger.log(
-                        f"Processing batch {i//BATCH_SIZE + 1}/{(len(dependency_dicts)-1)//BATCH_SIZE + 1} ({len(batch)} dependencies)"  # noqa
+                        f"Processing batch {i//BATCH_SIZE + 1}/{(len(dependency_dicts)-1)//BATCH_SIZE + 1} ({len(batch)} dependencies)"
                     )
 
                     # Use PostgreSQL dialect insert
@@ -353,6 +351,6 @@ class DebianLoader(DB):
                 self.logger.log("Successfully inserted all dependencies")
 
             except Exception as e:
-                self.logger.error(f"Error inserting dependencies: {str(e)}")
+                self.logger.error(f"Error inserting dependencies: {e!s}")
                 self.logger.error(f"Error type: {type(e)}")
                 raise
