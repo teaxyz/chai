@@ -58,3 +58,24 @@ fixable = ["ALL"]
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[dependency-groups]
+indexers = [
+    "alembic==1.13.2",
+    "certifi>=2025.4.26",
+    "charset-normalizer>=3.4.2",
+    "gitpython>=3.1.44",
+    "idna>=3.10",
+    "permalint>=0.1.15",
+    "psycopg2>=2.9.10",
+    "requests>=2.32.4",
+    "schedule>=1.2.2",
+    "sqlalchemy>=2.0.41",
+    "urllib3>=2.4.0",
+]
+lint = ["ruff>=0.11.13"]
+ranker = [
+    "numpy>=2.3.0",
+    "rustworkx>=0.16.0",
+]
+test = ["pytest>=8.4.0", "pytest-cov>=6.1.1", "testing-postgresql>=1.3.0"]
