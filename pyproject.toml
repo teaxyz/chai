@@ -18,7 +18,6 @@ Source = "https://github.com/teaxyz/chai"
 
 [tool.uv]
 managed = true
-dev-dependencies = ["pytest", "ruff", "ty"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
@@ -60,6 +59,12 @@ quote-style = "double"
 indent-style = "space"
 
 [dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+    "pytest-cov>=6.2.1",
+    "ruff>=0.11.13",
+    "testing-postgresql>=1.3.0",
+]
 indexers = [
     "alembic==1.13.2",
     "certifi>=2025.4.26",
@@ -73,9 +78,4 @@ indexers = [
     "sqlalchemy>=2.0.41",
     "urllib3>=2.4.0",
 ]
-lint = ["ruff>=0.11.13"]
-ranker = [
-    "numpy>=2.3.0",
-    "rustworkx>=0.16.0",
-]
-test = ["pytest>=8.4.0", "pytest-cov>=6.1.1", "testing-postgresql>=1.3.0"]
+ranker = ["numpy>=2.3.0", "rustworkx>=0.16.0"]
