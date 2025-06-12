@@ -7,10 +7,6 @@ COPY . .
 WORKDIR /core
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install pkgx requirements
-WORKDIR /package_managers/pkgx
-RUN pip install --no-cache-dir -r requirements.txt
-
 WORKDIR /
 # Run the main application
 CMD ["python", "/package_managers/pkgx/main.py"] 

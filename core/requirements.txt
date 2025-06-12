@@ -29,6 +29,8 @@ permalint==0.1.15
     # via chai (pyproject.toml:indexers)
 psycopg2==2.9.10
     # via chai (pyproject.toml:indexers)
+pyyaml==6.0.2
+    # via chai (pyproject.toml:indexers)
 requests==2.32.4
     # via
     #   chai (pyproject.toml:indexers)

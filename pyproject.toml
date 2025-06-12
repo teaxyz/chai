@@ -73,6 +73,7 @@ indexers = [
     "idna>=3.10",
     "permalint>=0.1.15",
     "psycopg2>=2.9.10",
+    "pyyaml>=6.0.2",
     "requests>=2.32.4",
     "schedule>=1.2.2",
     "sqlalchemy>=2.0.41",

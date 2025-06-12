@@ -108,7 +108,9 @@ dependency for. For example, if we're adding a new dependency for all the indexe
 
 ```bash
 uv add --group indexer requests
-uv sync
+
+# use the --all-groups flag to sync your venv for all dependencies
+uv sync --all-groups
 uv pip compile --group indexer -o core/requirements.txt
 ```
 
