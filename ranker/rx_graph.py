@@ -9,7 +9,6 @@ from uuid import UUID
 import rustworkx as rx
 
 from core.logger import Logger
-from ranker.config import Config
 
 logger = Logger("ranker.chai_graph")
 

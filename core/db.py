@@ -75,9 +75,7 @@ class DB:
             # return in the order preserved by the input (bc its relevant)
             # and account for the fact that some names might not have a URL
             return [
-                name_to_url.get(name)
-                for name in package_names
-                if name in name_to_url
+                name_to_url.get(name) for name in package_names if name in name_to_url
             ]
 
     def current_graph(self, package_manager_id: UUID) -> CurrentGraph:

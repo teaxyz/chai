@@ -1,4 +1,3 @@
-
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
