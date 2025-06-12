@@ -184,7 +184,7 @@ class PkgxLoader(DB):
                 for i in range(0, len(legacy_dependency_dicts), BATCH_SIZE):
                     batch = legacy_dependency_dicts[i : i + BATCH_SIZE]
                     self.logger.log(
-                        f"Processing LegacyDependency batch {i//BATCH_SIZE + 1}/{(len(legacy_dependency_dicts)-1)//BATCH_SIZE + 1} ({len(batch)} links)"
+                        f"Processing LegacyDependency batch {i // BATCH_SIZE + 1}/{(len(legacy_dependency_dicts) - 1) // BATCH_SIZE + 1} ({len(batch)} links)"
                     )
                     stmt = (
                         pg_insert(LegacyDependency)
@@ -199,12 +199,3 @@ class PkgxLoader(DB):
                 self.logger.error(f"Error inserting legacy dependencies: {e!s}")
                 self.logger.error(f"Error type: {type(e)}")
                 raise
-
-
-if __name__ == "__main__":
-    from core.config import PackageManager
-
-    config = Config(PackageManager.PKGX)
-    db = DB(config)
-    loader = PkgxLoader(config, {})
-    loader.load_urls_v2()
