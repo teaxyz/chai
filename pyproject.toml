@@ -25,7 +25,7 @@ minversion = "8.0"
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_"]
-addopts = ["--ra", "--strict-markers", "--disable-warnings", "--tb=short"]
+addopts = ["-ra", "--strict-markers", "--disable-warnings", "--tb=short"]
 markers = ["unit"]
 
 [tool.ruff]
