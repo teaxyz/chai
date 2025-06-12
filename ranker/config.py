@@ -74,9 +74,9 @@ class TeaRankConfig:
         self.personalization: dict[UUID, Decimal] = {}
         self.map_favorites(SYSTEM_PACKAGE_MANAGERS)
 
-    alpha: Decimal = Decimal(0.85)
-    split_ratio: Decimal = Decimal(0.5)
-    tol: Decimal = Decimal(1e-6)
+    alpha: Decimal = Decimal("0.85")
+    split_ratio: Decimal = Decimal("0.5")
+    tol: Decimal = Decimal("1e-6")
     max_iter: int = 1000000
 
     def map_favorites(self, package_managers: list[str]) -> None:
@@ -84,13 +84,13 @@ class TeaRankConfig:
             match pm:
                 case "homebrew":
                     pm_id = self.db.get_pm_id_by_name("homebrew")[0][0]
-                    self.favorites[pm_id] = Decimal(0.3)
+                    self.favorites[pm_id] = Decimal("0.3")
                 case "debian":
                     pm_id = self.db.get_pm_id_by_name("debian")[0][0]
-                    self.favorites[pm_id] = Decimal(0.6)
+                    self.favorites[pm_id] = Decimal("0.6")
                 case "pkgx":
                     pm_id = self.db.get_pm_id_by_name("pkgx")[0][0]
-                    self.favorites[pm_id] = Decimal(0.1)
+                    self.favorites[pm_id] = Decimal("0.1")
                 case _:
                     raise ValueError(f"Unknown system package manager: {pm}")
 
