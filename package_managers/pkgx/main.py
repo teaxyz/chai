@@ -48,24 +48,24 @@ def fetch(config: Config) -> GitFetcher:
 
 def run_pipeline(config: Config, db: PkgxDB):
     """A diff-based approach to loading pkgx data into CHAI"""
-    
+
     fetcher = fetch(config)
     output_dir = f"{fetcher.output}/latest"
 
     # Parse all packages
     pkgx_parser = PkgxParser(output_dir)
     packages = list(pkgx_parser.parse_packages())
-    
+
     logger.log(f"Parsed {len(packages)} packages")
 
     # Collect all URLs from packages for cache building
     all_urls = set()
-    for pkg_data, import_id in packages:
+    for pkg_data, _import_id in packages:
         # Add source URLs from distributables
         for distributable in pkg_data.distributable:
             if distributable.url:
                 all_urls.add(distributable.url)
-    
+
     # Set up URL cache
     db.set_current_urls(all_urls)
     logger.log("Set current URLs")
@@ -89,13 +89,12 @@ def run_pipeline(config: Config, db: PkgxDB):
 
     # Create diff processor
     diff = PkgxDiff(config, cache)
-    
+
     # Process each package
-    processed_count = 0
-    for pkg_data, import_id in packages:
+    for i, (pkg_data, import_id) in enumerate(packages):
         # Diff the package
         pkg_id, pkg_obj, update_payload = diff.diff_pkg(import_id, pkg_data)
-        
+
         if pkg_obj:
             logger.debug(f"New package: {pkg_obj.name}")
             new_packages.append(pkg_obj)
@@ -124,8 +123,7 @@ def run_pipeline(config: Config, db: PkgxDB):
             logger.debug(f"Removed dependencies: {len(removed_dependencies)}")
             removed_deps.extend(removed_dependencies)
 
-        processed_count += 1
-        if config.exec_config.test and processed_count > 10:
+        if config.exec_config.test and i > 10:
             break
 
     # Convert new_urls dict to list for ingestion

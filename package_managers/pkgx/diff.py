@@ -17,7 +17,9 @@ class PkgxDiff:
         self.caches = caches
         self.logger = Logger("pkgx_diff")
 
-    def diff_pkg(self, import_id: str, pkg: PkgxPackage) -> tuple[UUID, Package | None, dict | None]:
+    def diff_pkg(
+        self, import_id: str, pkg: PkgxPackage
+    ) -> tuple[UUID, Package | None, dict | None]:
         """
         Checks if the given pkg is in the package_cache.
 
@@ -27,7 +29,7 @@ class PkgxDiff:
           - changes: a dictionary of changes
         """
         self.logger.debug(f"Diffing package: {import_id}")
-        
+
         if import_id not in self.caches.package_map:
             # new package
             p = Package(
@@ -36,7 +38,7 @@ class PkgxDiff:
                 name=import_id,
                 package_manager_id=self.config.pm_config.pm_id,
                 import_id=import_id,
-                readme=pkg.description,
+                readme="",  # NOTE: pkgx doesn't have a description field
                 created_at=self.now,
                 updated_at=self.now,
             )
@@ -66,7 +68,7 @@ class PkgxDiff:
 
         # Collect all URLs from the package
         urls_to_process = []
-        
+
         # Add homepage URL if it exists
         homepage = self._get_homepage_url(import_id, pkg)
         if homepage:
@@ -78,16 +80,18 @@ class PkgxDiff:
                 clean_url = self._canonicalize_url(distributable.url)
                 if clean_url:
                     urls_to_process.append((clean_url, self.config.url_types.source))
-                    
+
                     # If it's a GitHub URL, also add as repository
                     if self._is_github_url(clean_url):
-                        urls_to_process.append((clean_url, self.config.url_types.repository))
+                        urls_to_process.append(
+                            (clean_url, self.config.url_types.repository)
+                        )
 
         # Process each URL
         for url, url_type in urls_to_process:
             url_key = (url, url_type)
             resolved_url_id: UUID
-            
+
             if url_key in new_urls:
                 resolved_url_id = new_urls[url_key].id
             elif url_key in self.caches.url_map:
@@ -113,7 +117,7 @@ class PkgxDiff:
     ) -> tuple[list[PackageURL], list[dict]]:
         """Takes in a package_id and resolved URLs from diff_url, and generates
         new PackageURL objects as well as a list of changes to existing ones"""
-        
+
         new_links: list[PackageURL] = []
         updates: list[dict] = []
 
@@ -138,9 +142,7 @@ class PkgxDiff:
             else:
                 # existing link - update timestamp
                 existing_pu = next(
-                    pu
-                    for pu in self.caches.package_urls[pkg_id]
-                    if pu.url_id == url_id
+                    pu for pu in self.caches.package_urls[pkg_id] if pu.url_id == url_id
                 )
                 existing_pu.updated_at = self.now
                 updates.append({"id": existing_pu.id, "updated_at": self.now})
@@ -152,7 +154,7 @@ class PkgxDiff:
     ) -> tuple[list[LegacyDependency], list[LegacyDependency]]:
         """
         Takes in a pkgx package and figures out what dependencies have changed.
-        
+
         Returns:
           - new_deps: a list of new dependencies
           - removed_deps: a list of removed dependencies
@@ -191,7 +193,9 @@ class PkgxDiff:
 
         # figure out what's new/removed
         existing: set[tuple[UUID, UUID]] = set()
-        legacy_links: set[LegacyDependency] = self.caches.dependencies.get(pkg_id, set())
+        legacy_links: set[LegacyDependency] = self.caches.dependencies.get(
+            pkg_id, set()
+        )
         existing_legacy_map: dict[tuple[UUID, UUID], LegacyDependency] = {}
 
         for legacy in legacy_links:
@@ -225,28 +229,30 @@ class PkgxDiff:
         """Get homepage URL for a package using the existing transformer logic"""
         # Import the transformer methods for URL handling
         from package_managers.pkgx.transformer import PkgxTransformer
-        
+
         # Create a temporary transformer instance to use its methods
         temp_transformer = PkgxTransformer(self.config, None)
-        
+
         # Try to get homepage from pkgx API
         homepage = temp_transformer.ask_pkgx(import_id)
         if not homepage:
             homepage = temp_transformer.special_case(import_id)
-            
+
         if homepage:
             return temp_transformer.canonicalize(homepage)
-        
+
         return None
 
     def _canonicalize_url(self, url: str) -> str:
         """Canonicalize URL using transformer logic"""
         from package_managers.pkgx.transformer import PkgxTransformer
+
         temp_transformer = PkgxTransformer(self.config, None)
         return temp_transformer.canonicalize(url)
 
     def _is_github_url(self, url: str) -> bool:
         """Check if URL is a GitHub URL"""
         from package_managers.pkgx.transformer import PkgxTransformer
+
         temp_transformer = PkgxTransformer(self.config, None)
         return temp_transformer.is_github(url)
