@@ -6,7 +6,7 @@ from uuid import UUID
 from core.config import Config, PackageManager
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
-from core.structs import Cache
+from core.structs import Cache, URLKey
 from package_managers.homebrew.db import HomebrewDB
 from package_managers.homebrew.diff import Diff
 from package_managers.homebrew.formulae import HomebrewFetcher
@@ -34,7 +34,7 @@ def main(config: Config, db: HomebrewDB) -> None:
 
     # total set of updates we'll make are:
     new_packages: list[Package] = []
-    new_urls: dict[tuple[str, UUID], URL] = {}  # we'll convert this later
+    new_urls: dict[URLKey, URL] = {}  # we'll convert this later
     new_package_urls: list[PackageURL] = []
     updated_packages: list[dict[str, UUID | str | datetime]] = []
     updated_package_urls: list[dict[str, UUID | datetime]] = []

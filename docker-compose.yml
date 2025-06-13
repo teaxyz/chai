@@ -34,7 +34,7 @@ services:
       dockerfile: ./package_managers/crates/Dockerfile
     environment:
       - CHAI_DATABASE_URL=${CHAI_DATABASE_URL:-postgresql://postgres:s3cr3t@db:5432/chai}
-      - NO_CACHE=${NO_CACHE:-false}
+      - NO_CACHE=${NO_CACHE:-true}
       - PYTHONPATH=/
       - DEBUG=${DEBUG:-false}
       - TEST=${TEST:-false}

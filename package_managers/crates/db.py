@@ -38,9 +38,9 @@ class CratesDB(DB):
         # Convert import_ids to package_ids using the cache
         package_ids: list[UUID] = []
         for import_id in import_ids:
-            package = self.graph.package_map.get(str(import_id))
-            if package:
-                package_ids.append(package.id)
+            pkg_id = self.import_id_map.get(str(import_id))
+            if pkg_id:
+                package_ids.append(pkg_id)
 
         if not package_ids:
             self.logger.debug("No packages found to delete")
@@ -166,4 +166,7 @@ class CratesDB(DB):
             stmt = select(Package.import_id, Package.id).where(
                 Package.package_manager_id == self.config.pm_config.pm_id
             )
-            return {row[0]: row[1] for row in session.execute(stmt).all()}
+            self.import_id_map: dict[str, UUID] = {
+                row[0]: row[1] for row in session.execute(stmt).all()
+            }
+            return self.import_id_map
