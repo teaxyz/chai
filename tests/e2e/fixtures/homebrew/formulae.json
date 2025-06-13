@@ -1,0 +1,234 @@
+[
+  {
+    "name": "wget",
+    "full_name": "wget",
+    "tap": "homebrew/core",
+    "desc": "Internet file retriever",
+    "license": "GPL-3.0-or-later",
+    "homepage": "https://www.gnu.org/software/wget/",
+    "urls": {
+      "stable": {
+        "url": "https://ftp.gnu.org/gnu/wget/wget-1.21.3.tar.gz",
+        "tag": null,
+        "revision": null,
+        "using": null,
+        "checksum": "5726bb8bc5ca0f6dc7110f6416c4bb7019e2d2ff5bf93d1ca2ffcc6656f220e5"
+      }
+    },
+    "revision": 0,
+    "version_scheme": 0,
+    "bottle": {},
+    "keg_only": false,
+    "keg_only_reason": null,
+    "options": [],
+    "build_dependencies": [],
+    "dependencies": ["openssl@3", "libidn2"],
+    "test_dependencies": [],
+    "recommended_dependencies": [],
+    "optional_dependencies": [],
+    "uses_from_macos": []
+  },
+  {
+    "name": "curl",
+    "full_name": "curl",
+    "tap": "homebrew/core",
+    "desc": "Get a file from an HTTP, HTTPS or FTP server",
+    "license": "curl",
+    "homepage": "https://curl.se",
+    "urls": {
+      "stable": {
+        "url": "https://curl.se/download/curl-8.0.0.tar.gz",
+        "tag": null,
+        "revision": null,
+        "using": null,
+        "checksum": "abc123"
+      }
+    },
+    "revision": 0,
+    "version_scheme": 0,
+    "bottle": {},
+    "keg_only": false,
+    "keg_only_reason": null,
+    "options": [],
+    "build_dependencies": ["pkg-config"],
+    "dependencies": ["openssl@3", "zlib"],
+    "test_dependencies": [],
+    "recommended_dependencies": [],
+    "optional_dependencies": [],
+    "uses_from_macos": []
+  },
+  {
+    "name": "git",
+    "full_name": "git",
+    "tap": "homebrew/core",
+    "desc": "Distributed revision control system",
+    "license": "GPL-2.0-only",
+    "homepage": "https://git-scm.com",
+    "urls": {
+      "stable": {
+        "url": "https://github.com/git/git/archive/v2.40.0.tar.gz",
+        "tag": null,
+        "revision": null,
+        "using": null,
+        "checksum": "def456"
+      }
+    },
+    "revision": 0,
+    "version_scheme": 0,
+    "bottle": {},
+    "keg_only": false,
+    "keg_only_reason": null,
+    "options": [],
+    "build_dependencies": [],
+    "dependencies": ["openssl@3", "pcre2"],
+    "test_dependencies": [],
+    "recommended_dependencies": [],
+    "optional_dependencies": [],
+    "uses_from_macos": []
+  },
+  {
+    "name": "openssl@3",
+    "full_name": "openssl@3",
+    "tap": "homebrew/core",
+    "desc": "Cryptography and SSL/TLS Toolkit",
+    "license": "Apache-2.0",
+    "homepage": "https://openssl.org/",
+    "urls": {
+      "stable": {
+        "url": "https://www.openssl.org/source/openssl-3.0.8.tar.gz",
+        "tag": null,
+        "revision": null,
+        "using": null,
+        "checksum": "ghi789"
+      }
+    },
+    "revision": 0,
+    "version_scheme": 0,
+    "bottle": {},
+    "keg_only": false,
+    "keg_only_reason": null,
+    "options": [],
+    "build_dependencies": [],
+    "dependencies": [],
+    "test_dependencies": [],
+    "recommended_dependencies": [],
+    "optional_dependencies": [],
+    "uses_from_macos": []
+  },
+  {
+    "name": "libidn2",
+    "full_name": "libidn2",
+    "tap": "homebrew/core",
+    "desc": "International domain name library (IDNA2008, Punycode and TR46)",
+    "license": "GPL-3.0-or-later",
+    "homepage": "https://www.gnu.org/software/libidn/",
+    "urls": {
+      "stable": {
+        "url": "https://ftp.gnu.org/gnu/libidn/libidn2-2.3.4.tar.gz",
+        "tag": null,
+        "revision": null,
+        "using": null,
+        "checksum": "jkl012"
+      }
+    },
+    "revision": 0,
+    "version_scheme": 0,
+    "bottle": {},
+    "keg_only": false,
+    "keg_only_reason": null,
+    "options": [],
+    "build_dependencies": [],
+    "dependencies": [],
+    "test_dependencies": [],
+    "recommended_dependencies": [],
+    "optional_dependencies": [],
+    "uses_from_macos": []
+  },
+  {
+    "name": "zlib",
+    "full_name": "zlib",
+    "tap": "homebrew/core",
+    "desc": "General-purpose lossless data-compression library",
+    "license": "Zlib",
+    "homepage": "https://zlib.net/",
+    "urls": {
+      "stable": {
+        "url": "https://zlib.net/zlib-1.2.13.tar.gz",
+        "tag": null,
+        "revision": null,
+        "using": null,
+        "checksum": "mno345"
+      }
+    },
+    "revision": 0,
+    "version_scheme": 0,
+    "bottle": {},
+    "keg_only": false,
+    "keg_only_reason": null,
+    "options": [],
+    "build_dependencies": [],
+    "dependencies": [],
+    "test_dependencies": [],
+    "recommended_dependencies": [],
+    "optional_dependencies": [],
+    "uses_from_macos": []
+  },
+  {
+    "name": "pcre2",
+    "full_name": "pcre2",
+    "tap": "homebrew/core",
+    "desc": "Perl compatible regular expressions library with a new API",
+    "license": "BSD-3-Clause",
+    "homepage": "https://www.pcre.org/",
+    "urls": {
+      "stable": {
+        "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.42/pcre2-10.42.tar.gz",
+        "tag": null,
+        "revision": null,
+        "using": null,
+        "checksum": "pqr678"
+      }
+    },
+    "revision": 0,
+    "version_scheme": 0,
+    "bottle": {},
+    "keg_only": false,
+    "keg_only_reason": null,
+    "options": [],
+    "build_dependencies": [],
+    "dependencies": [],
+    "test_dependencies": [],
+    "recommended_dependencies": [],
+    "optional_dependencies": [],
+    "uses_from_macos": []
+  },
+  {
+    "name": "pkg-config",
+    "full_name": "pkg-config",
+    "tap": "homebrew/core",
+    "desc": "Manage compile and link flags for libraries",
+    "license": "GPL-2.0-or-later",
+    "homepage": "https://freedesktop.org/wiki/Software/pkg-config/",
+    "urls": {
+      "stable": {
+        "url": "https://pkg-config.freedesktop.org/releases/pkg-config-0.29.2.tar.gz",
+        "tag": null,
+        "revision": null,
+        "using": null,
+        "checksum": "stu901"
+      }
+    },
+    "revision": 0,
+    "version_scheme": 0,
+    "bottle": {},
+    "keg_only": false,
+    "keg_only_reason": null,
+    "options": [],
+    "build_dependencies": [],
+    "dependencies": [],
+    "test_dependencies": [],
+    "recommended_dependencies": [],
+    "optional_dependencies": [],
+    "uses_from_macos": []
+  }
+]

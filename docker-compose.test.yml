@@ -1,0 +1,43 @@
+# Override configuration for end-to-end testing
+# This file provides test data mounts and environment overrides
+
+services:
+  homebrew:
+    environment:
+      - TEST=true
+      - FETCH=false
+      - ENABLE_SCHEDULER=false
+      - NO_CACHE=true
+    volumes:
+      - ./tests/e2e/fixtures/homebrew:/data/homebrew:ro
+      - ./tests/e2e/results:/results
+
+  crates:
+    environment:
+      - TEST=true
+      - FETCH=false
+      - ENABLE_SCHEDULER=false
+      - NO_CACHE=true
+    volumes:
+      - ./tests/e2e/fixtures/crates:/data/crates:ro
+      - ./tests/e2e/results:/results
+
+  debian:
+    environment:
+      - TEST=true
+      - FETCH=false
+      - ENABLE_SCHEDULER=false
+      - NO_CACHE=true
+    volumes:
+      - ./tests/e2e/fixtures/debian:/data/debian:ro
+      - ./tests/e2e/results:/results
+
+  pkgx:
+    environment:
+      - TEST=true
+      - FETCH=false
+      - ENABLE_SCHEDULER=false
+      - NO_CACHE=true
+    volumes:
+      - ./tests/e2e/fixtures/pkgx:/data/pkgx:ro
+      - ./tests/e2e/results:/results

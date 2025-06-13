@@ -1,0 +1,158 @@
+name: End-to-End Pipeline Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "package_managers/**"
+      - "core/**"
+      - "db/**"
+      - "docker-compose.yml"
+      - "docker-compose.test.yml"
+      - ".github/workflows/e2e-pipeline-test.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "package_managers/**"
+      - "core/**"
+      - "db/**"
+      - "docker-compose.yml"
+      - "docker-compose.test.yml"
+      - ".github/workflows/e2e-pipeline-test.yml"
+
+jobs:
+  e2e-pipeline-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: chai_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Setup with pkgx
+        uses: pkgxdev/setup@v4
+        with:
+          +: astral.sh/uv
+            postgresql.org
+
+      - name: Install dependencies
+        run: |
+          pkgx uv sync --locked --all-extras --dev --all-groups
+
+      - name: Set up test environment
+        env:
+          CHAI_DATABASE_URL: postgresql://postgres:test_password@localhost:5432/chai_test
+        run: |
+          # Run alembic migrations
+          pkgx uv run alembic upgrade head
+
+      - name: Create test data directory
+        run: |
+          mkdir -p tests/e2e/fixtures
+          mkdir -p tests/e2e/expected
+
+      - name: Test Homebrew Pipeline
+        env:
+          CHAI_DATABASE_URL: postgresql://postgres:test_password@localhost:5432/chai_test
+          TEST: true
+          NO_CACHE: true
+          ENABLE_SCHEDULER: false
+          FETCH: false
+        run: |
+          echo "Testing Homebrew pipeline..."
+          
+          # Run the pipeline with test data
+          docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm homebrew
+          
+          # Validate results
+          pkgx uv run python tests/e2e/validate_homebrew.py
+
+      - name: Test Crates Pipeline
+        env:
+          CHAI_DATABASE_URL: postgresql://postgres:test_password@localhost:5432/chai_test
+          TEST: true
+          NO_CACHE: true
+          ENABLE_SCHEDULER: false
+          FETCH: false
+        run: |
+          echo "Testing Crates pipeline..."
+          
+          # Run the pipeline with test data
+          docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm crates
+          
+          # Validate results
+          pkgx uv run python tests/e2e/validate_crates.py
+
+      - name: Test Debian Pipeline
+        env:
+          CHAI_DATABASE_URL: postgresql://postgres:test_password@localhost:5432/chai_test
+          TEST: true
+          NO_CACHE: true
+          ENABLE_SCHEDULER: false
+          FETCH: false
+        run: |
+          echo "Testing Debian pipeline..."
+          
+          # Run the pipeline with test data
+          docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm debian
+          
+          # Validate results
+          pkgx uv run python tests/e2e/validate_debian.py
+
+      - name: Test pkgx Pipeline
+        env:
+          CHAI_DATABASE_URL: postgresql://postgres:test_password@localhost:5432/chai_test
+          TEST: true
+          NO_CACHE: true
+          ENABLE_SCHEDULER: false
+          FETCH: false
+        run: |
+          echo "Testing pkgx pipeline..."
+          
+          # Run the pipeline with test data
+          docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm pkgx
+          
+          # Validate results
+          pkgx uv run python tests/e2e/validate_pkgx.py
+
+      - name: Database State Validation
+        env:
+          CHAI_DATABASE_URL: postgresql://postgres:test_password@localhost:5432/chai_test
+        run: |
+          echo "Validating final database state..."
+          pkgx uv run python tests/e2e/validate_database_state.py
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: |
+            tests/e2e/results/
+            tests/e2e/*.log

@@ -23,15 +23,27 @@ class HomebrewFetcher(Fetcher):
 
     def fetch(self) -> list[Actual]:
         """Get the current state of Homebrew"""
-        response = get(self.source)
-        try:
-            response.raise_for_status()
-        except Exception as e:
-            logger.error(f"Error fetching Homebrew formulae: {e}")
-            raise e
-
-        # make json
-        data: list[dict[str, Any]] = response.json()
+        
+        # If in test mode, load from test fixtures
+        if self.test:
+            import json
+            import os
+            test_fixture_path = "/data/homebrew/formulae.json"
+            if os.path.exists(test_fixture_path):
+                logger.info(f"Loading test data from {test_fixture_path}")
+                with open(test_fixture_path, "r") as f:
+                    data = json.load(f)
+            else:
+                logger.error(f"Test fixture not found at {test_fixture_path}")
+                raise FileNotFoundError(f"Test fixture not found at {test_fixture_path}")
+        else:
+            response = get(self.source)
+            try:
+                response.raise_for_status()
+            except Exception as e:
+                logger.error(f"Error fetching Homebrew formulae: {e}")
+                raise e
+            data: list[dict[str, Any]] = response.json()
 
         # prep results
         results: list[Actual] = []
