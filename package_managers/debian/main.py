@@ -17,7 +17,7 @@ logger = Logger("debian")
 SCHEDULER_ENABLED = os.getenv("ENABLE_SCHEDULER", "true").lower() == "true"
 
 
-def fetch(config: Config) -> None:
+def fetch(config: Config) -> tuple[GZipFetcher, GZipFetcher]:
     should_fetch = config.exec_config.fetch
     if not should_fetch:
         logger.log("Fetching disabled, skipping fetch")
@@ -44,14 +44,13 @@ def fetch(config: Config) -> None:
     logger.log(f"Fetched {len(sources_files)} sources files")
     sources_fetcher.write(sources_files)
 
-    logger.log("Cleaning up fetcher")
-    package_fetcher.cleanup()
-    sources_fetcher.cleanup()
+    return package_fetcher, sources_fetcher
 
 
 def run_pipeline(config: Config) -> None:
     logger.log("Starting Debian pipeline")
-    fetch(config)
+    package_fetcher, sources_fetcher = fetch(config)
+
     transformer = DebianTransformer(config)
     transformer.transform()
     loader = DebianLoader(config, transformer.cache_map)
@@ -68,6 +67,10 @@ def run_pipeline(config: Config) -> None:
 
     logger.log("Loading URLs...")
     loader.load_urls(loader.data)
+
+    logger.log("Cleaning up fetcher")
+    package_fetcher.cleanup()
+    sources_fetcher.cleanup()
 
     logger.log("Pipeline completed")
 
