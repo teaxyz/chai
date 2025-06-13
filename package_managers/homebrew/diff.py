@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 from core.config import Config
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
-from core.structs import Cache
+from core.structs import Cache, URLKey
 from package_managers.homebrew.structs import Actual
 
 
@@ -76,12 +76,12 @@ class Diff:
             if not url:
                 continue
 
-            url_key = (url, url_type)
+            url_key = URLKey(url, url_type)
             resolved_url_id: UUID
             if url_key in new_urls:
                 resolved_url_id = new_urls[url_key].id
-            elif url_key in self.caches.url_cache:
-                resolved_url_id = self.caches.url_cache[url_key].id
+            elif url_key in self.caches.url_map:
+                resolved_url_id = self.caches.url_map[url_key].id
             else:
                 self.logger.debug(f"URL {url} for {url_type} is entirely new")
                 new_url = URL(
@@ -124,7 +124,7 @@ class Diff:
 
         # what are the existing links?
         existing: set[UUID] = {
-            pu.url_id for pu in self.caches.package_url_cache.get(pkg_id, set())
+            pu.url_id for pu in self.caches.package_urls.get(pkg_id, set())
         }
 
         # for the correct URL type / URL for this package:
@@ -145,9 +145,7 @@ class Diff:
                 # here is an existing link between this URL and this package
                 # let's find it
                 existing_pu = next(
-                    pu
-                    for pu in self.caches.package_url_cache[pkg_id]
-                    if pu.url_id == url_id
+                    pu for pu in self.caches.package_urls[pkg_id] if pu.url_id == url_id
                 )
                 existing_pu.updated_at = self.now
                 updates.append({"id": existing_pu.id, "updated_at": self.now})

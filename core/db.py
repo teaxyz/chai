@@ -192,7 +192,7 @@ class DB:
             """
             # define all results as dictionaries, to prevent uniqueness constraints
             # from being violated
-            new_urls: dict[tuple[str, UUID], URL] = {}
+            new_urls: dict[URLKey, URL] = {}
             new_package_urls: dict[tuple[UUID, UUID], PackageURL] = {}
             urls_to_update: dict[tuple[UUID, UUID], PackageURL] = {}
 
@@ -218,18 +218,19 @@ class DB:
                 # what are the desired URLs for this package?
                 for url in urls:
                     # does this url exist in current?
-                    url_obj = current_state.url_map.get((url.url, url.url_type_id))
+                    url_key = URLKey(url.url, url.url_type_id)
+                    url_obj = current_state.url_map.get(url_key)
 
                     # if not:
                     if not url_obj:
                         # track as a new URL
-                        if (url.url, url.url_type_id) not in new_urls:
-                            new_urls[(url.url, url.url_type_id)] = URL(
+                        if url_key not in new_urls:
+                            new_urls[url_key] = URL(
                                 id=uuid4(), url=url.url, url_type_id=url.url_type_id
                             )
 
                         # we'll use this ID to link the package to the URL
-                        url_id = new_urls[(url.url, url.url_type_id)].id
+                        url_id = new_urls[url_key].id
                     else:
                         url_id = url_obj.id
 
@@ -268,7 +269,7 @@ class DB:
 
         # check if the URL strings from the above exist in the current state
         desired_urls = {url.url for urls in desired_state.values() for url in urls}
-        current_state = self.get_current_urls(desired_urls)
+        current_state = self.current_urls(desired_urls)
 
         # now, let's do the diff
         result = diff(current_state, desired_state)
@@ -333,7 +334,7 @@ class DB:
         for i in range(0, len(values), batch_size):
             batch = values[i : i + batch_size]
             self.logger.log(
-                f"Processing batch {i//batch_size + 1}/{(len(values)-1)//batch_size + 1} ({len(batch)})"
+                f"Processing batch {i // batch_size + 1}/{(len(values) - 1) // batch_size + 1} ({len(batch)})"
             )
             value_stmt = stmt.values(batch)
             session.execute(value_stmt)
