@@ -1,16 +1,8 @@
 #!/usr/bin/env pkgx uv run
 
-from dataclasses import dataclass
 from unittest.mock import patch
 from uuid import uuid4
 
-import pytest
-
-from core.config import (
-    DependencyTypes,
-    PMConf,
-    URLTypes,
-)
 from core.models import URL, LegacyDependency, Package, PackageURL
 from core.structs import Cache, URLKey
 from package_managers.pkgx.diff import PkgxDiff
@@ -21,37 +13,6 @@ from package_managers.pkgx.parser import (
     PkgxPackage,
     Version,
 )
-
-
-@dataclass
-class MockConfig:
-    """Mock config for testing"""
-
-    pm_config: PMConf
-    url_types: URLTypes
-    dependency_types: DependencyTypes
-
-
-# @pytest.fixture
-# def mock_config():
-#     """Create a mock config for testing"""
-#     pm_id = uuid4()
-#     homepage_id = uuid4()
-#     source_id = uuid4()
-#     repository_id = uuid4()
-#     build_id = uuid4()
-#     test_id = uuid4()
-#     runtime_id = uuid4()
-
-#     return MockConfig(
-#         pm_config=PMConf(pm_id=pm_id, source="test"),
-#         url_types=URLTypes(
-#             homepage=homepage_id, source=source_id, repository=repository_id
-#         ),
-#         dependency_types=DependencyTypes(
-#             build=build_id, test=test_id, runtime=runtime_id
-#         ),
-#     )
 
 
 def create_pkgx_package(
@@ -88,46 +49,7 @@ def create_pkgx_package(
 class TestPkgxDifferentialLoading:
     """Test cases for pkgx differential loading scenarios"""
 
-    def test_scenario_1_package_exists_needs_change(self, mock_config):
-        """Test scenario 1: Package existed in database and needs to change (readme)"""
-
-        # Setup existing package in cache
-        existing_pkg_id = uuid4()
-        existing_package = Package(
-            id=existing_pkg_id,
-            derived_id="pkgx/test-pkg",
-            name="test-pkg",
-            package_manager_id=mock_config.pm_config.pm_id,
-            import_id="test-pkg",
-            readme="Old description",
-        )
-
-        # Create cache with existing package
-        cache = Cache(
-            package_map={"test-pkg": existing_package},
-            url_map={},
-            package_urls={},
-            dependencies={},
-        )
-
-        # Create new package data with changed description
-        new_pkg_data = create_pkgx_package(
-            distributables=["https://example.com/source.tar.gz"],
-        )
-
-        # Test the diff
-        diff = PkgxDiff(mock_config, cache)
-        pkg_id, pkg_obj, update_payload = diff.diff_pkg("test-pkg", new_pkg_data)
-
-        # Assertions
-        assert pkg_id == existing_pkg_id
-        assert pkg_obj is None  # No new package should be created
-        assert update_payload is not None
-        assert update_payload["id"] == existing_pkg_id
-        assert update_payload["readme"] == "New updated description"
-        assert "updated_at" in update_payload
-
-    def test_scenario_2_package_exists_url_update(self, mock_config):
+    def test_package_exists_url_update(self, mock_config):
         """Test scenario 2: Package existed in database and needed a URL update"""
 
         # Setup existing package and URL
@@ -196,7 +118,7 @@ class TestPkgxDifferentialLoading:
         assert new_links[0].package_id == existing_pkg_id
         assert new_links[0].url_id == new_url.id
 
-    def test_scenario_3_package_exists_dependency_change(self, mock_config):
+    def test_package_exists_dependency_change(self, mock_config):
         """Test scenario 3: Package existed in database and changed its dependencies"""
 
         # Setup existing package and dependencies
@@ -211,7 +133,7 @@ class TestPkgxDifferentialLoading:
             name="dep-pkg",
             package_manager_id=mock_config.pm_config.pm_id,
             import_id="dep-pkg",
-            readme="Test package",
+            readme="",
         )
 
         # Create dependency packages
@@ -270,7 +192,7 @@ class TestPkgxDifferentialLoading:
         assert removed_deps[0].dependency_id == dep2_id
         assert removed_deps[0].dependency_type_id == mock_config.dependency_types.build
 
-    def test_scenario_4_completely_new_package(self, mock_config):
+    def test_completely_new_package(self, mock_config):
         """Test scenario 4: Package was completely new to the database"""
 
         # Create empty cache (no existing packages)
@@ -292,7 +214,6 @@ class TestPkgxDifferentialLoading:
         assert pkg_obj.derived_id == "pkgx/new-pkg"
         assert pkg_obj.name == "new-pkg"
         assert pkg_obj.import_id == "new-pkg"
-        assert pkg_obj.readme == "Brand new package"
         assert pkg_obj.package_manager_id == mock_config.pm_config.pm_id
         assert update_payload == {}  # No updates for new package
 
@@ -375,7 +296,3 @@ class TestPkgxDifferentialLoading:
         # Should handle gracefully - no deps added for missing packages
         assert len(new_deps) == 0
         assert len(removed_deps) == 0
-
-
-if __name__ == "__main__":
-    pytest.main([__file__])

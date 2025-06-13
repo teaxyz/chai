@@ -7,7 +7,7 @@ from core.config import Config
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
 from core.structs import Cache
-from package_managers.pkgx.parser import PkgxPackage
+from package_managers.pkgx.parser import Dependency, PkgxPackage
 
 
 class PkgxDiff:
@@ -45,20 +45,10 @@ class PkgxDiff:
             pkg_id: UUID = p.id
             return pkg_id, p, {}
         else:
-            p = self.caches.package_map[import_id]
-            pkg_id = p.id
-            # check for changes
-            # check if description changed
-            if p.readme != pkg.description:
-                self.logger.debug(f"Description changed for {import_id}")
-                return (
-                    pkg_id,
-                    None,
-                    {"id": p.id, "readme": pkg.description, "updated_at": self.now},
-                )
-            else:
-                # existing package, no change
-                return pkg_id, None, None
+            # the package exists, but since pkgx doesn't maintain a readme or
+            # description field, we can just return
+            pkg_id = self.caches.package_map[import_id].id
+            return pkg_id, None, None
 
     def diff_url(
         self, import_id: str, pkg: PkgxPackage, new_urls: dict[tuple[str, UUID], URL]
@@ -165,15 +155,17 @@ class PkgxDiff:
         # serialize the actual dependencies into a set of tuples
         actual: set[tuple[UUID, UUID]] = set()
 
-        def process_deps(dep_names: list[str], dep_type: UUID) -> None:
+        def process_deps(dependencies: list[Dependency], dep_type: UUID) -> None:
             """Helper to process dependencies of a given type"""
-            for dep_name in dep_names:
-                if not dep_name:
+            for dep in dependencies:
+                if not dep.name:
                     continue
 
-                dependency = self.caches.package_map.get(dep_name)
+                print(f"dep_name: {dep.name}")
+                print(f"self.caches.package_map: {self.caches.package_map}")
+                dependency = self.caches.package_map.get(dep.name)
                 if not dependency:
-                    self.logger.warn(f"{dep_name}, dep of {import_id} is not in cache")
+                    self.logger.warn(f"{dep.name}, dep of {import_id} is not in cache")
                     continue
 
                 actual.add((dependency.id, dep_type))
