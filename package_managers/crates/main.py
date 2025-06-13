@@ -70,7 +70,7 @@ def main(config: Config, db: CratesDB):
         logger.log(f"Fetched {len(files)} files")
 
     # write the files to disk
-    if not config.exec_config.no_cache:
+    if not config.exec_config.fetch and not config.exec_config.no_cache:
         fetcher.write(files)
         logger.log("Wrote files to disk")
 
