@@ -59,14 +59,12 @@ def run_pipeline(config: Config) -> None:
     logger.log("Loading packages...")
     loader.load_packages()
 
-    logger.log("Loading versions...")
-    loader.load_versions()
-
-    logger.log("Loading dependencies...")
-    loader.load_dependencies()
-
     logger.log("Loading URLs...")
     loader.load_urls(loader.data)
+
+    # TODO: need to convert to LegacyDependsOn
+    # logger.log("Loading dependencies...")
+    # loader.load_dependencies()
 
     logger.log("Cleaning up fetcher")
     package_fetcher.cleanup()
