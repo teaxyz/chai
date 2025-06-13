@@ -6,8 +6,8 @@ from uuid import UUID, uuid4
 from core.config import Config
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
-from core.structs import Cache
-from package_managers.pkgx.parser import Dependency, PkgxPackage
+from core.structs import Cache, URLKey
+from package_managers.pkgx.parser import Dependency, DependencyBlock, PkgxPackage
 
 
 class PkgxDiff:
@@ -79,7 +79,7 @@ class PkgxDiff:
 
         # Process each URL
         for url, url_type in urls_to_process:
-            url_key = (url, url_type)
+            url_key = URLKey(url, url_type)
             resolved_url_id: UUID
 
             if url_key in new_urls:
@@ -155,17 +155,18 @@ class PkgxDiff:
         # serialize the actual dependencies into a set of tuples
         actual: set[tuple[UUID, UUID]] = set()
 
-        def process_deps(dependencies: list[Dependency], dep_type: UUID) -> None:
+        def process_deps(dependencies: list[DependencyBlock], dep_type: UUID) -> None:
             """Helper to process dependencies of a given type"""
             for dep in dependencies:
-                if not dep.name:
-                    continue
+                for dep_obj in dep.dependencies:
+                    if not dep_obj.name:
+                        continue
 
-                print(f"dep_name: {dep.name}")
-                print(f"self.caches.package_map: {self.caches.package_map}")
-                dependency = self.caches.package_map.get(dep.name)
+                dependency = self.caches.package_map.get(dep_obj.name)
                 if not dependency:
-                    self.logger.warn(f"{dep.name}, dep of {import_id} is not in cache")
+                    self.logger.warn(
+                        f"{dep_obj.name}, dep of {import_id} is not in cache"
+                    )
                     continue
 
                 actual.add((dependency.id, dep_type))

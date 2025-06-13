@@ -41,7 +41,7 @@ class Cache:
 
 class PkgxTransformer(Transformer):
     def __init__(self, config: Config, db: DB):
-        super().__init__("pkgx_transformer")
+        super().__init__("pkgx")
         self.package_manager_id = config.pm_config.pm_id
         self.url_types: URLTypes = config.url_types
         self.depends_on_types = config.dependency_types

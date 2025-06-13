@@ -1,12 +1,9 @@
 #!/usr/bin/env pkgx +python@3.11 uv run
 
 import os
-import sys
 import time
 from datetime import datetime
 from uuid import UUID
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from core.config import Config, PackageManager
 from core.fetcher import GitFetcher
@@ -21,7 +18,6 @@ from package_managers.pkgx.parser import PkgxParser
 logger = Logger("pkgx")
 
 SCHEDULER_ENABLED = os.getenv("ENABLE_SCHEDULER", "true").lower() == "true"
-
 BATCH_SIZE = 500
 PROJECTS_DIR = "projects"
 PACKAGE_FILE = "package.yml"
