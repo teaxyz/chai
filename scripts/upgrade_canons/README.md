@@ -1,50 +1,72 @@
 # upgrade canons
 
-Create canonical URL entries in the URLs table for non-standardized canons in CHAI
+Create canonical URL entries in the URLs table for non-standardized homepage URLs in CHAI
 
 ## How it works
 
-1. Identify the current set of canons
-2. Identify the current Homepage URLs
-3. Iterate through canons, and find canons.url that are standardized. If they aren't:
-   1. Run through permalint
-   2. Skip if it's already canonicalized and in urls, OR we've already tried to
-      canonicalize it
-   3. Create a new URL entry
-   4. Map the Old URL ID to the New URL ID (for the next step)
-4. Query package links for non-standardized URLs from step 3
-5. Recreate package url links for new URLs
+1. **Get all homepage data**: Query the database to get all existing homepage URLs and
+   map each package to its list of homepage URL strings
+2. **Analyze packages needing canonicalization**: For each package:
+   - Skip if the package already has at least one canonical URL
+     (using `permalint.is_canonical_url`)
+   - Generate the canonical URL for the package's URLs (using `permalint.normalize_url`)
+   - Skip if the canonical URL already exists in the database
+   - Skip if we're already planning to create this canonical URL for another package
+   - Mark this package as needing a canonical URL created
+3. **Create objects**: For each package that needs canonicalization:
+   - Create a new `URL` object with the canonical URL
+   - Create a new `PackageURL` object linking the package to the new canonical URL
+4. **Ingest to database**: Insert the new URLs and PackageURLs into the database
+
+## Key Logic
+
+The script implements smart deduplication:
+
+- **Avoids duplicates**: Won't create a canonical URL if it already exists in the database
+- **Handles conflicts**: If multiple packages would generate the same canonical URL, only the first one processed gets it
+- **Preserves existing**: Packages that already have canonical URLs are left untouched
+- **Memory efficient**: Loads all data upfront to avoid database round-trips and constraint violations
 
 ## Requirements
 
-1. pkgx
-2. connection to CHAI_DATABASE_URL as an environment variable
+1. pkgx (or uv)
+2. Connection to CHAI_DATABASE_URL as an environment variable
+3. Python dependencies: `psycopg2==2.9.10`, `permalint==0.1.14`
 
 ## Usage
 
 ```bash
 $ chmod +x scripts/upgrade-canons/main.py
-$ scripts/upgrade-canons/main.py --homepage-id <homepage_url_id_from_chai>
+$ scripts/upgrade-canons/main.py --homepage-id <homepage_url_type_id_from_chai>
 ```
 
-If you include the `--dry-run` flag, then it'll show you what it's going to insert,
-rather than insert it
+If you include the `--dry-run` flag, then it'll show you what it's going to insert
+without actually inserting it.
 
-## Output
+## Example Output
 
 ```
-Found 1171064 existing canons
-Found 1206172 existing URLs
-dd94a2e5-7fce-4379-8d6b-eed07592edd6: http://  "files": [ is malformed: Invalid IPv6 URL
-  ⭐️ Populated 1090357 canonical URLs
-  ⭐️ Skipped 44222 URLs that were already canonicalized
-  ⭐️ Skipped 35569 URLs that were already added
-Found 1356405 existing package URLs
+Starting main: 2024-01-15 10:30:45.123456
+Found 1171064 homepages
+Found 1206172 packages with URLs
 ----------------------------------------------------------------------------------------------------
 Going to insert:
-  1090357 URLs
-  1357116 PackageURLs
+  45678 URLs
+  52341 PackageURLs
 ----------------------------------------------------------------------------------------------------
-Inserted 1090357 rows into urls
-Inserted 1357116 rows into package_urls
+Inserted 45678 rows into urls
+Inserted 52341 rows into package_urls
 ```
+
+## Testing
+
+```bash
+$ pkgx uv run pytest tests/scripts/upgrade_canons/
+```
+
+Key test scenarios covered:
+
+- Packages that need canonical URLs created
+- Packages that already have canonical URLs (skipped)
+- Canonical URLs that already exist in database (skipped)
+- Multiple packages generating the same canonical URL (deduplication)
