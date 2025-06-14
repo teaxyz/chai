@@ -46,26 +46,28 @@ class DB:
 
     def get_all_homepages(self) -> tuple[set[str], dict[UUID, list[str]]]:
         """
-        Returns a set of all homepage URLs, and a map of package ID to list of homepage
-        URL strings (not IDs)
+        Returns a set of ALL homepage URLs (including orphans), and a map of package ID
+        to list of homepage URL strings for URLs that are attached to packages
         """
         self.cursor.execute("""
             SELECT 
-                u.id, 
                 u.url, 
                 pu.package_id
-            FROM package_urls pu 
-            JOIN urls u ON pu.url_id = u.id 
+            FROM urls u 
             JOIN url_types ut ON ut.id = u.url_type_id 
+            LEFT JOIN package_urls pu ON pu.url_id = u.id 
             WHERE 
                 ut.name = 'homepage';""")
 
         package_url_map: dict[UUID, list[str]] = defaultdict(list)
         all_homepages: set[str] = set()
 
-        for _url_id, url, package_id in self.cursor.fetchall():
-            package_url_map[package_id].append(url)  # Store URL string, not ID
-            all_homepages.add(url)
+        for url, package_id in self.cursor.fetchall():
+            all_homepages.add(url)  # Add all URLs (including orphans)
+            if (
+                package_id is not None
+            ):  # Only add to package map if attached to a package
+                package_url_map[package_id].append(url)
 
         return all_homepages, package_url_map
 

@@ -4,8 +4,8 @@ Create canonical URL entries in the URLs table for non-standardized homepage URL
 
 ## How it works
 
-1. **Get all homepage data**: Query the database to get all existing homepage URLs and
-   map each package to its list of homepage URL strings
+1. **Get all homepage data**: Query the database to get ALL existing homepage URLs
+   (including orphaned URLs) and map each package to its list of homepage URL strings
 2. **Analyze packages needing canonicalization**: For each package:
    - Skip if the package already has at least one canonical URL
      (using `permalint.is_canonical_url`)
@@ -26,6 +26,7 @@ The script implements smart deduplication:
 - **Handles conflicts**: If multiple packages would generate the same canonical URL, only the first one processed gets it
 - **Preserves existing**: Packages that already have canonical URLs are left untouched
 - **Memory efficient**: Loads all data upfront to avoid database round-trips and constraint violations
+- **Handles orphans**: Checks against ALL homepage URLs (including orphaned ones) to prevent duplicate creation
 
 ## Requirements
 
@@ -70,3 +71,21 @@ Key test scenarios covered:
 - Packages that already have canonical URLs (skipped)
 - Canonical URLs that already exist in database (skipped)
 - Multiple packages generating the same canonical URL (deduplication)
+
+## Troubleshooting
+
+### Orphaned URLs
+
+If you encounter URLs in the database that aren't attached to any packages, you can investigate with:
+
+```sql
+-- Find orphaned homepage URLs
+SELECT u.id, u.url
+FROM urls u
+JOIN url_types ut ON ut.id = u.url_type_id
+LEFT JOIN package_urls pu ON pu.url_id = u.id
+WHERE ut.name = 'homepage'
+  AND pu.url_id IS NULL;
+```
+
+The script handles orphaned URLs defensively by checking against ALL homepage URLs before creating new ones. However, you may want to investigate and potentially clean up orphaned URLs as a separate data maintenance task.
