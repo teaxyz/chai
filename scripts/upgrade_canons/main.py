@@ -15,9 +15,6 @@ from psycopg2.sql import SQL, Identifier
 
 CHAI_DATABASE_URL = getenv("CHAI_DATABASE_URL")
 
-if not CHAI_DATABASE_URL:
-    raise Exception("CHAI_DATABASE_URL is not set")
-
 
 # let's make classes defining the data models, since scripts can't really access ./core
 @dataclass
@@ -40,14 +37,17 @@ class PackageURL:
 
 class DB:
     def __init__(self):
+        if not CHAI_DATABASE_URL:
+            raise Exception("CHAI_DATABASE_URL is not set")
+
         self.conn = psycopg2.connect(CHAI_DATABASE_URL)
         self.cursor = self.conn.cursor()
         register_uuid(self.conn)
 
-    def get_all_homepages(self) -> tuple[set[str], dict[UUID, list[UUID]]]:
+    def get_all_homepages(self) -> tuple[set[str], dict[UUID, list[str]]]:
         """
         Returns a set of all homepage URLs, and a map of package ID to list of homepage
-        URLs
+        URL strings (not IDs)
         """
         self.cursor.execute("""
             SELECT 
@@ -60,11 +60,11 @@ class DB:
             WHERE 
                 ut.name = 'homepage';""")
 
-        package_url_map: dict[UUID, list[UUID]] = defaultdict(list)
+        package_url_map: dict[UUID, list[str]] = defaultdict(list)
         all_homepages: set[str] = set()
 
-        for url_id, url, package_id in self.cursor.fetchall():
-            package_url_map[package_id].append(url_id)
+        for _url_id, url, package_id in self.cursor.fetchall():
+            package_url_map[package_id].append(url)  # Store URL string, not ID
             all_homepages.add(url)
 
         return all_homepages, package_url_map
@@ -98,27 +98,29 @@ class DB:
 
         execute_values expects the data to be formatted as a list of tuples
         """
-        table_name = "urls"
-        columns = ["id", "url", "url_type_id", "created_at", "updated_at"]
-        values = [
-            (url.id, url.url, url.url_type_id, url.created_at, url.updated_at)
-            for url in urls_to_add
-        ]
-        self.db_execute_values(table_name, columns, values)
+        if urls_to_add:
+            table_name = "urls"
+            columns = ["id", "url", "url_type_id", "created_at", "updated_at"]
+            values = [
+                (url.id, url.url, url.url_type_id, url.created_at, url.updated_at)
+                for url in urls_to_add
+            ]
+            self.db_execute_values(table_name, columns, values)
 
-        table_name = "package_urls"
-        columns = ["id", "package_id", "url_id", "created_at", "updated_at"]
-        values = [
-            (
-                package_url.id,
-                package_url.package_id,
-                package_url.url_id,
-                package_url.created_at,
-                package_url.updated_at,
-            )
-            for package_url in package_urls_to_add
-        ]
-        self.db_execute_values(table_name, columns, values)
+        if package_urls_to_add:
+            table_name = "package_urls"
+            columns = ["id", "package_id", "url_id", "created_at", "updated_at"]
+            values = [
+                (
+                    package_url.id,
+                    package_url.package_id,
+                    package_url.url_id,
+                    package_url.created_at,
+                    package_url.updated_at,
+                )
+                for package_url in package_urls_to_add
+            ]
+            self.db_execute_values(table_name, columns, values)
 
         if not dry_run:
             self.conn.commit()
@@ -154,45 +156,79 @@ def generate_new_package_url(
     return PackageURL(uuid4(), package_id, url_id, now, now)
 
 
-def main(db: DB, homepage_id: UUID, dry_run: bool):
-    now = datetime.now()
-    print(f"Starting main: {now}")
-
-    all_homepages, package_url_map = db.get_all_homepages()
-    print(f"Found {len(all_homepages)} homepages")
-    print(f"Found {len(package_url_map)} package URLs")
-
-    new_urls: list[URL] = []
-    new_canon_urls: set[str] = set()
-    new_package_urls: list[PackageURL] = []
+# Pure functions for business logic - highly testable
+def analyze_packages_needing_canonicalization(
+    package_url_map: dict[UUID, list[str]],
+    existing_homepages: set[str],
+) -> dict[UUID, str]:
+    """
+    Analyze which packages need canonical URLs created.
+    Returns a mapping of package_id to the canonical URL that should be created.
+    """
+    packages_needing_canon: dict[UUID, str] = {}
+    canonical_urls_to_create: set[str] = set()
 
     for package_id, urls in package_url_map.items():
-        # check if at least one canonical homepage exists, because then we can stop
-        # processing, since the deduplication process will pick it up.
+        # Skip if package already has at least one canonical URL
         if is_one_url_canonical(urls):
             continue
 
         canonical_url = generate_canonical_url(urls)
 
-        # now check if this is already in the database as a homepage
-        if canonical_url in all_homepages:
-            # TODO: should I continue here? or ensure that PackageURL also exists
+        # Skip if canonical URL already exists in database
+        if canonical_url in existing_homepages:
             continue
 
-        # and finally check if we're already planning to create this
-        if canonical_url in new_canon_urls:
+        # Skip if we're already planning to create this canonical URL
+        if canonical_url in canonical_urls_to_create:
             continue
 
-        # great, we're good to go
+        # This package needs a canonical URL created
+        packages_needing_canon[package_id] = canonical_url
+        canonical_urls_to_create.add(canonical_url)
+
+    return packages_needing_canon
+
+
+def create_url_and_package_url_objects(
+    packages_needing_canon: dict[UUID, str],
+    homepage_id: UUID,
+    now: datetime,
+) -> tuple[list[URL], list[PackageURL]]:
+    """
+    Create URL and PackageURL objects for the packages that need canonicalization.
+    """
+    new_urls: list[URL] = []
+    new_package_urls: list[PackageURL] = []
+
+    for package_id, canonical_url in packages_needing_canon.items():
         new_url = generate_new_url(canonical_url, homepage_id, now)
         new_package_url = generate_new_package_url(package_id, new_url.id, now)
 
-        # and append them to our lists
         new_urls.append(new_url)
         new_package_urls.append(new_package_url)
 
-        # and update our set of canonical URLs we're tracking
-        new_canon_urls.add(canonical_url)
+    return new_urls, new_package_urls
+
+
+def main(db: DB, homepage_id: UUID, dry_run: bool):
+    now = datetime.now()
+    print(f"Starting main: {now}")
+
+    # Get data from database
+    all_homepages, package_url_map = db.get_all_homepages()
+    print(f"Found {len(all_homepages)} homepages")
+    print(f"Found {len(package_url_map)} packages with URLs")
+
+    # Analyze which packages need canonicalization
+    packages_needing_canon = analyze_packages_needing_canonicalization(
+        package_url_map, all_homepages
+    )
+
+    # Create objects
+    new_urls, new_package_urls = create_url_and_package_url_objects(
+        packages_needing_canon, homepage_id, now
+    )
 
     print("-" * 100)
     print("Going to insert:")
@@ -200,6 +236,7 @@ def main(db: DB, homepage_id: UUID, dry_run: bool):
     print(f"  {len(new_package_urls)} PackageURLs")
     print("-" * 100)
 
+    # Ingest to database
     db.ingest(new_urls, new_package_urls, dry_run)
 
 
