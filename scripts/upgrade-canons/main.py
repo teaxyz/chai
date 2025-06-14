@@ -44,7 +44,7 @@ class DB:
         self.cursor = self.conn.cursor()
         register_uuid(self.conn)
 
-    def get_all_homepages(self):
+    def get_all_homepages(self) -> tuple[set[str], dict[UUID, list[UUID]]]:
         """
         Returns a set of all homepage URLs, and a map of package ID to list of homepage
         URLs
@@ -128,11 +128,71 @@ class DB:
         self.conn.close()
 
 
+def is_one_url_canonical(urls: list[str]) -> bool:
+    """Returns True if at least one of the URLs is canonical"""
+    return any(is_canonical_url(url) for url in urls)
+
+
+def generate_canonical_url(urls: list[str]) -> str:
+    """
+    Returns the canonical URL for the given list of URLs
+
+      - TODO: we should be smart about which one to pick, like most recent perhaps?
+    """
+    return normalize_url(urls[0])
+
+
+def generate_new_url(url: str, url_type_id: UUID, now: datetime) -> URL:
+    """Creates a new URL object for the given URL."""
+    return URL(uuid4(), url, url_type_id, now, now)
+
+
+def generate_new_package_url(
+    package_id: UUID, url_id: UUID, now: datetime
+) -> PackageURL:
+    """Creates a new PackageURL object for the given package and URL"""
+    return PackageURL(uuid4(), package_id, url_id, now, now)
+
+
 def main(db: DB, homepage_id: UUID, dry_run: bool):
     now = datetime.now()
     print(f"Starting main: {now}")
+
+    all_homepages, package_url_map = db.get_all_homepages()
+    print(f"Found {len(all_homepages)} homepages")
+    print(f"Found {len(package_url_map)} package URLs")
+
     new_urls: list[URL] = []
+    new_canon_urls: set[str] = set()
     new_package_urls: list[PackageURL] = []
+
+    for package_id, urls in package_url_map.items():
+        # check if at least one canonical homepage exists, because then we can stop
+        # processing, since the deduplication process will pick it up.
+        if is_one_url_canonical(urls):
+            continue
+
+        canonical_url = generate_canonical_url(urls)
+
+        # now check if this is already in the database as a homepage
+        if canonical_url in all_homepages:
+            # TODO: should I continue here? or ensure that PackageURL also exists
+            continue
+
+        # and finally check if we're already planning to create this
+        if canonical_url in new_canon_urls:
+            continue
+
+        # great, we're good to go
+        new_url = generate_new_url(canonical_url, homepage_id, now)
+        new_package_url = generate_new_package_url(package_id, new_url.id, now)
+
+        # and append them to our lists
+        new_urls.append(new_url)
+        new_package_urls.append(new_package_url)
+
+        # and update our set of canonical URLs we're tracking
+        new_canon_urls.add(canonical_url)
 
     print("-" * 100)
     print("Going to insert:")
