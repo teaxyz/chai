@@ -1,4 +1,4 @@
-#!/usr/bin/env uv run --with psycopg2==2.9.10 --with permalint==0.1.11
+#!/usr/bin/env uv run --with psycopg2==2.9.10 --with permalint==0.1.14
 
 import argparse
 import warnings
@@ -30,15 +30,6 @@ class URL:
 
 
 @dataclass
-class Canon:
-    id: UUID
-    name: str
-    url: str
-    created_at: datetime
-    updated_at: datetime
-
-
-@dataclass
 class PackageURL:
     id: UUID
     package_id: UUID
@@ -53,30 +44,30 @@ class DB:
         self.cursor = self.conn.cursor()
         register_uuid(self.conn)
 
-    def get_canons(self) -> list[tuple[UUID, str]]:
-        self.cursor.execute("SELECT id, url FROM canons")
-        return self.cursor.fetchall()
+    def get_all_homepages(self):
+        """
+        Returns a set of all homepage URLs, and a map of package ID to list of homepage
+        URLs
+        """
+        self.cursor.execute("""
+            SELECT 
+                u.id, 
+                u.url, 
+                pu.package_id
+            FROM package_urls pu 
+            JOIN urls u ON pu.url_id = u.id 
+            JOIN url_types ut ON ut.id = u.url_type_id 
+            WHERE 
+                ut.name = 'homepage';""")
 
-    def get_homepage_package_urls(self, url_ids: tuple[UUID]) -> dict[UUID, list[UUID]]:
-        self.cursor.execute(
-            """
-                SELECT package_id, url_id 
-                FROM package_urls pu 
-                JOIN urls u ON u.id = pu.url_id 
-                JOIN url_types ut ON ut.id = u.url_type_id 
-                WHERE ut.name = 'homepage' AND pu.url_id IN %s""",
-            (url_ids,),
-        )
-        result: dict[UUID, list[UUID]] = defaultdict(list)
-        for package_id, url_id in self.cursor.fetchall():
-            result[package_id].append(url_id)
-        return result
+        package_url_map: dict[UUID, list[UUID]] = defaultdict(list)
+        all_homepages: set[str] = set()
 
-    def get_urls_by_type(self, url_type_id: UUID) -> dict[str, UUID]:
-        self.cursor.execute(
-            "SELECT id, url FROM urls WHERE url_type_id = %s", (url_type_id,)
-        )
-        return {url: id for id, url in self.cursor.fetchall()}
+        for url_id, url, package_id in self.cursor.fetchall():
+            package_url_map[package_id].append(url_id)
+            all_homepages.add(url)
+
+        return all_homepages, package_url_map
 
     def db_execute_values(
         self, table_name: str, columns: list[str], values: list[tuple]
@@ -139,99 +130,17 @@ class DB:
 
 def main(db: DB, homepage_id: UUID, dry_run: bool):
     now = datetime.now()
-
-    # get all the existing canons
-    canons: list[tuple[UUID, str]] = db.get_canons()
-    print(f"Found {len(canons)} existing canons")
-
-    # get all existing URLs
-    urls: dict[str, UUID] = db.get_urls_by_type(homepage_id)
-    print(f"Found {len(urls)} existing URLs")
-
-    # save all existing homepage URLs
-    # we need this because we can't double load the same URL, it will fail the
-    # unique constraint on url_type (homepage) and url string
-    existing_homepages: set[str] = set(urls.keys())
-    skipped: int = 0
-    already_added: int = 0
-
-    # we'll need a map of new URL ID to old URL ID
-    old_url_to_new_url: dict[UUID, UUID] = {}
-    urls_to_add: dict[str, URL] = {}
-
-    for canon_id, url in canons:
-        try:
-            if not is_canonical_url(url):
-                # canonicalize the URL
-                canonical_url = normalize_url(url)
-
-                # skip if the URL is already in the DB
-                if canonical_url in existing_homepages:
-                    skipped += 1
-                    continue
-
-                # also skip the URL if we've already seen it
-                if canonical_url in urls_to_add:
-                    already_added += 1
-                    continue
-
-                # create the new URL object
-                new_url = URL(
-                    id=uuid4(),
-                    url=canonical_url,
-                    url_type_id=homepage_id,
-                    created_at=now,
-                    updated_at=now,
-                )
-
-                # add it to our master list of URLs to add
-                urls_to_add[canonical_url] = new_url
-
-                # populate the map
-                # we'd first need the URL ID of the old URL value
-                old_url_id = urls[url]
-                old_url_to_new_url[old_url_id] = new_url.id
-        except ValueError as e:
-            print(f"{canon_id}: {url} is malformed: {e}")
-    print(f"  ⭐️ Populated {len(urls_to_add)} canonical URLs")
-    print(f"  ⭐️ Skipped {skipped} URLs that were already canonicalized")
-    print(f"  ⭐️ Skipped {already_added} URLs that were already added")
-
-    # now, for each of the old URLs, we need to know what packages they belong to, so we
-    # can replicate those relationships to the new URLs
-    old_url_ids = tuple(old_url_to_new_url.keys())
-    existing_package_urls: dict[UUID, list[UUID]] = db.get_homepage_package_urls(
-        old_url_ids
-    )
-    print(f"Found {len(existing_package_urls)} existing package URLs")
+    print(f"Starting main: {now}")
+    new_urls: list[URL] = []
     new_package_urls: list[PackageURL] = []
-
-    for package_id, url_ids in existing_package_urls.items():
-        for url_id in url_ids:
-            canonicalized_url_id = old_url_to_new_url.get(url_id)
-            if not canonicalized_url_id:
-                # this wouldn't happen for non-homepage URLs
-                raise ValueError(f"No canonicalized URL ID found for {url_id}")
-
-            # we'll need a new package url object for this
-            new_package_url = PackageURL(
-                id=uuid4(),
-                package_id=package_id,
-                url_id=canonicalized_url_id,
-                created_at=now,
-                updated_at=now,
-            )
-            new_package_urls.append(new_package_url)
 
     print("-" * 100)
     print("Going to insert:")
-    print(f"  {len(urls_to_add)} URLs")
+    print(f"  {len(new_urls)} URLs")
     print(f"  {len(new_package_urls)} PackageURLs")
     print("-" * 100)
 
-    urls_to_add_list = list(urls_to_add.values())
-
-    db.ingest(urls_to_add_list, new_package_urls, dry_run)
+    db.ingest(new_urls, new_package_urls, dry_run)
 
 
 if __name__ == "__main__":
