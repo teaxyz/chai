@@ -171,6 +171,7 @@ examples/sbom-meta/sbom-meta
 
 # cursor
 .cursorrules
+.cursor/
 
 # DS Store
 .DS_Store
