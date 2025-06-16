@@ -106,3 +106,7 @@ class DB:
     def close(self):
         self.cursor.close()
         self.conn.close()
+
+        if self.app_conn:
+            self.app_cursor.close()
+            self.app_conn.close()
