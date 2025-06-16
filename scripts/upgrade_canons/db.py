@@ -20,12 +20,19 @@ class DB:
         self.cursor = self.conn.cursor()
         register_uuid(self.conn)
 
-    def get_all_homepages(self) -> tuple[set[str], dict[UUID, list[str]]]:
+    def get_urls_by_type(
+        self, url_type_name: str
+    ) -> tuple[set[str], dict[UUID, list[str]]]:
         """
-        Returns a set of ALL homepage URLs (including orphans), and a map of package ID
-        to list of homepage URL strings for URLs that are attached to packages
+        Returns a set of ALL URLs of the specified type (including orphans), and a map
+        of package ID to list of URL strings for URLs that are attached to packages
+
+        Args:
+            url_type_name: The name of the URL type to filter by (e.g., 'homepage',
+            'repository', 'source')
         """
-        self.cursor.execute("""
+        self.cursor.execute(
+            """
             SELECT 
                 u.url, 
                 pu.package_id
@@ -33,19 +40,21 @@ class DB:
             JOIN url_types ut ON ut.id = u.url_type_id 
             LEFT JOIN package_urls pu ON pu.url_id = u.id 
             WHERE 
-                ut.name = 'homepage';""")
+                ut.name = %s;""",
+            (url_type_name,),
+        )
 
         package_url_map: dict[UUID, list[str]] = defaultdict(list)
-        all_homepages: set[str] = set()
+        all_urls: set[str] = set()
 
         for url, package_id in self.cursor.fetchall():
-            all_homepages.add(url)  # Add all URLs (including orphans)
+            all_urls.add(url)  # Add all URLs (including orphans)
             if (
                 package_id is not None
             ):  # Only add to package map if attached to a package
                 package_url_map[package_id].append(url)
 
-        return all_homepages, package_url_map
+        return all_urls, package_url_map
 
     def db_execute_values(
         self, table_name: str, columns: list[str], values: list[tuple]
@@ -106,3 +115,17 @@ class DB:
     def close(self):
         self.cursor.close()
         self.conn.close()
+
+    def get_canons_by_url_ids(self, url_ids: list[UUID]) -> list[tuple[UUID, UUID]]:
+        if not url_ids:
+            return []
+
+        # Use unnest to properly handle UUID array comparison
+        placeholders = ",".join(["%s"] * len(url_ids))
+        self.cursor.execute(
+            f"""
+            SELECT id, url_id FROM canons WHERE url_id IN ({placeholders});
+            """,
+            url_ids,
+        )
+        return self.cursor.fetchall()
