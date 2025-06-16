@@ -1,4 +1,4 @@
-#!/usr/bin/env pkgx +python@3.11 uv run --with requests==2.31.0 --with permalint==0.1.9
+#!/usr/bin/env pkgx +python@3.11 uv run --with requests==2.31.0 --with permalint==0.1.15
 import argparse
 import sys
 from uuid import UUID, uuid4
