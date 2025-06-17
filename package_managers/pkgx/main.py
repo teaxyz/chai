@@ -1,6 +1,7 @@
 #!/usr/bin/env pkgx +python@3.11 uv run
 
 import os
+import sys
 import time
 from datetime import datetime
 from uuid import UUID
@@ -14,6 +15,7 @@ from core.structs import Cache
 from package_managers.pkgx.db import PkgxDB
 from package_managers.pkgx.diff import PkgxDiff
 from package_managers.pkgx.parser import PkgxParser
+from package_managers.pkgx.url import generate_urls
 
 logger = Logger("pkgx")
 
@@ -54,15 +56,14 @@ def run_pipeline(config: Config, db: PkgxDB):
 
     logger.log(f"Parsed {len(packages)} packages")
 
-    # Collect all URLs from packages for cache building
-    all_urls = set()
-    for pkg_data, _import_id in packages:
-        # Add source URLs from distributables
-        for distributable in pkg_data.distributable:
-            if distributable.url:
-                all_urls.add(distributable.url)
-
     # Set up URL cache
+    all_urls: set[str] = set()
+
+    for pkg_data, import_id in packages:
+        distributable_url = pkg_data.distributable[0].url
+        urls = generate_urls(config, db, import_id, distributable_url, logger)
+        all_urls.update(urls)
+
     db.set_current_urls(all_urls)
     logger.log("Set current URLs")
 

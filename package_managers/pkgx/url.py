@@ -5,6 +5,7 @@ from permalint import normalize_url, possible_names
 from requests import Response, get
 
 from core.config import Config
+from core.logger import Logger
 from package_managers.pkgx.db import DB
 
 HOMEPAGE_URL = "https://pkgx.dev/pkgs/{name}.json"
@@ -34,7 +35,7 @@ def ask_pkgx(import_id: str) -> str | None:
             return data["homepage"]
 
 
-def special_case(self, import_id: str) -> str | None:
+def special_case(import_id: str, logger: Logger) -> str | None:
     homepage: str | None = None
 
     # if no slashes, then pkgx used the homepage as the name
@@ -48,7 +49,7 @@ def special_case(self, import_id: str) -> str | None:
             name = import_id.split("/")[1]
             homepage = f"https://crates.io/crates/{name}"
         else:
-            self.logger.warn(f"Invalid format for crates.io import_id: {import_id}")
+            logger.warn(f"Invalid format for crates.io import_id: {import_id}")
 
     # if it's part of the x.org family
     elif re.search(r"^x.org", import_id):
@@ -59,14 +60,22 @@ def special_case(self, import_id: str) -> str | None:
         tool = import_id.split("/")[1]
         homepage = f"https://github.com/pkgxdev/{tool}"
 
+    # python.org/typing_extensions
+    elif re.search("^python.org/typing_extensions", import_id):
+        homepage = "https://github.com/python/typing_extensions"
+
+    # thrysoee.dk/editline
+    elif re.search("^thrysoee.dk/editline", import_id):
+        homepage = "https://thrysoee.dk/editline"
+
     else:
-        self.logger.warn(f"no homepage in pkgx for {import_id}")
+        logger.warn(f"no homepage in pkgx for {import_id}")
 
     return homepage
 
 
 def generate_urls(
-    config: Config, db: DB, import_id: str, distributable_url: str
+    config: Config, db: DB, import_id: str, distributable_url: str, logger: Logger
 ) -> list[str]:
     """For a pkgx import_id, generate a list of URLs it could have"""
     urls: set[str] = set()
@@ -81,11 +90,15 @@ def generate_urls(
         homepage = ask_pkgx(import_id)
 
         if not homepage:
-            homepage = special_case(import_id)
+            homepage = special_case(import_id, logger)
 
-    urls.update(canonicalize(homepage))
+    if homepage:
+        canonical_homepage = canonicalize(homepage)
+        urls.add(canonical_homepage)
 
     # source
+    # NOTE: for non-GitHub source URLs, pkgx tells you where the version string for the
+    # downloadable tarball is...right now, we don't do anything about that
     canonical_distributable = canonicalize(distributable_url)
     urls.add(canonical_distributable)
 
