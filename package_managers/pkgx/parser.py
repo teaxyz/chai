@@ -148,7 +148,7 @@ class PkgxParser:
             raise e
             return None
 
-    def parse_packages(self) -> Iterator[tuple[dict[str, Any], str]]:
+    def parse_packages(self) -> Iterator[tuple[PkgxPackage, str]]:
         """Parses all package.yml files found in the repository."""
         for yaml_path, project_identifier in self.find_package_yamls():
             parsed_data = self.parse_package_yaml(yaml_path)
