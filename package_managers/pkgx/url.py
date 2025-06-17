@@ -1,0 +1,92 @@
+import re
+from uuid import UUID
+
+from permalint import normalize_url, possible_names
+from requests import Response, get
+
+from core.config import Config
+from package_managers.pkgx.db import DB
+
+HOMEPAGE_URL = "https://pkgx.dev/pkgs/{name}.json"
+
+
+def canonicalize(url: str) -> str:
+    return normalize_url(url)
+
+
+def guess(db_client: DB, package_managers: list[UUID], url: str) -> list[str]:
+    names = possible_names(url)
+    urls = db_client.search_names(names, package_managers)
+    return urls
+
+
+def ask_pkgx(import_id: str) -> str | None:
+    """
+    ask max's scraping work for the homepage of a package
+    Homepage comes from the pkgxdev/www repo
+    The API https://pkgx.dev/pkgs/{name}.json returns a blob which may contain
+    the homepage field
+    """
+    response: Response = get(HOMEPAGE_URL.format(name=import_id))
+    if response.status_code == 200:
+        data: dict[str, str] = response.json()
+        if "homepage" in data:
+            return data["homepage"]
+
+
+def special_case(self, import_id: str) -> str | None:
+    homepage: str | None = None
+
+    # if no slashes, then pkgx used the homepage as the name
+    # if two slashes, then probably github / gitlab
+    if not re.search(r"/", import_id) or re.search(r"/.+/", import_id):
+        homepage = import_id
+
+    # if it's a crates.io package, then we can use the crates URL
+    elif re.search(r"^crates.io", import_id):
+        if "/" in import_id:
+            name = import_id.split("/")[1]
+            homepage = f"https://crates.io/crates/{name}"
+        else:
+            self.logger.warn(f"Invalid format for crates.io import_id: {import_id}")
+
+    # if it's part of the x.org family
+    elif re.search(r"^x.org", import_id):
+        homepage = "https://x.org"
+
+    # if it's part of the pkgx family
+    elif re.search("^pkgx.sh", import_id):
+        tool = import_id.split("/")[1]
+        homepage = f"https://github.com/pkgxdev/{tool}"
+
+    else:
+        self.logger.warn(f"no homepage in pkgx for {import_id}")
+
+    return homepage
+
+
+def generate_urls(
+    config: Config, db: DB, import_id: str, distributable_url: str
+) -> list[str]:
+    """For a pkgx import_id, generate a list of URLs it could have"""
+    urls: set[str] = set()
+
+    # homepage
+    similar = [config.package_managers.debian, config.package_managers.homebrew]
+    maybe: list[str] = guess(db, similar, import_id)
+
+    if maybe:
+        homepage = maybe[0]
+    else:
+        homepage = ask_pkgx(import_id)
+
+        if not homepage:
+            homepage = special_case(import_id)
+
+    urls.update(canonicalize(homepage))
+
+    # source
+    canonical_distributable = canonicalize(distributable_url)
+    urls.add(canonical_distributable)
+
+    return list(urls)
