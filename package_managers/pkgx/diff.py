@@ -7,7 +7,7 @@ from core.config import Config
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
 from core.structs import Cache, URLKey
-from package_managers.pkgx.parser import Dependency, DependencyBlock, PkgxPackage
+from package_managers.pkgx.parser import DependencyBlock, PkgxPackage
 
 
 class PkgxDiff:
