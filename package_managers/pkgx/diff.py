@@ -154,12 +154,20 @@ class PkgxDiff:
 
         # serialize the actual dependencies into a set of tuples
         actual: set[tuple[UUID, UUID]] = set()
+        processed: set[str] = set()
 
         def process_deps(dependencies: list[DependencyBlock], dep_type: UUID) -> None:
             """Helper to process dependencies of a given type"""
             for dep in dependencies:
                 for dep_obj in dep.dependencies:
                     if not dep_obj.name:
+                        continue
+
+                    # TODO: similar to Homebrew, pkgx allows the same dependency, as
+                    # different types. however, LegacyDependency objects are unique
+                    # for (package_id, dependency_id). so, we track whatever we've
+                    # already processed, skip it if we've already seen it
+                    if dep_obj.name in processed:
                         continue
 
                     dependency = self.caches.package_map.get(dep_obj.name)
@@ -170,6 +178,7 @@ class PkgxDiff:
                         continue
 
                     actual.add((dependency.id, dep_type))
+                    processed.add(dep_obj.name)
 
         # Process different types of dependencies
         process_deps(pkg.dependencies, self.config.dependency_types.runtime)

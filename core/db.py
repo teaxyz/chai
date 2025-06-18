@@ -81,7 +81,7 @@ class DB:
 
     def current_graph(self, package_manager_id: UUID) -> CurrentGraph:
         """Get the Homebrew packages and dependencies"""
-        package_map: dict[str, Package] = {}  # name to package
+        package_map: dict[str, Package] = defaultdict(Package)
         dependencies: dict[UUID, set[LegacyDependency]] = defaultdict(set)
 
         stmt = (
@@ -100,11 +100,10 @@ class DB:
 
             for pkg, dep in result:
                 # add to the package map, by import_id, which is usually name
-                if pkg.import_id not in package_map:
-                    package_map[pkg.import_id] = pkg
+                package_map[pkg.import_id] = pkg
 
                 # and add to the dependencies map as well
-                if dep:  # check because it's an outer join
+                if dep:  # check because it's an outer join, so might be None
                     dependencies[pkg.id].add(dep)
 
         self.logger.debug(f"Cached {len(package_map)} packages")
