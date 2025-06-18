@@ -1,24 +1,23 @@
 #!/usr/bin/env pkgx +python@3.11 uv run
 
 import os
-import sys
 import time
+from datetime import datetime
+from uuid import UUID
 
-from core.db import DB
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from core.config import Config, PackageManager
 from core.fetcher import GitFetcher
 from core.logger import Logger
+from core.models import URL, LegacyDependency, Package, PackageURL
 from core.scheduler import Scheduler
-from package_managers.pkgx.loader import PkgxLoader
+from core.structs import Cache, URLKey
+from package_managers.pkgx.db import PkgxDB
+from package_managers.pkgx.diff import PkgxDiff
 from package_managers.pkgx.parser import PkgxParser
-from package_managers.pkgx.transformer import PkgxTransformer
 
 logger = Logger("pkgx")
 
 SCHEDULER_ENABLED = os.getenv("ENABLE_SCHEDULER", "true").lower() == "true"
-
 BATCH_SIZE = 500
 PROJECTS_DIR = "projects"
 PACKAGE_FILE = "package.yml"
@@ -43,29 +42,91 @@ def fetch(config: Config) -> GitFetcher:
     return fetcher
 
 
-def run_pipeline(config: Config, db: DB):
+def run_pipeline(config: Config, db: PkgxDB):
+    """A diff-based approach to loading pkgx data into CHAI"""
+
     fetcher = fetch(config)
     output_dir = f"{fetcher.output}/latest"
 
-    # now, we'll parse the package.yml files
+    # Parse all packages
     pkgx_parser = PkgxParser(output_dir)
-    pkgx_transformer = PkgxTransformer(config, db)
+    packages = list(pkgx_parser.parse_packages())
 
-    if config.exec_config.test:
-        for i, (data, id) in enumerate(pkgx_parser.parse_packages()):
-            pkgx_transformer.transform(id, data)
-            if i > 10:
-                break
-    else:
-        for data, id in pkgx_parser.parse_packages():
-            pkgx_transformer.transform(id, data)
+    logger.log(f"Parsed {len(packages)} packages")
 
-    logger.log(f"Loaded {len(pkgx_transformer.cache_map)} packages")
+    # Set up cache
+    db.set_current_graph()
+    db.set_current_urls()
+    logger.log("Set current URLs")
 
-    pkgx_loader = PkgxLoader(config, pkgx_transformer.cache_map)
-    pkgx_loader.load_packages()
-    pkgx_loader.load_urls(pkgx_loader.data)
-    pkgx_loader.load_dependencies()
+    # Build cache for differential loading
+    cache = Cache(
+        db.graph.package_map,
+        db.urls.url_map,
+        db.urls.package_urls,
+        db.graph.dependencies,
+    )
+
+    # Initialize differential loading collections
+    new_packages: list[Package] = []
+    new_urls: dict[URLKey, URL] = {}
+    new_package_urls: list[PackageURL] = []
+    updated_packages: list[dict[str, UUID | str | datetime]] = []
+    updated_package_urls: list[dict[str, UUID | datetime]] = []
+    new_deps: list[LegacyDependency] = []
+    removed_deps: list[LegacyDependency] = []
+
+    # Create diff processor
+    diff = PkgxDiff(config, cache, db, logger)
+
+    # Process each package
+    for i, (pkg_data, import_id) in enumerate(packages):
+        # Diff the package
+        pkg_id, pkg_obj, update_payload = diff.diff_pkg(import_id, pkg_data)
+
+        if pkg_obj:
+            logger.debug(f"New package: {pkg_obj.name}")
+            new_packages.append(pkg_obj)
+        if update_payload:
+            logger.debug(f"Updated package: {update_payload['id']}")
+            updated_packages.append(update_payload)
+
+        # Diff URLs (resolved_urls is map of url types to final URL ID)
+        resolved_urls = diff.diff_url(import_id, pkg_data, new_urls)
+
+        # Diff package URLs
+        new_links, updated_links = diff.diff_pkg_url(pkg_id, resolved_urls)
+        if new_links:
+            logger.debug(f"New package URLs: {len(new_links)}")
+            new_package_urls.extend(new_links)
+        if updated_links:
+            updated_package_urls.extend(updated_links)
+
+        # Diff dependencies
+        new_dependencies, removed_dependencies = diff.diff_deps(import_id, pkg_data)
+        if new_dependencies:
+            logger.debug(f"New dependencies: {len(new_dependencies)}")
+            new_deps.extend(new_dependencies)
+        if removed_dependencies:
+            logger.debug(f"Removed dependencies: {len(removed_dependencies)}")
+            removed_deps.extend(removed_dependencies)
+
+        if config.exec_config.test and i > 10:
+            break
+
+    # Convert new_urls dict to list for ingestion
+    final_new_urls = list(new_urls.values())
+
+    # Ingest all diffs
+    db.ingest(
+        new_packages,
+        final_new_urls,
+        new_package_urls,
+        updated_packages,
+        updated_package_urls,
+        new_deps,
+        removed_deps,
+    )
 
     if config.exec_config.no_cache:
         fetcher.cleanup()
@@ -74,7 +135,7 @@ def run_pipeline(config: Config, db: DB):
 def main():
     logger.log("Initializing Pkgx package manager")
     config = Config(PackageManager.PKGX)
-    db = DB("pkgx_main_db_logger")
+    db = PkgxDB("pkgx_main_db_logger", config)
     logger.debug(f"Using config: {config}")
 
     if SCHEDULER_ENABLED:

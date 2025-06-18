@@ -1,4 +1,3 @@
-# ruff: noqa: E501
 """
 Test Debian package parser functionality.
 
