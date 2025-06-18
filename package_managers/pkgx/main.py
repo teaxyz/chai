@@ -77,7 +77,7 @@ def run_pipeline(config: Config, db: PkgxDB):
     removed_deps: list[LegacyDependency] = []
 
     # Create diff processor
-    diff = PkgxDiff(config, cache, logger)
+    diff = PkgxDiff(config, cache, db, logger)
 
     # Process each package
     for i, (pkg_data, import_id) in enumerate(packages):

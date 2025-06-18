@@ -7,15 +7,17 @@ from core.config import Config
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
 from core.structs import Cache
+from package_managers.pkgx.db import DB
 from package_managers.pkgx.parser import DependencyBlock, PkgxPackage
 from package_managers.pkgx.url import generate_chai_urls
 
 
 class PkgxDiff:
-    def __init__(self, config: Config, caches: Cache, logger: Logger):
+    def __init__(self, config: Config, caches: Cache, db: DB, logger: Logger):
         self.config = config
         self.now = datetime.now()
         self.caches = caches
+        self.db = db
         self.logger = logger
 
     def diff_pkg(
@@ -59,7 +61,7 @@ class PkgxDiff:
 
         # Generate the URLs for this package
         urls = generate_chai_urls(
-            self.config, self.caches, import_id, pkg.distributable[0].url, self.logger
+            self.config, self.db, import_id, pkg.distributable[0].url, self.logger
         )
 
         # Process each URL
