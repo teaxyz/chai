@@ -145,6 +145,18 @@ class PkgxDiff:
         """
         Takes in a pkgx package and figures out what dependencies have changed.
 
+        The process is:
+           1. Build a view of what the package's dependencies are according to
+              the parsed pkgx data, using priority-based deduplication
+           2. Get this package's ID from CHAI
+           3. Get this package's existing dependencies from CHAI
+           4. Compare the two sets, and identify new and removed dependencies
+
+        Note: The database has a unique constraint on (package_id, dependency_id),
+        so if a package depends on the same dependency with multiple types (e.g.,
+        both runtime and build), we choose the highest priority type:
+        Runtime > Build > Test
+
         Returns:
           - new_deps: a list of new dependencies
           - removed_deps: a list of removed dependencies
@@ -152,24 +164,25 @@ class PkgxDiff:
         new_deps: list[LegacyDependency] = []
         removed_deps: list[LegacyDependency] = []
 
-        # serialize the actual dependencies into a set of tuples
-        actual: set[tuple[UUID, UUID]] = set()
-        processed: set[str] = set()
+        # First, collect all dependencies and deduplicate by dependency name
+        # choosing the highest priority dependency type for each unique dependency
+        dependency_map: dict[str, UUID] = {}
+
+        # Priority order: Runtime > Build > Test
+        priority_order = {
+            self.config.dependency_types.runtime: 1,
+            self.config.dependency_types.build: 2,
+            self.config.dependency_types.test: 3,
+        }
 
         def process_deps(dependencies: list[DependencyBlock], dep_type: UUID) -> None:
-            """Helper to process dependencies of a given type"""
+            """Helper to process dependencies of a given type with priority"""
             for dep in dependencies:
                 for dep_obj in dep.dependencies:
                     if not dep_obj.name:
                         continue
 
-                    # TODO: similar to Homebrew, pkgx allows the same dependency, as
-                    # different types. however, LegacyDependency objects are unique
-                    # for (package_id, dependency_id). so, we track whatever we've
-                    # already processed, skip it if we've already seen it
-                    if dep_obj.name in processed:
-                        continue
-
+                    # Get the dependency package from cache
                     dependency = self.caches.package_map.get(dep_obj.name)
                     if not dependency:
                         self.logger.warn(
@@ -177,13 +190,36 @@ class PkgxDiff:
                         )
                         continue
 
-                    actual.add((dependency.id, dep_type))
-                    processed.add(dep_obj.name)
+                    # If this dependency already exists in our map, choose higher priority
+                    if dep_obj.name in dependency_map:
+                        existing_priority = priority_order.get(
+                            dependency_map[dep_obj.name], 999
+                        )
+                        new_priority = priority_order.get(dep_type, 999)
 
-        # Process different types of dependencies
+                        if (
+                            new_priority < existing_priority
+                        ):  # Lower number = higher priority
+                            old_type_id = dependency_map[dep_obj.name]
+                            dependency_map[dep_obj.name] = dep_type
+                            self.logger.debug(
+                                f"Updated dependency type for {dep_obj.name} from "
+                                f"{old_type_id} to {dep_type} (higher priority)"
+                            )
+                    else:
+                        dependency_map[dep_obj.name] = dep_type
+
+        # Process different types of dependencies with priority handling
         process_deps(pkg.dependencies, self.config.dependency_types.runtime)
         process_deps(pkg.build.dependencies, self.config.dependency_types.build)
         process_deps(pkg.test.dependencies, self.config.dependency_types.test)
+
+        # Now build the actual set of dependencies with resolved types
+        actual: set[tuple[UUID, UUID]] = set()
+        for dep_name, dep_type in dependency_map.items():
+            dependency = self.caches.package_map.get(dep_name)
+            if dependency:  # Double-check it still exists
+                actual.add((dependency.id, dep_type))
 
         # get the package ID for what we are working with
         package = self.caches.package_map.get(import_id)
@@ -193,37 +229,53 @@ class PkgxDiff:
 
         pkg_id: UUID = package.id
 
-        # figure out what's new/removed
-        existing: set[tuple[UUID, UUID]] = set()
-        legacy_links: set[LegacyDependency] = self.caches.dependencies.get(
-            pkg_id, set()
-        )
-        existing_legacy_map: dict[tuple[UUID, UUID], LegacyDependency] = {}
+        # what are its existing dependencies?
+        # specifically, existing dependencies IN THE SAME STRUCTURE as `actual`,
+        # so we can do an easy comparison
+        existing: set[tuple[UUID, UUID]] = {
+            (dep.dependency_id, dep.dependency_type_id)
+            for dep in self.caches.dependencies.get(pkg_id, set())
+        }
 
-        for legacy in legacy_links:
-            key = (legacy.dependency_id, legacy.dependency_type_id)
-            existing_legacy_map[key] = legacy
-            existing.add(key)
+        # we have two sets!
+        # actual minus existing = new_deps
+        # existing minus actual = removed_deps
+        new = actual - existing
+        removed = existing - actual
 
-        # calculate our diffs
-        added_tuples: set[tuple[UUID, UUID]] = actual - existing
-        removed_tuples: set[tuple[UUID, UUID]] = existing - actual
-
-        # convert these to LegacyDependency objects
-        for dep_id, type_id in added_tuples:
-            new_dep = LegacyDependency(
+        new_deps: list[LegacyDependency] = [
+            LegacyDependency(
                 package_id=pkg_id,
-                dependency_id=dep_id,
-                dependency_type_id=type_id,
+                dependency_id=dep[0],
+                dependency_type_id=dep[1],
                 created_at=self.now,
                 updated_at=self.now,
             )
-            new_deps.append(new_dep)
+            for dep in new
+        ]
 
-        for dep_id, type_id in removed_tuples:
-            removed_dep = existing_legacy_map.get((dep_id, type_id))
-            if removed_dep:
-                removed_deps.append(removed_dep)
+        # get the existing legacy dependency, and add it to removed_deps
+        removed_deps: list[LegacyDependency] = []
+        cache_deps: set[LegacyDependency] = self.caches.dependencies.get(pkg_id, set())
+        for removed_dep_id, removed_dep_type in removed:
+            try:
+                existing_dep = next(
+                    dep
+                    for dep in cache_deps
+                    if dep.dependency_id == removed_dep_id
+                    and dep.dependency_type_id == removed_dep_type
+                )
+                removed_deps.append(existing_dep)
+            except StopIteration as exc:
+                cache_deps_str = "\n".join(
+                    [
+                        f"{dep.dependency_id} / {dep.dependency_type_id}"
+                        for dep in cache_deps
+                    ]
+                )
+                raise ValueError(
+                    f"Removing {removed_dep_id} / {removed_dep_type} for {pkg_id} but not in Cache: \n{cache_deps_str}"
+                ) from exc
 
         return new_deps, removed_deps
 
