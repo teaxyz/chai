@@ -1,3 +1,4 @@
+from collections import defaultdict
 import os
 from dataclasses import dataclass
 from datetime import datetime
@@ -81,7 +82,7 @@ class DB:
     def current_graph(self, package_manager_id: UUID) -> CurrentGraph:
         """Get the Homebrew packages and dependencies"""
         package_map: dict[str, Package] = {}  # name to package
-        dependencies: dict[UUID, set[LegacyDependency]] = {}
+        dependencies: dict[UUID, set[LegacyDependency]] = defaultdict(set)
 
         stmt = (
             select(Package, LegacyDependency)
@@ -104,8 +105,6 @@ class DB:
 
                 # and add to the dependencies map as well
                 if dep:  # check because it's an outer join
-                    if pkg.id not in dependencies:
-                        dependencies[pkg.id] = set()
                     dependencies[pkg.id].add(dep)
 
         self.logger.debug(f"Cached {len(package_map)} packages")
