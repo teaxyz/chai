@@ -6,8 +6,9 @@ from uuid import UUID, uuid4
 from core.config import Config
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
-from core.structs import Cache, URLKey
+from core.structs import Cache
 from package_managers.pkgx.parser import DependencyBlock, PkgxPackage
+from package_managers.pkgx.url import generate_chai_urls
 
 
 class PkgxDiff:
@@ -56,30 +57,17 @@ class PkgxDiff:
         """Given a package's URLs, returns the resolved URL for this specific package"""
         resolved_urls: dict[UUID, UUID] = {}
 
-        # Collect all URLs from the package
-        urls_to_process = []
-
-        # Add homepage URL if it exists
-        homepage = self._get_homepage_url(import_id, pkg)
-        if homepage:
-            urls_to_process.append((homepage, self.config.url_types.homepage))
-
-        # Add source URLs from distributables
-        for distributable in pkg.distributable:
-            if distributable.url:
-                clean_url = self._canonicalize_url(distributable.url)
-                if clean_url:
-                    urls_to_process.append((clean_url, self.config.url_types.source))
-
-                    # If it's a GitHub URL, also add as repository
-                    if self._is_github_url(clean_url):
-                        urls_to_process.append(
-                            (clean_url, self.config.url_types.repository)
-                        )
+        # Generate the URLs for this package
+        urls = generate_chai_urls(
+            self.config, self.caches, import_id, pkg.distributable[0].url, self.logger
+        )
 
         # Process each URL
-        for url, url_type in urls_to_process:
-            url_key = URLKey(url, url_type)
+        for url_key in urls:
+            # guard: generate_chai_urls could be None for a url type
+            if url_key is None:
+                continue
+
             resolved_url_id: UUID
 
             if url_key in new_urls:
@@ -87,18 +75,20 @@ class PkgxDiff:
             elif url_key in self.caches.url_map:
                 resolved_url_id = self.caches.url_map[url_key].id
             else:
-                self.logger.debug(f"URL {url} for {url_type} is entirely new")
+                self.logger.debug(
+                    f"URL {url_key.url} as {url_key.url_type_id} is entirely new"
+                )
                 new_url = URL(
                     id=uuid4(),
-                    url=url,
-                    url_type_id=url_type,
+                    url=url_key.url,
+                    url_type_id=url_key.url_type_id,
                     created_at=self.now,
                     updated_at=self.now,
                 )
                 resolved_url_id = new_url.id
                 new_urls[url_key] = new_url
 
-            resolved_urls[url_type] = resolved_url_id
+            resolved_urls[url_key.url_type_id] = resolved_url_id
 
         return resolved_urls
 
@@ -278,36 +268,3 @@ class PkgxDiff:
                 ) from exc
 
         return new_deps, removed_deps
-
-    def _get_homepage_url(self, import_id: str, pkg: PkgxPackage) -> str | None:
-        """Get homepage URL for a package using the existing transformer logic"""
-        # Import the transformer methods for URL handling
-        # TODO: this should use the url.py function
-        from package_managers.pkgx.transformer import PkgxTransformer
-
-        # Create a temporary transformer instance to use its methods
-        temp_transformer = PkgxTransformer(self.config, None)
-
-        # Try to get homepage from pkgx API
-        homepage = temp_transformer.ask_pkgx(import_id)
-        if not homepage:
-            homepage = temp_transformer.special_case(import_id)
-
-        if homepage:
-            return temp_transformer.canonicalize(homepage)
-
-        return None
-
-    def _canonicalize_url(self, url: str) -> str:
-        """Canonicalize URL using transformer logic"""
-        from package_managers.pkgx.transformer import PkgxTransformer
-
-        temp_transformer = PkgxTransformer(self.config, None)
-        return temp_transformer.canonicalize(url)
-
-    def _is_github_url(self, url: str) -> bool:
-        """Check if URL is a GitHub URL"""
-        from package_managers.pkgx.transformer import PkgxTransformer
-
-        temp_transformer = PkgxTransformer(self.config, None)
-        return temp_transformer.is_github(url)
