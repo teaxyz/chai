@@ -3,29 +3,50 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import update
+from sqlalchemy import Result, select, update
 
 from core.config import Config
 from core.db import DB, CurrentURLs
 from core.models import URL, LegacyDependency, Package, PackageURL
-from core.structs import CurrentGraph
+from core.structs import CurrentGraph, URLKey
 
 
 class PkgxDB(DB):
     def __init__(self, logger_name: str, config: Config):
         super().__init__(logger_name)
         self.config = config
-        self.set_current_graph()
 
     def set_current_graph(self) -> None:
         """Get the pkgx packages and dependencies"""
         self.graph: CurrentGraph = self.current_graph(self.config.pm_config.pm_id)
         self.logger.log(f"Loaded {len(self.graph.package_map)} pkgx packages")
 
-    def set_current_urls(self, urls: set[str]) -> None:
-        """Wrapper for setting current urls"""
-        self.urls: CurrentURLs = self.current_urls(urls)
-        self.logger.log(f"Found {len(self.urls.url_map)} pkgx URLs")
+    def set_current_urls(self) -> None:
+        """Getting all the URLs and Package URLs from the database"""
+        self.urls: CurrentURLs | None = None
+        url_map: dict[URLKey, URL] = {}
+        package_urls: dict[UUID, set[PackageURL]] = {}
+
+        stmt = (
+            select(Package, PackageURL, URL)
+            .select_from(URL)
+            .join(PackageURL, PackageURL.url_id == URL.id, isouter=True)
+            .join(Package, Package.id == PackageURL.package_id, isouter=True)
+        )
+        with self.session() as session:
+            result: Result[tuple[Package, PackageURL, URL]] = session.execute(stmt)
+
+            for pkg, pkg_url, url in result:
+                url_key = URLKey(url.url, url.url_type_id)
+                url_map[url_key] = url
+
+                # since it's a left join, we need to check if pkg is None
+                if pkg is not None:
+                    if pkg.id not in package_urls:
+                        package_urls[pkg.id] = set()
+                    package_urls[pkg.id].add(pkg_url)
+
+        self.urls = CurrentURLs(url_map=url_map, package_urls=package_urls)
 
     def ingest(
         self,
@@ -92,7 +113,7 @@ class PkgxDB(DB):
                 # 3. Commit all changes
                 session.commit()
                 self.logger.log("✅ Successfully ingested pkgx data")
-            
+
             except Exception as e:
                 self.logger.error(f"Error during pkgx batched ingest: {e}")
                 session.rollback()
