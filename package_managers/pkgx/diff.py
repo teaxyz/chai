@@ -11,11 +11,11 @@ from package_managers.pkgx.parser import DependencyBlock, PkgxPackage
 
 
 class PkgxDiff:
-    def __init__(self, config: Config, caches: Cache):
+    def __init__(self, config: Config, caches: Cache, logger: Logger):
         self.config = config
         self.now = datetime.now()
         self.caches = caches
-        self.logger = Logger("pkgx_diff")
+        self.logger = logger
 
     def diff_pkg(
         self, import_id: str, pkg: PkgxPackage
@@ -162,14 +162,14 @@ class PkgxDiff:
                     if not dep_obj.name:
                         continue
 
-                dependency = self.caches.package_map.get(dep_obj.name)
-                if not dependency:
-                    self.logger.warn(
-                        f"{dep_obj.name}, dep of {import_id} is not in cache"
-                    )
-                    continue
+                    dependency = self.caches.package_map.get(dep_obj.name)
+                    if not dependency:
+                        self.logger.warn(
+                            f"{dep_obj.name}, dep of {import_id} is not in cache"
+                        )
+                        continue
 
-                actual.add((dependency.id, dep_type))
+                    actual.add((dependency.id, dep_type))
 
         # Process different types of dependencies
         process_deps(pkg.dependencies, self.config.dependency_types.runtime)
@@ -221,6 +221,7 @@ class PkgxDiff:
     def _get_homepage_url(self, import_id: str, pkg: PkgxPackage) -> str | None:
         """Get homepage URL for a package using the existing transformer logic"""
         # Import the transformer methods for URL handling
+        # TODO: this should use the url.py function
         from package_managers.pkgx.transformer import PkgxTransformer
 
         # Create a temporary transformer instance to use its methods
