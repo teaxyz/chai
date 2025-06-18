@@ -14,23 +14,32 @@ from package_managers.pkgx.url import special_case
 class TestSpecialCase:
     """Test special case URL transformations."""
 
-    def test_special_case_crates_io(self):
+    def test_special_case_crates_io(self, mock_logger):
         """Test that crates.io URLs are properly transformed."""
-        assert special_case("crates.io/pkgx") == "https://crates.io/crates/pkgx"
+        assert (
+            special_case("crates.io/pkgx", mock_logger)
+            == "https://crates.io/crates/pkgx"
+        )
 
-    def test_special_case_x_org(self):
+    def test_special_case_x_org(self, mock_logger):
         """Test that x.org URLs are normalized."""
-        assert special_case("x.org/ice") == "https://x.org"
-        assert special_case("x.org/xxf86vm") == "https://x.org"
+        assert special_case("x.org/ice", mock_logger) == "https://x.org"
+        assert special_case("x.org/xxf86vm", mock_logger) == "https://x.org"
 
-    def test_special_case_pkgx_sh(self):
+    def test_special_case_pkgx_sh(self, mock_logger):
         """Test that pkgx.sh URLs are redirected to GitHub."""
-        assert special_case("pkgx.sh/pkgx") == "https://github.com/pkgxdev/pkgx"
+        assert (
+            special_case("pkgx.sh/pkgx", mock_logger)
+            == "https://github.com/pkgxdev/pkgx"
+        )
 
-    def test_special_case_no_slashes(self):
+    def test_special_case_no_slashes(self, mock_logger):
         """Test that URLs without slashes are returned as-is."""
-        assert special_case("abseil.io") == "abseil.io"
+        assert special_case("abseil.io", mock_logger) == "abseil.io"
 
-    def test_special_case_double_slashes(self):
+    def test_special_case_double_slashes(self, mock_logger):
         """Test that URLs with double slashes are returned as-is."""
-        assert special_case("github.com/awslabs/llrt") == "github.com/awslabs/llrt"
+        assert (
+            special_case("github.com/awslabs/llrt", mock_logger)
+            == "github.com/awslabs/llrt"
+        )
