@@ -317,3 +317,215 @@ class TestPkgxDifferentialLoading:
         # Should handle gracefully - no deps added for missing packages
         assert len(new_deps) == 0
         assert len(removed_deps) == 0
+
+    def test_dependency_type_priority_no_change(self, mock_config, mock_logger):
+        """Test case 1: p1 has runtime dependency to p2 in cache,
+        p1 depends on p2 as both runtime and build in parsed data.
+        Expect no change (runtime has priority)."""
+
+        # Setup existing package and dependencies
+        p1_id = uuid4()
+        p2_id = uuid4()
+
+        p1_pkg = Package(id=p1_id, derived_id="pkgx/p1", name="p1", import_id="p1")
+        p2_pkg = Package(id=p2_id, derived_id="pkgx/p2", name="p2", import_id="p2")
+
+        # Existing runtime dependency in cache
+        existing_runtime_dep = LegacyDependency(
+            package_id=p1_id,
+            dependency_id=p2_id,
+            dependency_type_id=mock_config.dependency_types.runtime,
+        )
+
+        cache = Cache(
+            package_map={"p1": p1_pkg, "p2": p2_pkg},
+            url_map={},
+            package_urls={},
+            dependencies={p1_id: {existing_runtime_dep}},
+        )
+
+        # Parsed data has p2 as both runtime and build dependency
+        new_pkg_data = create_pkgx_package(
+            dependencies=["p2"],  # runtime
+            build_deps=["p2"],  # build
+        )
+
+        diff = PkgxDiff(mock_config, cache, mock_logger)
+        new_deps, removed_deps = diff.diff_deps("p1", new_pkg_data)
+
+        # Should have no changes - runtime priority means no change needed
+        assert len(new_deps) == 0
+        assert len(removed_deps) == 0
+
+    def test_dependency_type_change_runtime_to_build(self, mock_config, mock_logger):
+        """Test case 2: p1 has runtime dependency to p2 in cache,
+        p1 has build dependency to p2 in parsed data.
+        Expect removed runtime dependency and new build dependency."""
+
+        p1_id = uuid4()
+        p2_id = uuid4()
+
+        p1_pkg = Package(id=p1_id, derived_id="pkgx/p1", name="p1", import_id="p1")
+        p2_pkg = Package(id=p2_id, derived_id="pkgx/p2", name="p2", import_id="p2")
+
+        # Existing runtime dependency
+        existing_runtime_dep = LegacyDependency(
+            package_id=p1_id,
+            dependency_id=p2_id,
+            dependency_type_id=mock_config.dependency_types.runtime,
+        )
+
+        cache = Cache(
+            package_map={"p1": p1_pkg, "p2": p2_pkg},
+            url_map={},
+            package_urls={},
+            dependencies={p1_id: {existing_runtime_dep}},
+        )
+
+        # Parsed data only has build dependency
+        new_pkg_data = create_pkgx_package(
+            dependencies=[],  # no runtime deps
+            build_deps=["p2"],  # only build
+        )
+
+        diff = PkgxDiff(mock_config, cache, mock_logger)
+        new_deps, removed_deps = diff.diff_deps("p1", new_pkg_data)
+
+        # Should remove runtime and add build
+        assert len(removed_deps) == 1
+        assert removed_deps[0].dependency_id == p2_id
+        assert (
+            removed_deps[0].dependency_type_id == mock_config.dependency_types.runtime
+        )
+
+        assert len(new_deps) == 1
+        assert new_deps[0].dependency_id == p2_id
+        assert new_deps[0].dependency_type_id == mock_config.dependency_types.build
+
+    def test_dependency_type_change_build_to_runtime(self, mock_config, mock_logger):
+        """Test case 3: p1 has build dependency to p2 in cache,
+        p1 has runtime dependency to p2 in parsed data.
+        Expect removed build dependency and new runtime dependency."""
+
+        p1_id = uuid4()
+        p2_id = uuid4()
+
+        p1_pkg = Package(id=p1_id, derived_id="pkgx/p1", name="p1", import_id="p1")
+        p2_pkg = Package(id=p2_id, derived_id="pkgx/p2", name="p2", import_id="p2")
+
+        # Existing build dependency
+        existing_build_dep = LegacyDependency(
+            package_id=p1_id,
+            dependency_id=p2_id,
+            dependency_type_id=mock_config.dependency_types.build,
+        )
+
+        cache = Cache(
+            package_map={"p1": p1_pkg, "p2": p2_pkg},
+            url_map={},
+            package_urls={},
+            dependencies={p1_id: {existing_build_dep}},
+        )
+
+        # Parsed data only has runtime dependency
+        new_pkg_data = create_pkgx_package(
+            dependencies=["p2"],  # runtime
+            build_deps=[],  # no build deps
+        )
+
+        diff = PkgxDiff(mock_config, cache, mock_logger)
+        new_deps, removed_deps = diff.diff_deps("p1", new_pkg_data)
+
+        # Should remove build and add runtime
+        assert len(removed_deps) == 1
+        assert removed_deps[0].dependency_id == p2_id
+        assert removed_deps[0].dependency_type_id == mock_config.dependency_types.build
+
+        assert len(new_deps) == 1
+        assert new_deps[0].dependency_id == p2_id
+        assert new_deps[0].dependency_type_id == mock_config.dependency_types.runtime
+
+    def test_dependency_type_priority_new_package(self, mock_config, mock_logger):
+        """Test case 4: p1 has no dependencies to p2 in cache,
+        p1 has both runtime and build dependencies to p2 in parsed data.
+        Expect one new runtime dependency (priority over build)."""
+
+        p1_id = uuid4()
+        p2_id = uuid4()
+
+        p1_pkg = Package(id=p1_id, derived_id="pkgx/p1", name="p1", import_id="p1")
+        p2_pkg = Package(id=p2_id, derived_id="pkgx/p2", name="p2", import_id="p2")
+
+        cache = Cache(
+            package_map={"p1": p1_pkg, "p2": p2_pkg},
+            url_map={},
+            package_urls={},
+            dependencies={},  # No existing dependencies
+        )
+
+        # Parsed data has both runtime and build dependencies to p2
+        new_pkg_data = create_pkgx_package(
+            dependencies=["p2"],  # runtime
+            build_deps=["p2"],  # build
+        )
+
+        diff = PkgxDiff(mock_config, cache, mock_logger)
+        new_deps, removed_deps = diff.diff_deps("p1", new_pkg_data)
+
+        # Should only create one new dependency - runtime (higher priority)
+        assert len(removed_deps) == 0
+        assert len(new_deps) == 1
+        assert new_deps[0].dependency_id == p2_id
+        assert new_deps[0].dependency_type_id == mock_config.dependency_types.runtime
+
+    def test_dependency_type_priority_with_test(self, mock_config, mock_logger):
+        """Test priority handling with test dependencies: Runtime > Build > Test"""
+
+        p1_id = uuid4()
+        p2_id = uuid4()
+        p3_id = uuid4()
+        p4_id = uuid4()
+
+        p1_pkg = Package(id=p1_id, derived_id="pkgx/p1", name="p1", import_id="p1")
+        p2_pkg = Package(id=p2_id, derived_id="pkgx/p2", name="p2", import_id="p2")
+        p3_pkg = Package(id=p3_id, derived_id="pkgx/p3", name="p3", import_id="p3")
+        p4_pkg = Package(id=p4_id, derived_id="pkgx/p4", name="p4", import_id="p4")
+
+        cache = Cache(
+            package_map={"p1": p1_pkg, "p2": p2_pkg, "p3": p3_pkg, "p4": p4_pkg},
+            url_map={},
+            package_urls={},
+            dependencies={},
+        )
+
+        # Parsed data with overlapping dependencies across different types
+        new_pkg_data = create_pkgx_package(
+            dependencies=["p2", "p3"],  # runtime: p2, p3
+            build_deps=["p2", "p4"],  # build: p2, p4
+            test_deps=["p2", "p3", "p4"],  # test: p2, p3, p4
+        )
+
+        diff = PkgxDiff(mock_config, cache, mock_logger)
+        new_deps, removed_deps = diff.diff_deps("p1", new_pkg_data)
+
+        # Should create dependencies based on priority:
+        # p2: runtime (highest priority among runtime/build/test)
+        # p3: runtime (highest priority among runtime/test)
+        # p4: build (highest priority among build/test)
+        assert len(removed_deps) == 0
+        assert len(new_deps) == 3
+
+        # Sort by dependency_id for consistent testing
+        new_deps_sorted = sorted(new_deps, key=lambda d: str(d.dependency_id))
+
+        # p2 should be runtime (highest priority)
+        p2_dep = next(d for d in new_deps_sorted if d.dependency_id == p2_id)
+        assert p2_dep.dependency_type_id == mock_config.dependency_types.runtime
+
+        # p3 should be runtime (highest priority)
+        p3_dep = next(d for d in new_deps_sorted if d.dependency_id == p3_id)
+        assert p3_dep.dependency_type_id == mock_config.dependency_types.runtime
+
+        # p4 should be build (highest available priority)
+        p4_dep = next(d for d in new_deps_sorted if d.dependency_id == p4_id)
+        assert p4_dep.dependency_type_id == mock_config.dependency_types.build
