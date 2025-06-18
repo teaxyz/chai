@@ -30,9 +30,30 @@ def create_pkgx_package(
             distributable_blocks.append(Distributable(url=url))
 
     # Create dependency objects
-    dep_objects = [Dependency(name=dep, semver="*") for dep in (dependencies or [])]
-    build_dep_objects = [Dependency(name=dep, semver="*") for dep in (build_deps or [])]
-    test_dep_objects = [Dependency(name=dep, semver="*") for dep in (test_deps or [])]
+    dep_objects = [
+        DependencyBlock(
+            platform="all",
+            dependencies=[
+                Dependency(name=dep, semver="*") for dep in (dependencies or [])
+            ],
+        )
+    ]
+    build_dep_objects = [
+        DependencyBlock(
+            platform="all",
+            dependencies=[
+                Dependency(name=dep, semver="*") for dep in (build_deps or [])
+            ],
+        )
+    ]
+    test_dep_objects = [
+        DependencyBlock(
+            platform="all",
+            dependencies=[
+                Dependency(name=dep, semver="*") for dep in (test_deps or [])
+            ],
+        )
+    ]
 
     # Create version object
     version = Version()
@@ -49,7 +70,7 @@ def create_pkgx_package(
 class TestPkgxDifferentialLoading:
     """Test cases for pkgx differential loading scenarios"""
 
-    def test_package_exists_url_update(self, mock_config):
+    def test_package_exists_url_update(self, mock_config, mock_logger):
         """Test scenario 2: Package existed in database and needed a URL update"""
 
         # Setup existing package and URL
@@ -96,7 +117,7 @@ class TestPkgxDifferentialLoading:
         )
 
         # Test the diff
-        diff = PkgxDiff(mock_config, cache)
+        diff = PkgxDiff(mock_config, cache, mock_logger)
         new_urls = {}
 
         # Mock the URL canonicalization and homepage methods
@@ -118,7 +139,7 @@ class TestPkgxDifferentialLoading:
         assert new_links[0].package_id == existing_pkg_id
         assert new_links[0].url_id == new_url.id
 
-    def test_package_exists_dependency_change(self, mock_config):
+    def test_package_exists_dependency_change(self, mock_config, mock_logger):
         """Test scenario 3: Package existed in database and changed its dependencies"""
 
         # Setup existing package and dependencies
@@ -180,7 +201,7 @@ class TestPkgxDifferentialLoading:
         )
 
         # Test the diff
-        diff = PkgxDiff(mock_config, cache)
+        diff = PkgxDiff(mock_config, cache, mock_logger)
         new_deps, removed_deps = diff.diff_deps("dep-pkg", new_pkg_data)
 
         # Assertions
@@ -192,7 +213,7 @@ class TestPkgxDifferentialLoading:
         assert removed_deps[0].dependency_id == dep2_id
         assert removed_deps[0].dependency_type_id == mock_config.dependency_types.build
 
-    def test_completely_new_package(self, mock_config):
+    def test_completely_new_package(self, mock_config, mock_logger):
         """Test scenario 4: Package was completely new to the database"""
 
         # Create empty cache (no existing packages)
@@ -206,7 +227,7 @@ class TestPkgxDifferentialLoading:
         )
 
         # Test the diff
-        diff = PkgxDiff(mock_config, cache)
+        diff = PkgxDiff(mock_config, cache, mock_logger)
         pkg_id, pkg_obj, update_payload = diff.diff_pkg("new-pkg", new_pkg_data)
 
         # Assertions
@@ -236,7 +257,7 @@ class TestPkgxDifferentialLoading:
         assert len(new_links) >= 2  # At least source and homepage links
         assert len(updated_links) == 0  # No existing links to update
 
-    def test_no_changes_scenario(self, mock_config):
+    def test_no_changes_scenario(self, mock_config, mock_logger):
         """Test scenario where package exists but has no changes"""
 
         # Setup existing package
@@ -261,7 +282,7 @@ class TestPkgxDifferentialLoading:
         pkg_data = create_pkgx_package()
 
         # Test the diff
-        diff = PkgxDiff(mock_config, cache)
+        diff = PkgxDiff(mock_config, cache, mock_logger)
         pkg_id, pkg_obj, update_payload = diff.diff_pkg("unchanged-pkg", pkg_data)
 
         # Assertions
@@ -269,7 +290,7 @@ class TestPkgxDifferentialLoading:
         assert pkg_obj is None  # No new package
         assert update_payload is None  # No changes
 
-    def test_missing_dependency_handling(self, mock_config):
+    def test_missing_dependency_handling(self, mock_config, mock_logger):
         """Test how missing dependencies are handled"""
 
         existing_pkg_id = uuid4()
@@ -290,7 +311,7 @@ class TestPkgxDifferentialLoading:
         # Create package with dependency that doesn't exist in cache
         pkg_data = create_pkgx_package(dependencies=["non-existent-dep"])
 
-        diff = PkgxDiff(mock_config, cache)
+        diff = PkgxDiff(mock_config, cache, mock_logger)
         new_deps, removed_deps = diff.diff_deps("missing-dep-pkg", pkg_data)
 
         # Should handle gracefully - no deps added for missing packages

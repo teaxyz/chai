@@ -20,7 +20,14 @@ from core.config import (
     URLTypes,
     UserTypes,
 )
+from core.logger import Logger
 from core.models import Source
+
+
+@pytest.fixture
+def mock_logger():
+    """Mock logger for testing."""
+    return MagicMock(spec=Logger)
 
 
 @pytest.fixture
