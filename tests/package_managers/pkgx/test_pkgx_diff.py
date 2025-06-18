@@ -70,7 +70,7 @@ def create_pkgx_package(
 class TestPkgxDifferentialLoading:
     """Test cases for pkgx differential loading scenarios"""
 
-    def test_package_exists_url_update(self, mock_config, mock_logger):
+    def test_package_exists_url_update(self, mock_config, mock_logger, mock_db):
         """Test scenario 2: Package existed in database and needed a URL update"""
 
         # Setup existing package and URL
@@ -115,31 +115,39 @@ class TestPkgxDifferentialLoading:
         new_pkg_data = create_pkgx_package(
             distributables=["https://new-source.com/file.tar.gz"],
         )
+        new_generated_urls = [
+            URLKey("https://new-source.com/file.tar.gz", mock_config.url_types.source)
+        ]
+        new_urls = {}  # this tracks all the new URLs we've created so far -
+        # let it be empty for this test
 
         # Test the diff
-        diff = PkgxDiff(mock_config, cache, mock_logger)
-        new_urls = {}
+        diff = PkgxDiff(mock_config, cache, mock_db, mock_logger)
 
-        # Mock the URL canonicalization and homepage methods
+        # Mock the URL retrieval step
         with (
-            patch.object(diff, "_canonicalize_url", side_effect=lambda x: x),
-            patch.object(diff, "_get_homepage_url", return_value=None),
-            patch.object(diff, "_is_github_url", return_value=False),
+            patch(
+                "package_managers.pkgx.diff.generate_chai_urls",
+                return_value=new_generated_urls,
+            ),
         ):
             resolved_urls = diff.diff_url("url-pkg", new_pkg_data, new_urls)
-            new_links, updated_links = diff.diff_pkg_url(existing_pkg_id, resolved_urls)
+            new_links, _ = diff.diff_pkg_url(existing_pkg_id, resolved_urls)
 
         # Assertions
-        assert len(new_urls) == 1  # New URL should be created
-        new_url = next(iter(new_urls.values()))
-        assert new_url.url == "https://new-source.com/file.tar.gz"
-        assert new_url.url_type_id == mock_config.url_types.source
+        assert len(new_links) == 1  # New URL should be created
+        new_link = new_links[0]
+        assert new_link.package_id == existing_pkg_id
 
-        assert len(new_links) == 1  # New package URL link should be created
-        assert new_links[0].package_id == existing_pkg_id
-        assert new_links[0].url_id == new_url.id
+        # The URL should be created in new_urls dict and the link should reference it
+        assert len(new_urls) == 1  # One new URL should be created
+        new_url_key = list(new_urls.keys())[0]
+        new_url = new_urls[new_url_key]
+        assert new_link.url_id == new_url.id  # Link should reference the new URL
+        assert new_url_key.url == "https://new-source.com/file.tar.gz"
+        assert new_url_key.url_type_id == mock_config.url_types.source
 
-    def test_package_exists_dependency_change(self, mock_config, mock_logger):
+    def test_package_exists_dependency_change(self, mock_config, mock_logger, mock_db):
         """Test scenario 3: Package existed in database and changed its dependencies"""
 
         # Setup existing package and dependencies
@@ -201,7 +209,7 @@ class TestPkgxDifferentialLoading:
         )
 
         # Test the diff
-        diff = PkgxDiff(mock_config, cache, mock_logger)
+        diff = PkgxDiff(mock_config, cache, mock_db, mock_logger)
         new_deps, removed_deps = diff.diff_deps("dep-pkg", new_pkg_data)
 
         # Assertions
@@ -213,7 +221,7 @@ class TestPkgxDifferentialLoading:
         assert removed_deps[0].dependency_id == dep2_id
         assert removed_deps[0].dependency_type_id == mock_config.dependency_types.build
 
-    def test_completely_new_package(self, mock_config, mock_logger):
+    def test_completely_new_package(self, mock_config, mock_logger, mock_db):
         """Test scenario 4: Package was completely new to the database"""
 
         # Create empty cache (no existing packages)
@@ -227,7 +235,7 @@ class TestPkgxDifferentialLoading:
         )
 
         # Test the diff
-        diff = PkgxDiff(mock_config, cache, mock_logger)
+        diff = PkgxDiff(mock_config, cache, mock_db, mock_logger)
         pkg_id, pkg_obj, update_payload = diff.diff_pkg("new-pkg", new_pkg_data)
 
         # Assertions
@@ -240,14 +248,18 @@ class TestPkgxDifferentialLoading:
 
         # Test URL creation
         new_urls = {}
-        with (
-            patch.object(diff, "_canonicalize_url", side_effect=lambda x: x),
-            patch.object(
-                diff,
-                "_get_homepage_url",
-                return_value="https://github.com/example/new-pkg",
+        # Mock generate_chai_urls to return predictable URLs
+        mock_urls = [
+            URLKey(
+                "https://github.com/example/new-pkg", mock_config.url_types.homepage
             ),
-            patch.object(diff, "_is_github_url", return_value=True),
+            URLKey(
+                "https://github.com/example/new-pkg/archive/v1.0.tar.gz",
+                mock_config.url_types.source,
+            ),
+        ]
+        with patch(
+            "package_managers.pkgx.diff.generate_chai_urls", return_value=mock_urls
         ):
             resolved_urls = diff.diff_url("new-pkg", new_pkg_data, new_urls)
             new_links, updated_links = diff.diff_pkg_url(pkg_id, resolved_urls)
@@ -257,7 +269,7 @@ class TestPkgxDifferentialLoading:
         assert len(new_links) >= 2  # At least source and homepage links
         assert len(updated_links) == 0  # No existing links to update
 
-    def test_no_changes_scenario(self, mock_config, mock_logger):
+    def test_no_changes_scenario(self, mock_config, mock_logger, mock_db):
         """Test scenario where package exists but has no changes"""
 
         # Setup existing package
@@ -282,7 +294,7 @@ class TestPkgxDifferentialLoading:
         pkg_data = create_pkgx_package()
 
         # Test the diff
-        diff = PkgxDiff(mock_config, cache, mock_logger)
+        diff = PkgxDiff(mock_config, cache, mock_db, mock_logger)
         pkg_id, pkg_obj, update_payload = diff.diff_pkg("unchanged-pkg", pkg_data)
 
         # Assertions
@@ -290,7 +302,7 @@ class TestPkgxDifferentialLoading:
         assert pkg_obj is None  # No new package
         assert update_payload is None  # No changes
 
-    def test_missing_dependency_handling(self, mock_config, mock_logger):
+    def test_missing_dependency_handling(self, mock_config, mock_logger, mock_db):
         """Test how missing dependencies are handled"""
 
         existing_pkg_id = uuid4()
@@ -311,14 +323,16 @@ class TestPkgxDifferentialLoading:
         # Create package with dependency that doesn't exist in cache
         pkg_data = create_pkgx_package(dependencies=["non-existent-dep"])
 
-        diff = PkgxDiff(mock_config, cache, mock_logger)
+        diff = PkgxDiff(mock_config, cache, mock_db, mock_logger)
         new_deps, removed_deps = diff.diff_deps("missing-dep-pkg", pkg_data)
 
         # Should handle gracefully - no deps added for missing packages
         assert len(new_deps) == 0
         assert len(removed_deps) == 0
 
-    def test_dependency_type_priority_no_change(self, mock_config, mock_logger):
+    def test_dependency_type_priority_no_change(
+        self, mock_config, mock_logger, mock_db
+    ):
         """Test case 1: p1 has runtime dependency to p2 in cache,
         p1 depends on p2 as both runtime and build in parsed data.
         Expect no change (runtime has priority)."""
@@ -350,14 +364,16 @@ class TestPkgxDifferentialLoading:
             build_deps=["p2"],  # build
         )
 
-        diff = PkgxDiff(mock_config, cache, mock_logger)
+        diff = PkgxDiff(mock_config, cache, mock_db, mock_logger)
         new_deps, removed_deps = diff.diff_deps("p1", new_pkg_data)
 
         # Should have no changes - runtime priority means no change needed
         assert len(new_deps) == 0
         assert len(removed_deps) == 0
 
-    def test_dependency_type_change_runtime_to_build(self, mock_config, mock_logger):
+    def test_dependency_type_change_runtime_to_build(
+        self, mock_config, mock_logger, mock_db
+    ):
         """Test case 2: p1 has runtime dependency to p2 in cache,
         p1 has build dependency to p2 in parsed data.
         Expect removed runtime dependency and new build dependency."""
@@ -388,7 +404,7 @@ class TestPkgxDifferentialLoading:
             build_deps=["p2"],  # only build
         )
 
-        diff = PkgxDiff(mock_config, cache, mock_logger)
+        diff = PkgxDiff(mock_config, cache, mock_db, mock_logger)
         new_deps, removed_deps = diff.diff_deps("p1", new_pkg_data)
 
         # Should remove runtime and add build
@@ -402,7 +418,9 @@ class TestPkgxDifferentialLoading:
         assert new_deps[0].dependency_id == p2_id
         assert new_deps[0].dependency_type_id == mock_config.dependency_types.build
 
-    def test_dependency_type_change_build_to_runtime(self, mock_config, mock_logger):
+    def test_dependency_type_change_build_to_runtime(
+        self, mock_config, mock_logger, mock_db
+    ):
         """Test case 3: p1 has build dependency to p2 in cache,
         p1 has runtime dependency to p2 in parsed data.
         Expect removed build dependency and new runtime dependency."""
@@ -433,7 +451,7 @@ class TestPkgxDifferentialLoading:
             build_deps=[],  # no build deps
         )
 
-        diff = PkgxDiff(mock_config, cache, mock_logger)
+        diff = PkgxDiff(mock_config, cache, mock_db, mock_logger)
         new_deps, removed_deps = diff.diff_deps("p1", new_pkg_data)
 
         # Should remove build and add runtime
@@ -445,7 +463,9 @@ class TestPkgxDifferentialLoading:
         assert new_deps[0].dependency_id == p2_id
         assert new_deps[0].dependency_type_id == mock_config.dependency_types.runtime
 
-    def test_dependency_type_priority_new_package(self, mock_config, mock_logger):
+    def test_dependency_type_priority_new_package(
+        self, mock_config, mock_logger, mock_db
+    ):
         """Test case 4: p1 has no dependencies to p2 in cache,
         p1 has both runtime and build dependencies to p2 in parsed data.
         Expect one new runtime dependency (priority over build)."""
@@ -469,7 +489,7 @@ class TestPkgxDifferentialLoading:
             build_deps=["p2"],  # build
         )
 
-        diff = PkgxDiff(mock_config, cache, mock_logger)
+        diff = PkgxDiff(mock_config, cache, mock_db, mock_logger)
         new_deps, removed_deps = diff.diff_deps("p1", new_pkg_data)
 
         # Should only create one new dependency - runtime (higher priority)
@@ -478,7 +498,9 @@ class TestPkgxDifferentialLoading:
         assert new_deps[0].dependency_id == p2_id
         assert new_deps[0].dependency_type_id == mock_config.dependency_types.runtime
 
-    def test_dependency_type_priority_with_test(self, mock_config, mock_logger):
+    def test_dependency_type_priority_with_test(
+        self, mock_config, mock_logger, mock_db
+    ):
         """Test priority handling with test dependencies: Runtime > Build > Test"""
 
         p1_id = uuid4()
@@ -505,7 +527,7 @@ class TestPkgxDifferentialLoading:
             test_deps=["p2", "p3", "p4"],  # test: p2, p3, p4
         )
 
-        diff = PkgxDiff(mock_config, cache, mock_logger)
+        diff = PkgxDiff(mock_config, cache, mock_db, mock_logger)
         new_deps, removed_deps = diff.diff_deps("p1", new_pkg_data)
 
         # Should create dependencies based on priority:

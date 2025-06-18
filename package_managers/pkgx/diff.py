@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from core.config import Config
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
-from core.structs import Cache
+from core.structs import Cache, URLKey
 from package_managers.pkgx.db import DB
 from package_managers.pkgx.parser import DependencyBlock, PkgxPackage
 from package_managers.pkgx.url import generate_chai_urls
@@ -54,7 +54,7 @@ class PkgxDiff:
             return pkg_id, None, None
 
     def diff_url(
-        self, import_id: str, pkg: PkgxPackage, new_urls: dict[tuple[str, UUID], URL]
+        self, import_id: str, pkg: PkgxPackage, new_urls: dict[URLKey, URL]
     ) -> dict[UUID, UUID]:
         """Given a package's URLs, returns the resolved URL for this specific package"""
         resolved_urls: dict[UUID, UUID] = {}

@@ -10,7 +10,7 @@ from core.fetcher import GitFetcher
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
 from core.scheduler import Scheduler
-from core.structs import Cache
+from core.structs import Cache, URLKey
 from package_managers.pkgx.db import PkgxDB
 from package_managers.pkgx.diff import PkgxDiff
 from package_managers.pkgx.parser import PkgxParser
@@ -69,7 +69,7 @@ def run_pipeline(config: Config, db: PkgxDB):
 
     # Initialize differential loading collections
     new_packages: list[Package] = []
-    new_urls: dict[tuple[str, UUID], URL] = {}
+    new_urls: dict[URLKey, URL] = {}
     new_package_urls: list[PackageURL] = []
     updated_packages: list[dict[str, UUID | str | datetime]] = []
     updated_package_urls: list[dict[str, UUID | datetime]] = []

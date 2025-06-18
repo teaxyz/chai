@@ -20,6 +20,7 @@ from core.config import (
     URLTypes,
     UserTypes,
 )
+from core.db import DB
 from core.logger import Logger
 from core.models import Source
 
@@ -266,3 +267,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "transformer: Transformer tests")
     config.addinivalue_line("markers", "loader: Loader tests")
     config.addinivalue_line("markers", "ranker: Ranker tests")
+
+
+@pytest.fixture
+def mock_db():
+    return MagicMock(spec=DB)
