@@ -207,17 +207,17 @@ class Diff:
 
         # alright, let's do it
         if hasattr(pkg, "dependencies"):
-            process(pkg.dependencies, self.config.dependency_types.runtime)
+            process(pkg.dependencies, self.config.dependency_types.runtime.id)
         if hasattr(pkg, "build_dependencies"):
-            process(pkg.build_dependencies, self.config.dependency_types.build)
+            process(pkg.build_dependencies, self.config.dependency_types.build.id)
         if hasattr(pkg, "test_dependencies"):
-            process(pkg.test_dependencies, self.config.dependency_types.test)
+            process(pkg.test_dependencies, self.config.dependency_types.test.id)
         if hasattr(pkg, "recommended_dependencies"):
             process(
-                pkg.recommended_dependencies, self.config.dependency_types.recommended
+                pkg.recommended_dependencies, self.config.dependency_types.recommended.id
             )
         if hasattr(pkg, "optional_dependencies"):
-            process(pkg.optional_dependencies, self.config.dependency_types.optional)
+            process(pkg.optional_dependencies, self.config.dependency_types.optional.id)
 
         # get the package ID for what we are working with
         package = self.caches.package_map.get(pkg.formula)

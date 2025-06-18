@@ -314,10 +314,10 @@ class Diff:
         Resolves the dependency type UUID from the config
         """
         if dep_type == DependencyType.NORMAL:
-            return self.config.dependency_types.runtime
+            return self.config.dependency_types.runtime.id
         elif dep_type == DependencyType.BUILD:
-            return self.config.dependency_types.build
+            return self.config.dependency_types.build.id
         elif dep_type == DependencyType.DEV:
-            return self.config.dependency_types.development
+            return self.config.dependency_types.development.id
         else:
             raise ValueError(f"Unknown dependency type: {dep_type}")
