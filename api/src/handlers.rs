@@ -140,8 +140,7 @@ pub async fn get_projects(path: web::Path<Uuid>, data: web::Data<AppState>) -> i
     let id = path.into_inner();
 
     // Construct the query
-    let query = format!(
-        r#"
+    let query = r#"
         SELECT DISTINCT ON (c.id)
             c.id AS "projectId",
             u_homepage.url AS homepage,
@@ -167,8 +166,7 @@ pub async fn get_projects(path: web::Path<Uuid>, data: web::Data<AppState>) -> i
         WHERE 
             c.id = $1 
             AND ut_source.name = 'source'
-        ORDER BY c.id, tr.created_at DESC, u_source.url;"#
-    );
+        ORDER BY c.id, tr.created_at DESC, u_source.url;"#;
 
     match data.pool.get().await {
         Ok(client) => match client.query_one(&query, &[&id]).await {
