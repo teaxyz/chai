@@ -141,7 +141,7 @@ class TestPkgxDifferentialLoading:
 
         # The URL should be created in new_urls dict and the link should reference it
         assert len(new_urls) == 1  # One new URL should be created
-        new_url_key = list(new_urls.keys())[0]
+        new_url_key = next(iter(new_urls.keys()))
         new_url = new_urls[new_url_key]
         assert new_link.url_id == new_url.id  # Link should reference the new URL
         assert new_url_key.url == "https://new-source.com/file.tar.gz"
