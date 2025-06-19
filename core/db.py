@@ -80,7 +80,7 @@ class DB:
             ]
 
     def current_graph(self, package_manager_id: UUID) -> CurrentGraph:
-        """Get the Homebrew packages and dependencies"""
+        """Get the packages and dependencies for a specific package manager"""
         package_map: dict[str, Package] = defaultdict(Package)
         dependencies: dict[UUID, set[LegacyDependency]] = defaultdict(set)
 
@@ -110,7 +110,30 @@ class DB:
 
         return CurrentGraph(package_map, dependencies)
 
+    def _build_current_urls(
+        self, result: Result[tuple[Package, PackageURL, URL]]
+    ) -> CurrentURLs:
+        """Build the CurrentURLs result based on a query of Package, PackageURL, URL"""
+        url_map: dict[URLKey, URL] = {}
+        package_urls: dict[UUID, set[PackageURL]] = {}
+
+        for pkg, pkg_url, url in result:
+            url_key = URLKey(url.url, url.url_type_id)
+            url_map[url_key] = url
+
+            # since it's a left join, we need to check if pkg is None
+            if pkg is not None:
+                if pkg.id not in package_urls:
+                    package_urls[pkg.id] = set()
+                package_urls[pkg.id].add(pkg_url)
+
+        self.logger.debug(f"Cached {len(url_map)} URLs")
+        self.logger.debug(f"Cached {len(package_urls)} package URLs")
+
+        return CurrentURLs(url_map=url_map, package_urls=package_urls)
+
     def current_urls(self, urls: set[str]) -> CurrentURLs:
+        """Get the Package URL Relationships for a given set of URLs"""
         stmt = (
             select(Package, PackageURL, URL)
             .select_from(URL)
@@ -120,25 +143,20 @@ class DB:
         )
 
         with self.session() as session:
-            result = session.execute(stmt)
+            result: Result[tuple[Package, PackageURL, URL]] = session.execute(stmt)
+            return self._build_current_urls(result)
 
-            url_map: dict[URLKey, URL] = {}
-            package_urls: dict[UUID, set[PackageURL]] = {}
-
-            for pkg, pkg_url, url in result:
-                url_key = URLKey(url.url, url.url_type_id)
-                url_map[url_key] = url
-
-                # since it's a left join, we need to check if pkg is None
-                if pkg is not None:
-                    if pkg.id not in package_urls:
-                        package_urls[pkg.id] = set()
-                    package_urls[pkg.id].add(pkg_url)
-
-            self.logger.debug(f"Cached {len(url_map)} URLs")
-            self.logger.debug(f"Cached {len(package_urls)} package URLs")
-
-            return CurrentURLs(url_map=url_map, package_urls=package_urls)
+    def all_current_urls(self) -> CurrentURLs:
+        """Get all the URLs and the Packages they are tied to from CHAI"""
+        stmt = (
+            select(Package, PackageURL, URL)
+            .select_from(URL)
+            .join(PackageURL, PackageURL.url_id == URL.id, isouter=True)
+            .join(Package, Package.id == PackageURL.package_id, isouter=True)
+        )
+        with self.session() as session:
+            result: Result[tuple[Package, PackageURL, URL]] = session.execute(stmt)
+            return self._build_current_urls(result)
 
     # TODO: we should add the Cache class to the core structure, and have the individual
     # transformers inherit from it. For now, keeping this as `Any`

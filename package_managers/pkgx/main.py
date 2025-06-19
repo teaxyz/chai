@@ -122,10 +122,10 @@ def run_pipeline(config: Config, db: PkgxDB):
         new_packages,
         final_new_urls,
         new_package_urls,
-        updated_packages,
-        updated_package_urls,
         new_deps,
         removed_deps,
+        updated_packages,
+        updated_package_urls,
     )
 
     if config.exec_config.no_cache:

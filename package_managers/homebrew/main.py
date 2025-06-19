@@ -84,10 +84,10 @@ def main(config: Config, db: HomebrewDB) -> None:
         new_packages,
         final_new_urls,
         new_package_urls,
-        updated_packages,
-        updated_package_urls,
         new_deps,
         removed_deps,
+        updated_packages,
+        updated_package_urls,
     )
 
 
