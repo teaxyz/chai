@@ -2,6 +2,8 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
+from permalint import normalize_url
+
 
 # structures
 @dataclass
@@ -138,7 +140,7 @@ class DebianParser:
             case "Description":
                 obj.description = value.strip()
             case "Homepage":
-                obj.homepage = value.strip()
+                obj.homepage = normalize_url(value.strip())
             case "Description-md5":
                 obj.description_md5 = value.strip()
             case "Tag":
@@ -160,9 +162,9 @@ class DebianParser:
             case "Format":
                 obj.format = value.strip()
             case "Vcs-Browser":
-                obj.vcs_browser = value.strip()
+                obj.vcs_browser = normalize_url(value.strip())
             case "Vcs-Git":
-                obj.vcs_git = value.strip()
+                obj.vcs_git = normalize_url(value.strip())
             case "Directory":
                 obj.directory = value.strip()
             case "Testsuite":

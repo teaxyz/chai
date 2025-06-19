@@ -15,7 +15,7 @@ from core.scheduler import Scheduler
 from core.structs import Cache, URLKey
 from package_managers.debian.db import DebianDB
 from package_managers.debian.diff import DebianDiff
-from package_managers.debian.parser import DebianParser
+from package_managers.debian.parser import DebianData, DebianParser
 
 logger = Logger("debian")
 
@@ -59,24 +59,23 @@ def run_pipeline(config: Config, db: DebianDB):
     package_fetcher, sources_fetcher = fetch(config)
 
     # Read and parse all packages
-    packages = []
-    
-    # Parse packages file
-    if package_fetcher:
-        # Read the written file using the same pattern as transformer
-        input_dir = f"data/debian/latest"
-        packages_file_path = os.path.join(input_dir, "debian", "packages")
-        with open(packages_file_path, 'r') as f:
-            package_content = f.read()
-        package_parser = DebianParser(package_content, config.exec_config.test)
-        packages.extend(list(package_parser.parse()))
+    packages: list[DebianData] = []
+    input_dir = "data/debian/latest"
 
-    # Parse sources file  
+    # Parse packages file
+    # if package_fetcher:
+    #     # Read the written file using the same pattern as transformer
+    #     packages_file_path = os.path.join(input_dir, "debian", "packages")
+    #     with open(packages_file_path) as f:
+    #         package_content = f.read()
+    #     package_parser = DebianParser(package_content, config.exec_config.test)
+    #     packages.extend(list(package_parser.parse()))
+
+    # Parse sources file
     if sources_fetcher:
         # Read the written file using the same pattern as transformer
-        input_dir = f"data/debian/latest"
         sources_file_path = os.path.join(input_dir, "debian", "sources")
-        with open(sources_file_path, 'r') as f:
+        with open(sources_file_path) as f:
             sources_content = f.read()
         sources_parser = DebianParser(sources_content, config.exec_config.test)
         packages.extend(list(sources_parser.parse()))
@@ -88,14 +87,10 @@ def run_pipeline(config: Config, db: DebianDB):
     db.set_current_urls()
     logger.log("Set current URLs")
 
-    # Build cache for differential loading - handle case where urls might be None
-    url_map = db.urls.url_map if db.urls else {}
-    package_urls = db.urls.package_urls if db.urls else {}
-    
     cache = Cache(
         db.graph.package_map,
-        url_map,
-        package_urls,
+        db.urls.url_map,
+        db.urls.package_urls,
         db.graph.dependencies,
     )
 
@@ -113,7 +108,9 @@ def run_pipeline(config: Config, db: DebianDB):
 
     # Process each package
     for i, debian_data in enumerate(packages):
-        import_id = debian_data.package
+        print("-" * 100)
+        logger.debug(f"Processing package {i}: {debian_data.package}")
+        import_id = f"debian/{debian_data.package}"
         if not import_id:
             logger.warn(f"Skipping package with empty name at index {i}")
             continue

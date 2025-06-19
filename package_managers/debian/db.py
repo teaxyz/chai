@@ -23,7 +23,6 @@ class DebianDB(DB):
 
     def set_current_urls(self) -> None:
         """Getting all the URLs and Package URLs from the database"""
-        self.urls: CurrentURLs | None = None
         url_map: dict[URLKey, URL] = {}
         package_urls: dict[UUID, set[PackageURL]] = {}
 
@@ -47,7 +46,7 @@ class DebianDB(DB):
                         package_urls[pkg.id] = set()
                     package_urls[pkg.id].add(pkg_url)
 
-        self.urls = CurrentURLs(url_map=url_map, package_urls=package_urls)
+        self.urls: CurrentURLs = CurrentURLs(url_map=url_map, package_urls=package_urls)
 
     def ingest(
         self,
