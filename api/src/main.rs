@@ -10,7 +10,7 @@ use std::env;
 use std::sync::Arc;
 
 use crate::app_state::AppState;
-use crate::handlers::{get_table, get_table_row, heartbeat, list_tables};
+use crate::handlers::{get_table, get_table_row, heartbeat, list_tables, get_projects};
 use crate::logging::setup_logger;
 
 #[actix_web::main]
@@ -36,6 +36,7 @@ async fn main() -> std::io::Result<()> {
             }))
             .service(list_tables)
             .service(heartbeat)
+            .service(get_projects)
             .service(get_table)
             .service(get_table_row)
     })
