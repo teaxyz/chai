@@ -134,6 +134,68 @@ pub async fn get_table(
     }
 }
 
+#[get("/projects/{id}")]
+pub async fn get_projects(path: web::Path<Uuid>, data: web::Data<AppState>) -> impl Responder {
+    // Check if the table exists
+    let id = path.into_inner();
+
+    // Construct the query
+    let query = r#"
+        SELECT DISTINCT ON (c.id)
+            c.id AS "projectId",
+            u_homepage.url AS homepage,
+            c.name,
+            u_source.url AS source,
+            COALESCE(tr.rank,'0') AS "teaRank",
+            tr.created_at AS "teaRankCalculatedAt",
+            (
+                SELECT ARRAY_AGG(DISTINCT s.type)
+                FROM canon_packages cp2
+                JOIN packages p2 ON cp2.package_id = p2.id
+                JOIN package_managers pm2 ON p2.package_manager_id = pm2.id
+                JOIN sources s ON pm2.source_id = s.id
+                WHERE cp2.canon_id = c.id
+            ) AS "packageManagers"
+        FROM canons c
+        JOIN urls u_homepage ON c.url_id = u_homepage.id 
+        JOIN canon_packages cp ON cp.canon_id = c.id
+        JOIN package_urls pu ON pu.package_id = cp.package_id
+        JOIN urls u_source ON pu.url_id = u_source.id
+        JOIN url_types ut_source ON ut_source.id = u_source.url_type_id
+        LEFT JOIN tea_ranks tr ON tr.canon_id = c.id
+        WHERE 
+            c.id = $1 
+            AND ut_source.name = 'source'
+        ORDER BY c.id, tr.created_at DESC, u_source.url;"#;
+
+    match data.pool.get().await {
+        Ok(client) => match client.query_one(query, &[&id]).await {
+            Ok(row) => {
+                let json = rows_to_json(&[row]);
+                let value = json.first().unwrap();
+                HttpResponse::Ok().json(value)
+            }
+            Err(e) => {
+                if e.as_db_error()
+                    .is_some_and(|e| e.code() == &SqlState::NO_DATA_FOUND)
+                {
+                    HttpResponse::NotFound().json(json!({
+                        "error": format!("No row found with id '{:?}' in table canons", id)
+                    }))
+                } else {
+                    HttpResponse::InternalServerError().json(json!({
+                        "error": format!("Database error: {}", e)
+                    }))
+                }
+            }
+        },
+        Err(e) => {
+            log::error!("Failed to get database connection: {}", e);
+            HttpResponse::InternalServerError().body("Failed to get database connection")
+        }
+    }
+}
+
 #[get("/{table}/{id}")]
 pub async fn get_table_row(
     path: web::Path<(String, Uuid)>,
