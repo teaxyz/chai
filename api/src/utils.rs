@@ -50,6 +50,10 @@ pub fn rows_to_json(rows: &[Row]) -> Vec<Value> {
                         let uuid: Uuid = row.get(i);
                         json!(uuid.to_string())
                     }
+                    Type::TEXT_ARRAY | Type::VARCHAR_ARRAY => {
+                        let array: Vec<String> = row.get(i);
+                        json!(array)
+                    }
                     _ => Value::Null,
                 };
                 map.insert(column.name().to_string(), value);
