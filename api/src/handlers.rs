@@ -169,7 +169,7 @@ pub async fn get_projects(path: web::Path<Uuid>, data: web::Data<AppState>) -> i
         ORDER BY c.id, tr.created_at DESC, u_source.url;"#;
 
     match data.pool.get().await {
-        Ok(client) => match client.query_one(&query, &[&id]).await {
+        Ok(client) => match client.query_one(query, &[&id]).await {
             Ok(row) => {
                 let json = rows_to_json(&[row]);
                 let value = json.first().unwrap();
