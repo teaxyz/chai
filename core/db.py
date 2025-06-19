@@ -368,7 +368,7 @@ class DB:
         """
         Ingests a list of new, updated, and deleted objects from the database.
 
-        It flushes after after each insert, to ensure that the database is in a valid
+        It flushes after each insert, to ensure that the database is in a valid
         state prior to the next batch of ingestions.
 
         TODO: if pkey is set in the values provided, then sqlalchemy will use
