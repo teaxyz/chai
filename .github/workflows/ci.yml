@@ -59,5 +59,14 @@ jobs:
           src: .
 
       - name: Run tests with pytest
+        id: pytest
+        continue-on-error: true
         run: |
           pkgx uv run pytest tests/
+
+      - name: Complain about test failures
+        if: failure() && steps.pytest.outcome == 'failure'
+        uses: ./.github/actions/complain
+        with:
+          test_function: "pytest tests/"
+          token: ${{ secrets.GITHUB_TOKEN }}
