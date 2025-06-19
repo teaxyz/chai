@@ -1,4 +1,4 @@
-name: pkgx/pantry/complain
+name: teaxyz/chai/complain
 description: creates an issue for any failing tests
 
 inputs:
@@ -17,28 +17,28 @@ runs:
       uses: actions-cool/issues-helper@v3
       id: find
       with:
-        actions: 'find-issues'
+        actions: "find-issues"
         token: ${{ inputs.token }}
-        issue-state: 'open'
-        title-includes: '❌ test failure: ${{ inputs.test_function }}'
-        labels: 'test-failure'
+        issue-state: "open"
+        title-includes: "❌ test failure: ${{ inputs.test_function }}"
+        labels: "test-failure"
 
     - name: Create Issue
       uses: actions-cool/issues-helper@v3
       id: create
       if: ${{ steps.find.outputs.issues == '[]' }}
       with:
-        actions: 'create-issue'
+        actions: "create-issue"
         token: ${{ inputs.token }}
-        title: '❌ test failure: ${{ inputs.test_function }}'
-        body: 'Running log of test failure for ${{ inputs.test_function }}'
-        labels: 'test-failure'
-        assignees: 'sanchitram1'
+        title: "❌ test failure: ${{ inputs.test_function }}"
+        body: "Running log of test failure for ${{ inputs.test_function }}"
+        labels: "test-failure"
+        assignees: "sanchitram1"
 
     - name: Log Comment
       uses: actions-cool/issues-helper@v3
       with:
-        actions: 'create-comment'
+        actions: "create-comment"
         token: ${{ inputs.token }}
         issue-number: ${{ steps.create.outputs.issue-number || fromJSON(steps.find.outputs.issues)[0].number }}
         body: |
