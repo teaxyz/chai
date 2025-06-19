@@ -10,7 +10,7 @@ use std::env;
 use std::sync::Arc;
 
 use crate::app_state::AppState;
-use crate::handlers::{get_table, get_table_row, heartbeat, list_tables, get_projects};
+use crate::handlers::{get_projects, get_table, get_table_row, heartbeat, list_tables};
 use crate::logging::setup_logger;
 
 #[actix_web::main]

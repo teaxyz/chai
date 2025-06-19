@@ -135,14 +135,10 @@ pub async fn get_table(
 }
 
 #[get("/projects/{id}")]
-pub async fn get_projects(
-    path: web::Path<Uuid>,
-    data: web::Data<AppState>,
-) -> impl Responder {
-    
+pub async fn get_projects(path: web::Path<Uuid>, data: web::Data<AppState>) -> impl Responder {
     // Check if the table exists
     let id = path.into_inner();
-    
+
     // Construct the query
     let query = format!(
         r#"
@@ -182,8 +178,7 @@ pub async fn get_projects(
                 HttpResponse::Ok().json(value)
             }
             Err(e) => {
-                if e
-                    .as_db_error()
+                if e.as_db_error()
                     .is_some_and(|e| e.code() == &SqlState::NO_DATA_FOUND)
                 {
                     HttpResponse::NotFound().json(json!({
