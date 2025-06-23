@@ -200,7 +200,6 @@ jobs:
 
       - name: Deploy chai-api
         run: |
-          aws ecs run-task --cluster chai-${{ env.DEPLOY_ENV }} \
-                          --task-definition ${{ env.DEPLOY_ENV }}-chai-api-run \
-                          --launch-type FARGATE \
-                          --network-configuration "awsvpcConfiguration={subnets=['${{ secrets.PRIVATE_SUBNET_ID }}'],securityGroups=['${{ secrets.ECS_SECURITY_GROUP_ID }}'],assignPublicIp=DISABLED}"
+          aws ecs update-service --cluster chai-${{ env.DEPLOY_ENV }} \
+                                 --service ${{ env.DEPLOY_ENV }-chai-api \
+                                 --force-new-deployment
