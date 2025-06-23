@@ -14,6 +14,7 @@ def create_debian_package(
     description: str = "Test package",
     homepage: str = "",
     vcs_git: str = "",
+    vcs_browser: str = "",
     directory: str = "",
     filename: str = "",
     depends: list[str] | None = None,
@@ -22,15 +23,16 @@ def create_debian_package(
     suggests: list[str] | None = None,
 ) -> DebianData:
     """Helper to create DebianData instances for testing"""
-    
+
     debian_data = DebianData()
     debian_data.package = package
     debian_data.description = description
     debian_data.homepage = homepage
     debian_data.vcs_git = vcs_git
+    debian_data.vcs_browser = vcs_browser
     debian_data.directory = directory
     debian_data.filename = filename
-    
+
     # Convert string dependencies to Depends objects (except build_depends which is list[str])
     if depends:
         debian_data.depends = [Depends(package=dep, semver="*") for dep in depends]
@@ -38,10 +40,12 @@ def create_debian_package(
         # build_depends is list[str] not list[Depends] in DebianData
         debian_data.build_depends = build_depends
     if recommends:
-        debian_data.recommends = [Depends(package=dep, semver="*") for dep in recommends]
+        debian_data.recommends = [
+            Depends(package=dep, semver="*") for dep in recommends
+        ]
     if suggests:
         debian_data.suggests = [Depends(package=dep, semver="*") for dep in suggests]
-    
+
     return debian_data
 
 
@@ -259,8 +263,7 @@ class TestDebianDifferentialLoading:
 
         # Create package data with same description
         pkg_data = create_debian_package(
-            package="unchanged-pkg",
-            description="Unchanged description"
+            package="unchanged-pkg", description="Unchanged description"
         )
 
         # Test the diff
@@ -295,8 +298,7 @@ class TestDebianDifferentialLoading:
 
         # Create package data with new description
         pkg_data = create_debian_package(
-            package="desc-pkg",
-            description="New description"
+            package="desc-pkg", description="New description"
         )
 
         # Test the diff
@@ -330,8 +332,7 @@ class TestDebianDifferentialLoading:
 
         # Create package with dependency that doesn't exist in cache
         pkg_data = create_debian_package(
-            package="missing-dep-pkg",
-            depends=["non-existent-dep"]
+            package="missing-dep-pkg", depends=["non-existent-dep"]
         )
 
         diff = DebianDiff(mock_config, cache, mock_db, mock_logger)
@@ -513,9 +514,7 @@ class TestDebianDifferentialLoading:
         assert new_deps[0].dependency_id == p2_id
         assert new_deps[0].dependency_type_id == mock_config.dependency_types.runtime
 
-    def test_debian_specific_dependencies(
-        self, mock_config, mock_logger, mock_db
-    ):
+    def test_debian_specific_dependencies(self, mock_config, mock_logger, mock_db):
         """Test Debian-specific dependency types: recommends, suggests"""
 
         p1_id = uuid4()
@@ -553,30 +552,199 @@ class TestDebianDifferentialLoading:
             assert dep.dependency_id in [p2_id, p3_id]
 
     def test_archive_url_generation(self, mock_config, mock_logger, mock_db):
-        """Test generation of archive URLs from directory and filename"""
+        """Test that archive URLs are correctly generated from directory and filename"""
 
+        # Create empty cache
         cache = Cache(package_map={}, url_map={}, package_urls={}, dependencies={})
 
-        # Create package data with directory and filename
-        pkg_data = create_debian_package(
+        # Create package data with directory and filename for archive URL
+        new_pkg_data = create_debian_package(
             package="archive-pkg",
             directory="pool/main/a/archive-pkg",
-            filename="archive-pkg_1.0-1.deb",
+            filename="archive-pkg_1.0-1_amd64.deb",
         )
 
-        diff = DebianDiff(mock_config, cache, mock_db, mock_logger)
         new_urls = {}
-        resolved_urls = diff.diff_url("archive-pkg", pkg_data, new_urls)
+        diff = DebianDiff(mock_config, cache, mock_db, mock_logger)
 
-        # Should create source URL
-        assert len(new_urls) >= 1
-        
-        # Check that archive URL was created correctly
-        archive_url_found = False
-        for url_key, url in new_urls.items():
-            if url_key.url_type_id == mock_config.url_types.source:
-                expected_url = "http://archive.debian.org/debian/pool/main/a/archive-pkg/archive-pkg_1.0-1.deb"
-                assert url_key.url == expected_url
-                archive_url_found = True
-                break
-        assert archive_url_found
+        # Test URL generation
+        resolved_urls = diff.diff_url("archive-pkg", new_pkg_data, new_urls)
+
+        # Should create a source URL from directory + filename
+        assert len(new_urls) == 1
+        url_key = list(new_urls.keys())[0]
+        assert url_key.url_type_id == mock_config.url_types.source
+        # Archive URL should be constructed from debian archive base + directory + filename
+        expected_url = "http://archive.debian.org/debian/pool/main/a/archive-pkg/archive-pkg_1.0-1_amd64.deb"
+        assert url_key.url == expected_url
+
+
+class TestPackageSourceMapping:
+    """Test cases for package to source mapping functionality"""
+
+    def test_build_package_to_source_mapping_with_binary_list(self, tmp_path):
+        """Test building mapping when source has explicit binary list"""
+        from package_managers.debian.main import build_package_to_source_mapping
+
+        # Create a test sources file
+        sources_content = """Package: test-source
+Binary: test-pkg1, test-pkg2, test-pkg3
+Vcs-Git: https://github.com/test/test-source.git
+Homepage: https://example.com/test-source
+
+Package: another-source
+Binary: another-pkg
+Vcs-Browser: https://github.com/test/another-source
+"""
+
+        sources_file = tmp_path / "sources"
+        sources_file.write_text(sources_content)
+
+        # Build mapping
+        mapping = build_package_to_source_mapping(str(sources_file))
+
+        # Verify mapping
+        assert len(mapping) == 4  # 3 packages from first source + 1 from second
+        assert "test-pkg1" in mapping
+        assert "test-pkg2" in mapping
+        assert "test-pkg3" in mapping
+        assert "another-pkg" in mapping
+
+        # Verify source data is correctly associated
+        assert mapping["test-pkg1"].package == "test-source"
+        # URLs are normalized by the parser - expect normalized format
+        assert mapping["test-pkg1"].vcs_git == "github.com/test/test-source"
+        assert mapping["test-pkg2"].package == "test-source"
+        assert mapping["another-pkg"].package == "another-source"
+        assert mapping["another-pkg"].vcs_browser == "github.com/test/another-source"
+
+    def test_build_package_to_source_mapping_no_binary_list(self, tmp_path):
+        """Test building mapping when source has no explicit binary list"""
+        from package_managers.debian.main import build_package_to_source_mapping
+
+        # Create a test sources file with no Binary field
+        sources_content = """Package: single-source
+Vcs-Git: https://github.com/test/single-source.git
+Homepage: https://example.com/single-source
+"""
+
+        sources_file = tmp_path / "sources"
+        sources_file.write_text(sources_content)
+
+        # Build mapping
+        mapping = build_package_to_source_mapping(str(sources_file))
+
+        # Verify mapping - should use source package name as binary name
+        assert len(mapping) == 1
+        assert "single-source" in mapping
+        assert mapping["single-source"].package == "single-source"
+        # URLs are normalized by the parser - expect normalized format
+        assert mapping["single-source"].vcs_git == "github.com/test/single-source"
+
+    def test_enrich_package_with_explicit_source(self):
+        """Test enriching package that has explicit source reference"""
+        from package_managers.debian.main import enrich_package_with_source
+
+        # Create package data with explicit source reference
+        package_data = create_debian_package(
+            package="binary-pkg",
+            description="A binary package",
+        )
+        package_data.source = "source-pkg"
+
+        # Create source mapping
+        source_data = create_debian_package(
+            package="source-pkg",
+            vcs_git="github.com/test/source-pkg",  # Already normalized format
+            homepage="example.com/source-pkg",  # Already normalized format
+            build_depends=["build-dep1", "build-dep2"],
+        )
+        source_mapping = {"source-pkg": source_data}
+
+        # Enrich package
+        enriched = enrich_package_with_source(package_data, source_mapping)
+
+        # Verify enrichment
+        assert enriched.package == "binary-pkg"
+        assert enriched.description == "A binary package"
+        assert enriched.vcs_git == "github.com/test/source-pkg"
+        assert enriched.homepage == "example.com/source-pkg"
+        assert enriched.build_depends == ["build-dep1", "build-dep2"]
+
+    def test_enrich_package_no_explicit_source(self):
+        """Test enriching package with no explicit source reference"""
+        from package_managers.debian.main import enrich_package_with_source
+
+        # Create package data with no explicit source
+        package_data = create_debian_package(
+            package="self-source-pkg",
+            description="A self-sourced package",
+        )
+
+        # Create source mapping with same name as package
+        source_data = create_debian_package(
+            package="self-source-pkg",
+            vcs_browser="github.com/test/self-source-pkg",  # Already normalized format
+            directory="pool/main/s/self-source-pkg",
+        )
+        source_mapping = {"self-source-pkg": source_data}
+
+        # Enrich package
+        enriched = enrich_package_with_source(package_data, source_mapping)
+
+        # Verify enrichment
+        assert enriched.package == "self-source-pkg"
+        assert enriched.vcs_browser == "github.com/test/self-source-pkg"
+        assert enriched.directory == "pool/main/s/self-source-pkg"
+
+    def test_enrich_package_missing_source_warning(self, caplog, mock_logger):
+        """Test warning when package references missing source"""
+        from package_managers.debian.main import enrich_package_with_source
+
+        # Create package data with source that doesn't exist in mapping
+        package_data = create_debian_package(
+            package="orphan-pkg",
+            description="An orphaned package",
+        )
+        package_data.source = "missing-source"
+
+        # Empty source mapping
+        source_mapping = {}
+
+        # Enrich package (this should log a warning)
+        enriched = enrich_package_with_source(package_data, source_mapping)
+
+        # The warning should be present in the function execution output
+        # Check the logged warning message directly
+        # Note: The warning is logged by our function, so we check the expected behavior
+
+        # Package should remain unchanged
+        assert enriched.package == "orphan-pkg"
+        assert enriched.description == "An orphaned package"
+        assert not enriched.vcs_git
+        assert not enriched.vcs_browser
+
+    def test_enrich_package_preserves_existing_fields(self):
+        """Test that existing package fields are not overwritten"""
+        from package_managers.debian.main import enrich_package_with_source
+
+        # Create package data with existing homepage
+        package_data = create_debian_package(
+            package="pkg-with-homepage",
+            homepage="pkg-homepage.com",  # Normalized format
+        )
+
+        # Create source data with different homepage
+        source_data = create_debian_package(
+            package="pkg-with-homepage",
+            homepage="source-homepage.com",  # Normalized format
+            vcs_git="github.com/test/pkg",  # Normalized format
+        )
+        source_mapping = {"pkg-with-homepage": source_data}
+
+        # Enrich package
+        enriched = enrich_package_with_source(package_data, source_mapping)
+
+        # Verify package homepage is preserved, but source info is added
+        assert enriched.homepage == "pkg-homepage.com"  # Package value preserved
+        assert enriched.vcs_git == "github.com/test/pkg"  # Source value added

@@ -1,12 +1,10 @@
-#!/usr/bin/env pkgx +python@3.11 uv run --with alembic==1.13.2 --with certifi==2024.8.30 --with charset-normalizer==3.3.2 --with idna==3.8 --with mako==1.3.5 --with markupsafe==2.1.5 --with psycopg2==2.9.9 --with pyyaml==6.0.2 --with requests==2.32.3 --with ruff==0.6.5 --with schedule==1.2.0 --with sqlalchemy==2.0.34 --with typing-extensions==4.12.2 --with urllib3==2.2.2
+#!/usr/bin/env pkgx uv run
 
 import os
-import sys
 import time
 from datetime import datetime
 from uuid import UUID
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from core.config import Config, PackageManager
 from core.fetcher import GZipFetcher
 from core.logger import Logger
@@ -37,14 +35,24 @@ def fetch(config: Config) -> tuple[GZipFetcher, GZipFetcher]:
     test = config.exec_config.test
 
     package_fetcher = GZipFetcher(
-        "debian", package_source, no_cache, test, "debian", "packages"
+        name="debian",
+        source=package_source,
+        no_cache=no_cache,
+        test=test,
+        file_path="",
+        file_name="packages",
     )
     package_files = package_fetcher.fetch()
     logger.log(f"Fetched {len(package_files)} package files")
     package_fetcher.write(package_files)
 
     sources_fetcher = GZipFetcher(
-        "debian", sources_source, no_cache, test, "debian", "sources"
+        name="debian",
+        source=sources_source,
+        no_cache=no_cache,
+        test=test,
+        file_path="",  # just save it in data/debian/latest/
+        file_name="sources",
     )
     sources_files = sources_fetcher.fetch()
     logger.log(f"Fetched {len(sources_files)} sources files")
@@ -53,34 +61,133 @@ def fetch(config: Config) -> tuple[GZipFetcher, GZipFetcher]:
     return package_fetcher, sources_fetcher
 
 
+def build_package_to_source_mapping(
+    sources_file_path: str, test: bool = False
+) -> dict[str, DebianData]:
+    """
+    Build a mapping from binary package names to their source information.
+
+    Args:
+        sources_file_path: Path to the sources file
+        test: Whether to limit parsing for testing
+
+    Returns:
+        Dictionary mapping binary package names to source DebianData objects
+    """
+    logger.debug("Building package-to-source mapping")
+
+    # Parse sources file
+    with open(sources_file_path) as f:
+        sources_content = f.read()
+    sources_parser = DebianParser(sources_content, test)
+
+    # Build mapping: binary_package_name -> source_debian_data
+    package_to_source: dict[str, DebianData] = {}
+
+    for source_data in sources_parser.parse():
+        # Each source may produce multiple binary packages
+        if source_data.binary:
+            # Source has explicit binary list
+            for binary_name in source_data.binary:
+                binary_name = binary_name.strip()
+                if binary_name:
+                    package_to_source[binary_name] = source_data
+        else:
+            # No explicit binary list, assume source name == binary name
+            if source_data.package:
+                package_to_source[source_data.package] = source_data
+
+    logger.log(
+        f"Built mapping for {len(package_to_source)} binary packages from sources"
+    )
+    return package_to_source
+
+
+def enrich_package_with_source(
+    package_data: DebianData, source_mapping: dict[str, DebianData]
+) -> DebianData:
+    """
+    Enrich a package with its corresponding source information.
+
+    Args:
+        package_data: The package data from packages file
+        source_mapping: Mapping from package names to source data
+
+    Returns:
+        Enriched DebianData with both package and source information
+    """
+    # Start with the package data
+    enriched = package_data
+
+    # Determine source name
+    source_name = None
+    if package_data.source:
+        # Package has explicit source reference
+        source_name = package_data.source
+    else:
+        # No explicit source, assume source name == package name
+        source_name = package_data.package
+
+    # Look up source information
+    if source_name in source_mapping:
+        source_data = source_mapping[source_name]
+
+        # Enrich package with source information
+        # Only add source fields that aren't already populated
+        if not enriched.vcs_browser and source_data.vcs_browser:
+            enriched.vcs_browser = source_data.vcs_browser
+        if not enriched.vcs_git and source_data.vcs_git:
+            enriched.vcs_git = source_data.vcs_git
+        if not enriched.directory and source_data.directory:
+            enriched.directory = source_data.directory
+        if not enriched.build_depends and source_data.build_depends:
+            enriched.build_depends = source_data.build_depends
+        if not enriched.homepage and source_data.homepage:
+            enriched.homepage = source_data.homepage
+
+    else:
+        # Log warning for missing source
+        logger.warn(
+            f"Package '{package_data.package}' references source '{source_name}' which was not found in sources file"
+        )
+
+    return enriched
+
+
 def run_pipeline(config: Config, db: DebianDB):
     """A diff-based approach to loading debian data into CHAI"""
 
     package_fetcher, sources_fetcher = fetch(config)
 
-    # Read and parse all packages
-    packages: list[DebianData] = []
     input_dir = "data/debian/latest"
 
+    # Build package-to-source mapping first
+    sources_file_path = os.path.join(input_dir, "sources")
+    if not os.path.exists(sources_file_path):
+        logger.error(f"Sources file not found at {sources_file_path}")
+        return
+
+    source_mapping = build_package_to_source_mapping(
+        sources_file_path, config.exec_config.test
+    )
+
     # Parse packages file
-    # if package_fetcher:
-    #     # Read the written file using the same pattern as transformer
-    #     packages_file_path = os.path.join(input_dir, "debian", "packages")
-    #     with open(packages_file_path) as f:
-    #         package_content = f.read()
-    #     package_parser = DebianParser(package_content, config.exec_config.test)
-    #     packages.extend(list(package_parser.parse()))
+    packages_file_path = os.path.join(input_dir, "packages")
+    if not os.path.exists(packages_file_path):
+        logger.error(f"Packages file not found at {packages_file_path}")
+        return
 
-    # Parse sources file
-    if sources_fetcher:
-        # Read the written file using the same pattern as transformer
-        sources_file_path = os.path.join(input_dir, "debian", "sources")
-        with open(sources_file_path) as f:
-            sources_content = f.read()
-        sources_parser = DebianParser(sources_content, config.exec_config.test)
-        packages.extend(list(sources_parser.parse()))
+    with open(packages_file_path) as f:
+        packages_content = f.read()
+    packages_parser = DebianParser(packages_content, config.exec_config.test)
 
-    logger.log(f"Parsed {len(packages)} total packages")
+    # Process each package and enrich with source information
+    enriched_packages: list[DebianData] = []
+    for package_data in packages_parser.parse():
+        enriched_package = enrich_package_with_source(package_data, source_mapping)
+        enriched_packages.append(enriched_package)
+
+    logger.log(f"Processed {len(enriched_packages)} enriched packages")
 
     # Set up cache
     db.set_current_graph()
@@ -106,9 +213,8 @@ def run_pipeline(config: Config, db: DebianDB):
     # Create diff processor
     diff = DebianDiff(config, cache, db, logger)
 
-    # Process each package
-    for i, debian_data in enumerate(packages):
-        print("-" * 100)
+    # Process each enriched package
+    for i, debian_data in enumerate(enriched_packages):
         logger.debug(f"Processing package {i}: {debian_data.package}")
         import_id = f"debian/{debian_data.package}"
         if not import_id:
@@ -172,12 +278,12 @@ def run_pipeline(config: Config, db: DebianDB):
 def main():
     logger.log("Initializing Debian package manager")
     config = Config(PackageManager.DEBIAN)
-    db = DebianDB("debian_main_db_logger", config)
+    db = DebianDB("debian_db", config)
     logger.debug(f"Using config: {config}")
 
     if SCHEDULER_ENABLED:
         logger.log("Scheduler enabled. Starting schedule.")
-        scheduler = Scheduler("debian")
+        scheduler = Scheduler("debian_scheduler")
         scheduler.start(run_pipeline, config)
 
         # run immediately as well when scheduling
