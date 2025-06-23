@@ -174,6 +174,17 @@ jobs:
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/ranker:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/ranker:latest
+
+      - name: Build and push chai-api image
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./api/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/chai-api:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/chai-api:latest
   deploy:
     needs: [changes, build]
     if: ${{ needs.changes.outputs.any_changes == 'true' || github.event_name == 'workflow_dispatch' }}
