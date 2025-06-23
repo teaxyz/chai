@@ -38,6 +38,9 @@ class TestDebianParser:
             "binutils-for-build",
             "binutils-ia64-linux-gnu-dbg",
             "binutils-m68k-linux-gnu",
+            "binutils-mips64el-linux-gnuabin32-dbg",
+            "binutils-mipsisa64r6-linux-gnuabin32",
+            "binutils-mipsisa64r6el-linux-gnuabi64-dbg",
         ]
 
     def test_parse_package_data(self):
@@ -155,8 +158,8 @@ Testsuite-Triggers: g++, pyrex
 
         # Test other source fields
         assert source.format == "3.0 (quilt)"
-        assert source.vcs_browser == "https://salsa.debian.org/games-team/0ad"
-        assert source.vcs_git == "https://salsa.debian.org/games-team/0ad.git"
+        assert source.vcs_browser == "salsa.debian.org/games-team/0ad"
+        assert source.vcs_git == "salsa.debian.org/games-team/0ad"
         assert source.testsuite == "autopkgtest"
         assert source.testsuite_triggers == "g++, pyrex"
 

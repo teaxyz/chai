@@ -101,8 +101,13 @@ class DebianParser:
             # each paragraph represents one object
             obj = DebianData()
 
+            # State for handling multiline fields
+            current_field = None
+            current_value = ""
+
             # populate the object
-            for line in paragraph.split("\n"):
+            lines = paragraph.split("\n")
+            for i, line in enumerate(lines):
                 # if the line is empty, then move on
                 if not line.strip():
                     continue
@@ -110,10 +115,26 @@ class DebianParser:
                 # if the line starts with a tab or space, then it's a continuation of
                 # the previous field
                 if line[0] == " " or line[0] == "\t":
+                    # Append continuation line to current field value
+                    if current_field is not None:
+                        current_value += " " + line.strip()
                     continue
 
-                # split the line into key and value
-                self.handle_line(obj, line)
+                # Process any accumulated field before starting new one
+                if current_field is not None:
+                    self.mapper(obj, current_field, current_value)
+
+                # Start new field
+                if ":" not in line:
+                    continue
+
+                key, value = line.split(":", 1)
+                current_field = key.strip()
+                current_value = value.strip()
+
+            # Process the final accumulated field
+            if current_field is not None:
+                self.mapper(obj, current_field, current_value)
 
             if obj.package:
                 yield obj
@@ -172,7 +193,7 @@ class DebianParser:
             case "Testsuite-Triggers":
                 obj.testsuite_triggers = value.strip()
             case "Binary":
-                obj.binary = [bin.strip() for bin in value.split(",")]
+                obj.binary = [bin.strip() for bin in value.split(",") if bin.strip()]
             case "Package-List":
                 obj.package_list = [pkg.strip() for pkg in value.split(",")]
 
