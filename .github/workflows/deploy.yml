@@ -2,6 +2,9 @@ name: "Release Chai"
 run-name: Release Chai - ${{ inputs.env || 'auto' }} - ${{ inputs.ref || github.ref }}
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       env:
@@ -91,14 +94,14 @@ jobs:
       - name: Set deployment ref
         id: set-ref
         run: |
-          DEPLOY_REF=${{ inputs.ref }}
+          DEPLOY_REF=${{ inputs.ref || github.sha }}
           echo "DEPLOY_REF=${DEPLOY_REF}" >> $GITHUB_ENV
           echo "deploy_ref=${DEPLOY_REF}" >> $GITHUB_OUTPUT
       
       - name: Set environment
         id: set-env
         run: |
-          DEPLOY_ENV=${{ inputs.env }}
+          DEPLOY_ENV=${{ inputs.env || 'dev' }}
           echo "DEPLOY_ENV=${DEPLOY_ENV}" >> $GITHUB_ENV
           echo "deploy_env=${DEPLOY_ENV}" >> $GITHUB_OUTPUT
       
@@ -195,10 +198,9 @@ jobs:
           echo "DEPLOY_ENV=${DEPLOY_ENV}" >> $GITHUB_ENV
           echo "deploy_env=${DEPLOY_ENV}" >> $GITHUB_OUTPUT
 
-      - name: Run Alembic Migrations
-        if: ${{ needs.changes.outputs.alembic == 'true' || github.event_name == 'workflow_dispatch' }}
+      - name: Deploy chai-api
         run: |
           aws ecs run-task --cluster chai-${{ env.DEPLOY_ENV }} \
-                          --task-definition ${{ env.DEPLOY_ENV }}-chai-alembic-run \
+                          --task-definition ${{ env.DEPLOY_ENV }}-chai-api-run \
                           --launch-type FARGATE \
                           --network-configuration "awsvpcConfiguration={subnets=['${{ secrets.PRIVATE_SUBNET_ID }}'],securityGroups=['${{ secrets.ECS_SECURITY_GROUP_ID }}'],assignPublicIp=DISABLED}"
