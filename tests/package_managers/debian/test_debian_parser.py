@@ -10,9 +10,35 @@ import pytest
 from package_managers.debian.parser import DebianParser
 
 
+@pytest.fixture
+def multiline_binutils():
+    return """
+Package: binutils
+Binary: binutils-for-host, binutils-for-build,
+ binutils-ia64-linux-gnu-dbg, binutils-m68k-linux-gnu,
+ binutils-mips64el-linux-gnuabin32-dbg, binutils-mipsisa64r6-linux-gnuabin32,
+ binutils-mipsisa64r6el-linux-gnuabi64-dbg
+
+"""
+
+
 @pytest.mark.parser
 class TestDebianParser:
     """Test the Debian parser functionality."""
+
+    def test_multiline_binutils(self, multiline_binutils):
+        """Test handling of multiline binaries."""
+        parser = DebianParser(multiline_binutils)
+        sources = list(parser.parse())
+        assert len(sources) == 1
+        source = sources[0]
+        assert source.package == "binutils"
+        assert source.binary == [
+            "binutils-for-host",
+            "binutils-for-build",
+            "binutils-ia64-linux-gnu-dbg",
+            "binutils-m68k-linux-gnu",
+        ]
 
     def test_parse_package_data(self):
         """Test parsing a typical package entry from Packages file."""

@@ -1,6 +1,7 @@
 #!/usr/bin/env pkgx uv run
 
 import os
+import sys
 import time
 from datetime import datetime
 from uuid import UUID
@@ -120,17 +121,11 @@ def enrich_package_with_source(
     enriched = package_data
 
     # Determine source name
-    source_name = None
-    if package_data.source:
-        # Package has explicit source reference
-        source_name = package_data.source
-    else:
-        # No explicit source, assume source name == package name
-        source_name = package_data.package
+    binary_name = package_data.package
 
     # Look up source information
-    if source_name in source_mapping:
-        source_data = source_mapping[source_name]
+    if binary_name in source_mapping:
+        source_data = source_mapping[binary_name]
 
         # Enrich package with source information
         # Only add source fields that aren't already populated
@@ -147,8 +142,9 @@ def enrich_package_with_source(
 
     else:
         # Log warning for missing source
+        source_name = package_data.source or package_data.package
         logger.warn(
-            f"Package '{package_data.package}' references source '{source_name}' which was not found in sources file"
+            f"Binary '{binary_name}' of source '{source_name}' was not found in sources file"
         )
 
     return enriched
@@ -212,6 +208,8 @@ def run_pipeline(config: Config, db: DebianDB):
 
     # Create diff processor
     diff = DebianDiff(config, cache, db, logger)
+
+    sys.exit()
 
     # Process each enriched package
     for i, debian_data in enumerate(enriched_packages):
