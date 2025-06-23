@@ -179,7 +179,7 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true }}
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ./api
           file: ./api/Dockerfile
           push: true
           tags: |
