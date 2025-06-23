@@ -201,5 +201,5 @@ jobs:
       - name: Deploy chai-api
         run: |
           aws ecs update-service --cluster chai-${{ env.DEPLOY_ENV }} \
-                                 --service ${{ env.DEPLOY_ENV }-chai-api \
+                                 --service ${{ env.DEPLOY_ENV }}-chai-api \
                                  --force-new-deployment
