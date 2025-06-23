@@ -1,6 +1,7 @@
 from unittest.mock import mock_open, patch
 
 import pytest
+
 from package_managers.debian.scripts.investigate_sources import parse_sources_file
 
 

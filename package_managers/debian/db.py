@@ -78,6 +78,10 @@ class DebianDB(DB):
         self.logger.log(f"Removed dependencies: {len(removed_deps)}")
         self.logger.log("-" * 100)
 
+        import sys
+
+        sys.exit()
+
         with self.session() as session:
             try:
                 # 1. Add all new objects with granular flushes

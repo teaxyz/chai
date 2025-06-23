@@ -1,7 +1,6 @@
 #!/usr/bin/env pkgx uv run
 
 import os
-import sys
 import time
 from datetime import datetime
 from uuid import UUID
@@ -62,9 +61,7 @@ def fetch(config: Config) -> tuple[GZipFetcher, GZipFetcher]:
     return package_fetcher, sources_fetcher
 
 
-def build_package_to_source_mapping(
-    sources_file_path: str, test: bool = False
-) -> dict[str, DebianData]:
+def build_package_to_source_mapping(sources_file_path: str) -> dict[str, DebianData]:
     """
     Build a mapping from binary package names to their source information.
 
@@ -80,7 +77,7 @@ def build_package_to_source_mapping(
     # Parse sources file
     with open(sources_file_path) as f:
         sources_content = f.read()
-    sources_parser = DebianParser(sources_content, test)
+    sources_parser = DebianParser(sources_content)
 
     # Build mapping: binary_package_name -> source_debian_data
     package_to_source: dict[str, DebianData] = {}
@@ -163,9 +160,7 @@ def run_pipeline(config: Config, db: DebianDB):
         logger.error(f"Sources file not found at {sources_file_path}")
         return
 
-    source_mapping = build_package_to_source_mapping(
-        sources_file_path, config.exec_config.test
-    )
+    source_mapping = build_package_to_source_mapping(sources_file_path)
 
     # Parse packages file
     packages_file_path = os.path.join(input_dir, "packages")
@@ -175,7 +170,7 @@ def run_pipeline(config: Config, db: DebianDB):
 
     with open(packages_file_path) as f:
         packages_content = f.read()
-    packages_parser = DebianParser(packages_content, config.exec_config.test)
+    packages_parser = DebianParser(packages_content)
 
     # Process each package and enrich with source information
     enriched_packages: list[DebianData] = []
@@ -208,8 +203,6 @@ def run_pipeline(config: Config, db: DebianDB):
 
     # Create diff processor
     diff = DebianDiff(config, cache, db, logger)
-
-    sys.exit()
 
     # Process each enriched package
     for i, debian_data in enumerate(enriched_packages):

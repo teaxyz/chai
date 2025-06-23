@@ -62,7 +62,7 @@ class DebianData:
     suggests: list[Depends] = field(default_factory=list)
     breaks: list[Depends] = field(default_factory=list)
     conflicts: list[Depends] = field(default_factory=list)
-    build_depends: list[str] = field(default_factory=list)  # source only
+    build_depends: list[Depends] = field(default_factory=list)  # source only
 
     # Source fields
     binary: list[str] = field(default_factory=list)
@@ -80,17 +80,13 @@ class DebianData:
 
 
 class DebianParser:
-    def __init__(self, content: str, test: bool = False):
+    def __init__(self, content: str):
         # content is the Packages or Sources file
         self.content = content
-        self.test = test
 
     def parse(self) -> Iterator[DebianData]:
         """Yield packages and sources from the Packages and Sources files."""
         paragraphs = self.content.split("\n\n")
-
-        if self.test:
-            paragraphs = paragraphs[:10]
 
         # iterate over the lines
         for paragraph in paragraphs:
@@ -107,7 +103,7 @@ class DebianParser:
 
             # populate the object
             lines = paragraph.split("\n")
-            for i, line in enumerate(lines):
+            for _i, line in enumerate(lines):
                 # if the line is empty, then move on
                 if not line.strip():
                     continue
@@ -267,11 +263,23 @@ class DebianParser:
 
 # Helpers for handling specific fields in the mapper
 def handle_depends(dependency: str) -> Depends:
+    # Handle various dependency formats:
     # 0ad-data (>= 0.0.26)
-    # use regex to match the `()`, because a split won't work
+    # lib32gcc1-amd64-cross [amd64 arm64 i386 ppc64el x32]
+    # gm2-11 [!powerpc !ppc64 !x32]
+    # debhelper-compat (= 13)
+    # gcc-11-source (>= 11.3.0-11~)
+
+    # First, strip platform specifications in square brackets
+    # Remove platform specs like [amd64 arm64 i386 ppc64el x32] or [!powerpc !ppc64 !x32]
+    platform_match = re.search(r"\s*\[[^\]]+\]", dependency)
+    if platform_match:
+        dependency = dependency.replace(platform_match.group(0), "").strip()
+
+    # Now handle version constraints in parentheses
     match = re.match(r"^(.*?)(\s*\((.*)\))?$", dependency)
     if match:
-        dep = match.group(1)
+        dep = match.group(1).strip()
         if match.group(2):
             semver = match.group(3)
             return Depends(package=dep, semver=semver)

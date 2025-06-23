@@ -33,12 +33,14 @@ def create_debian_package(
     debian_data.directory = directory
     debian_data.filename = filename
 
-    # Convert string dependencies to Depends objects (except build_depends which is list[str])
+    # Convert string dependencies to Depends objects
     if depends:
         debian_data.depends = [Depends(package=dep, semver="*") for dep in depends]
     if build_depends:
-        # build_depends is list[str] not list[Depends] in DebianData
-        debian_data.build_depends = build_depends
+        # build_depends is now list[Depends] like other dependency fields
+        debian_data.build_depends = [
+            Depends(package=dep, semver="*") for dep in build_depends
+        ]
     if recommends:
         debian_data.recommends = [
             Depends(package=dep, semver="*") for dep in recommends

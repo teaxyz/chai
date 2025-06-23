@@ -50,7 +50,7 @@ class DebianDiff:
             # the package exists, check if description has changed
             existing_pkg = self.caches.package_map[import_id]
             pkg_id = existing_pkg.id
-            
+
             # Check if description (readme) has changed
             if existing_pkg.readme != debian_data.description:
                 update_payload = {
@@ -146,7 +146,7 @@ class DebianDiff:
 
         The process is:
            1. Build a view of what the package's dependencies are according to
-              the parsed debian data, using priority-based deduplication  
+              the parsed debian data, using priority-based deduplication
            2. Get this package's ID from CHAI
            3. Get this package's existing dependencies from CHAI
            4. Compare the two sets, and identify new and removed dependencies
@@ -175,20 +175,15 @@ class DebianDiff:
             """Helper to process dependencies of a given type with priority"""
             for dep in dependencies:
                 # Handle build_depends which is list[str] vs other deps which are list[Depends]
-                if isinstance(dep, str):
-                    dep_name = dep
-                else:
-                    dep_name = dep.package
-                    
+                dep_name = dep if isinstance(dep, str) else dep.package
+
                 if not dep_name:
                     continue
 
                 # Get the dependency package from cache
                 dependency = self.caches.package_map.get(dep_name)
                 if not dependency:
-                    self.logger.warn(
-                        f"{dep_name}, dep of {import_id} is not in cache"
-                    )
+                    self.logger.warn(f"{dep_name}, dep of {import_id} is not in cache")
                     continue
 
                 # If this dependency already exists in our map, choose higher priority
@@ -286,7 +281,7 @@ class DebianDiff:
     def _generate_chai_urls(self, debian_data: DebianData) -> list[URLKey]:
         """Generate URLs for a debian package"""
         urls = []
-        
+
         # Homepage URL
         if debian_data.homepage:
             homepage_url = self._canonicalize(debian_data.homepage)
@@ -308,7 +303,9 @@ class DebianDiff:
         if debian_data.directory and debian_data.filename:
             # Debian archive URLs typically follow: http://archive.debian.org/debian/{directory}
             archive_base = "http://archive.debian.org/debian"
-            archive_url = f"{archive_base}/{debian_data.directory}/{debian_data.filename}"
+            archive_url = (
+                f"{archive_base}/{debian_data.directory}/{debian_data.filename}"
+            )
             urls.append(URLKey(archive_url, self.config.url_types.source))
 
         return urls
@@ -317,13 +314,13 @@ class DebianDiff:
         """Canonicalize a URL by cleaning it up"""
         if not url:
             return None
-        
+
         url = url.strip()
         if not url:
             return None
-            
+
         # Basic cleanup
-        if url.startswith("http://") or url.startswith("https://"):
+        if url.startswith(("http://", "https://")):
             return url
         elif url.startswith("//"):
             return f"https:{url}"

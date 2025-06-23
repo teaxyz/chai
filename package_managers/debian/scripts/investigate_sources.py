@@ -215,7 +215,7 @@ def investigate_mapping(sources_file: str, packages_file: str) -> None:
 
 
 def main():
-    data_dir = "data/debian/latest/debian"
+    data_dir = "data/debian/latest"
 
     # Check if data files exist
     sources_file = os.path.join(data_dir, "sources")
