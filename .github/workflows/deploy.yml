@@ -110,7 +110,7 @@ jobs:
           echo "deploy_env=${DEPLOY_ENV}" >> $GITHUB_OUTPUT
       
       - name: Build and push Crates indexer image
-        if: ${{ needs.changes.outputs.crates == 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ needs.changes.outputs.crates == 'true' || (github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true) }}
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -121,7 +121,7 @@ jobs:
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/crates:latest
       
       - name: Build and push Homebrew indexer image
-        if: ${{ needs.changes.outputs.homebrew == 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ needs.changes.outputs.homebrew == 'true' || (github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true) }}
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -132,7 +132,7 @@ jobs:
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/homebrew:latest
       
       - name: Build and push Debian indexer image
-        if: ${{ needs.changes.outputs.debian == 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ needs.changes.outputs.debian == 'true' || (github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true) }}
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -143,7 +143,7 @@ jobs:
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/debian:latest
       
       - name: Build and push Pkgx indexer image
-        if: ${{ needs.changes.outputs.pkgx == 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ needs.changes.outputs.pkgx == 'true' || (github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true) }}
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -154,7 +154,7 @@ jobs:
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/pkgx:latest
       
       - name: Build and push Alembic image
-        if: ${{ needs.changes.outputs.alembic == 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ needs.changes.outputs.alembic == 'true' || (github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true) }}
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -165,7 +165,7 @@ jobs:
             ${{ steps.login-ecr.outputs.registry }}/chai-v2/alembic:latest
   
       - name: Build and push Ranker indexer image
-        if: ${{ needs.changes.outputs.ranker == 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ needs.changes.outputs.ranker == 'true' || (github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true) }}
         uses: docker/build-push-action@v2
         with:
           context: .
