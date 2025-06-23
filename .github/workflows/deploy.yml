@@ -18,7 +18,7 @@ on:
           - mainnet
       ref:
         description: "The git ref (SHA or tag) to deploy"
-        required: true
+        required: false
       deploy_latest:
         description: "Force deploy all components from latest commit"
         required: false
