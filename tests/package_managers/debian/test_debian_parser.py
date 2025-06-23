@@ -62,6 +62,7 @@ Testsuite-Triggers: g++, pyrex
 
 @pytest.fixture
 def multiline_binary():
+    """Fixture for binary fields, specifically multi-lines ones"""
     return """
 Package: binutils
 Binary: binutils-for-host, binutils-for-build,
@@ -73,16 +74,32 @@ Binary: binutils-for-host, binutils-for-build,
 
 
 @pytest.fixture
-def platform_specified_build_depends():
+def build_depends():
+    """Fixture for all kinds of build depends."""
     return """
 Package: example
-Build-Depends: gcc-11-source (>= 11.3.0-11~), gawk, gettext, gperf (>= 3.0.1), lib32gcc1-amd64-cross [amd64 arm64 i386 ppc64el x32], g++-11, gccgo-11, gm2-11 [!powerpc !ppc64 !x32]
+Build-Depends: gcc-11-source (>= 11.3.0-11~), gawk, lib32gcc1-amd64-cross [amd64 arm64 i386 ppc64el x32], g++-11, gm2-11 [!powerpc !ppc64 !x32]
 """
 
 
 @pytest.mark.parser
 class TestDebianParser:
     """Test the Debian parser functionality."""
+
+    def test_build_depends(self, build_depends):
+        """Test parsing build depends."""
+        parser = DebianParser(build_depends)
+        sources = list(parser.parse())
+        assert len(sources) == 1
+        source = sources[0]
+        assert len(source.build_depends) == 5
+        assert any(dep.package == "gcc-11-source" for dep in source.build_depends)
+        assert any(dep.package == "gawk" for dep in source.build_depends)
+        assert any(
+            dep.package == "lib32gcc1-amd64-cross" for dep in source.build_depends
+        )
+        assert any(dep.package == "g++-11" for dep in source.build_depends)
+        assert any(dep.package == "gm2-11" for dep in source.build_depends)
 
     def test_multiline_binary(self, multiline_binary):
         """Test handling of multiline binaries."""
