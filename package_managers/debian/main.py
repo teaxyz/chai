@@ -180,9 +180,18 @@ def run_pipeline(config: Config, db: DebianDB):
 
     logger.log(f"Processed {len(enriched_packages)} enriched packages")
 
+    # Grab all the URLs from enriched packages
+    all_urls: set[str] = set()
+    for package in enriched_packages:
+        all_urls.add(package.homepage)
+        all_urls.add(package.vcs_browser)
+        all_urls.add(package.vcs_git)
+
+    logger.log(f"Found {len(all_urls)} URLs to load")
+
     # Set up cache
     db.set_current_graph()
-    db.set_current_urls()
+    db.set_current_urls(all_urls)
     logger.log("Set current URLs")
 
     cache = Cache(
@@ -242,7 +251,7 @@ def run_pipeline(config: Config, db: DebianDB):
             logger.debug(f"Removed dependencies: {len(removed_dependencies)}")
             removed_deps.extend(removed_dependencies)
 
-        if config.exec_config.test and i > 10:
+        if config.exec_config.test and i > 2:
             break
 
     # Convert new_urls dict to list for ingestion
@@ -253,10 +262,10 @@ def run_pipeline(config: Config, db: DebianDB):
         new_packages,
         final_new_urls,
         new_package_urls,
-        updated_packages,
-        updated_package_urls,
         new_deps,
         removed_deps,
+        updated_packages,
+        updated_package_urls,
     )
 
     if config.exec_config.no_cache:

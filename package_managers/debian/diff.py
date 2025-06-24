@@ -3,10 +3,13 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
+from permalint import normalize_url
+
 from core.config import Config
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
 from core.structs import Cache, URLKey
+from core.utils import is_github_url
 from package_managers.debian.db import DebianDB
 from package_managers.debian.parser import DebianData
 
@@ -176,14 +179,17 @@ class DebianDiff:
             for dep in dependencies:
                 # Handle build_depends which is list[str] vs other deps which are list[Depends]
                 dep_name = dep if isinstance(dep, str) else dep.package
+                lookup_dep_name = f"debian/{dep_name}"
 
                 if not dep_name:
                     continue
 
                 # Get the dependency package from cache
-                dependency = self.caches.package_map.get(dep_name)
+                dependency = self.caches.package_map.get(lookup_dep_name)
+
+                # try debian/dependency
                 if not dependency:
-                    self.logger.warn(f"{dep_name}, dep of {import_id} is not in cache")
+                    self.logger.debug(f"{dep_name} not loaded, will catch next time")
                     continue
 
                 # If this dependency already exists in our map, choose higher priority
@@ -223,7 +229,7 @@ class DebianDiff:
         # get the package ID for what we are working with
         package = self.caches.package_map.get(import_id)
         if not package:
-            self.logger.warn(f"New package {import_id}, will grab its deps next time")
+            self.logger.debug(f"New package {import_id}, will grab its deps next time")
             return [], []
 
         pkg_id: UUID = package.id
@@ -284,47 +290,17 @@ class DebianDiff:
 
         # Homepage URL
         if debian_data.homepage:
-            homepage_url = self._canonicalize(debian_data.homepage)
-            if homepage_url:
-                urls.append(URLKey(homepage_url, self.config.url_types.homepage))
+            urls.append(URLKey(debian_data.homepage, self.config.url_types.homepage))
 
-        # VCS URLs
-        if debian_data.vcs_git:
-            vcs_url = self._canonicalize(debian_data.vcs_git)
-            if vcs_url:
-                urls.append(URLKey(vcs_url, self.config.url_types.repository))
+        # Source URL
+        source_url = (
+            debian_data.vcs_git if debian_data.vcs_git else debian_data.vcs_browser
+        )
+        if source_url:
+            urls.append(URLKey(source_url, self.config.url_types.source))
 
-        if debian_data.vcs_browser:
-            vcs_browser_url = self._canonicalize(debian_data.vcs_browser)
-            if vcs_browser_url:
-                urls.append(URLKey(vcs_browser_url, self.config.url_types.repository))
-
-        # Archive/source URL (constructed from directory and filename)
-        if debian_data.directory and debian_data.filename:
-            # Debian archive URLs typically follow: http://archive.debian.org/debian/{directory}
-            archive_base = "http://archive.debian.org/debian"
-            archive_url = (
-                f"{archive_base}/{debian_data.directory}/{debian_data.filename}"
-            )
-            urls.append(URLKey(archive_url, self.config.url_types.source))
+        # Repository URL
+        if is_github_url(source_url):
+            urls.append(URLKey(source_url, self.config.url_types.repository))
 
         return urls
-
-    def _canonicalize(self, url: str) -> str | None:
-        """Canonicalize a URL by cleaning it up"""
-        if not url:
-            return None
-
-        url = url.strip()
-        if not url:
-            return None
-
-        # Basic cleanup
-        if url.startswith(("http://", "https://")):
-            return url
-        elif url.startswith("//"):
-            return f"https:{url}"
-        elif url.startswith("/"):
-            return f"https://archive.debian.org{url}"
-        else:
-            return f"https://{url}"
