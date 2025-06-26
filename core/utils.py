@@ -1,4 +1,5 @@
 from os import getenv
+from os.path import exists, join
 from typing import Any
 
 
@@ -44,3 +45,11 @@ def convert_keys_to_snake_case(data: dict[str, Any]) -> dict[str, Any]:
 def is_github_url(url: str) -> bool:
     """Assumes the url has been canonicalized by permalint"""
     return url.startswith("github.com/")
+
+
+def file_exists(*args) -> str:
+    """Confirms if a file exists"""
+    file_path = join(*args)
+    if not exists(file_path):
+        raise FileNotFoundError(f"{file_path} not found")
+    return file_path

@@ -28,7 +28,12 @@ from core.models import Source
 @pytest.fixture
 def mock_logger():
     """Mock logger for testing."""
-    return MagicMock(spec=Logger)
+    logger = MagicMock(spec=Logger)
+    logger.debug.side_effect = lambda x: print(f"DEBUG: {x}")
+    logger.warn.side_effect = lambda x: print(f"WARN: {x}")
+    logger.log.side_effect = lambda x: print(x)
+
+    return logger
 
 
 @pytest.fixture

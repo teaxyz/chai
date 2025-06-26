@@ -16,8 +16,6 @@ def build_package_to_source_mapping(
     Returns:
         Dictionary mapping binary package names to source DebianData objects
     """
-    logger.debug("Building package-to-source mapping")
-
     # Parse sources file
     with open(sources_file_path) as f:
         sources_content = f.read()

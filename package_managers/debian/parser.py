@@ -6,7 +6,7 @@ from permalint import normalize_url
 from package_managers.debian.structs import DebianData, Depends, Maintainer
 
 
-#
+# NOTE: The DebianParser is the one which normalizes all the URLs!
 class DebianParser:
     def __init__(self, content: str):
         # content is the Packages or Sources file

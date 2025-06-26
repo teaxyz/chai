@@ -3,8 +3,6 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from permalint import normalize_url
-
 from core.config import Config
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
@@ -39,7 +37,7 @@ class DebianDiff:
             # new package
             p = Package(
                 id=uuid4(),
-                derived_id=f"debian/{import_id}",
+                derived_id=import_id,
                 name=import_id,
                 package_manager_id=self.config.pm_config.pm_id,
                 import_id=import_id,

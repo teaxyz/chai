@@ -10,7 +10,8 @@ from core.fetcher import GZipFetcher
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
 from core.scheduler import Scheduler
-from core.structs import Cache, URLKey
+from core.structs import Cache, DiffResult, URLKey
+from core.utils import file_exists
 from package_managers.debian.db import DebianDB
 from package_managers.debian.debian_sources import (
     build_package_to_source_mapping,
@@ -19,13 +20,10 @@ from package_managers.debian.debian_sources import (
 from package_managers.debian.diff import DebianDiff
 from package_managers.debian.parser import DebianData, DebianParser
 
-logger = Logger("debian")
-
 SCHEDULER_ENABLED = os.getenv("ENABLE_SCHEDULER", "true").lower() == "true"
-BATCH_SIZE = 500
 
 
-def fetch(config: Config) -> tuple[GZipFetcher, GZipFetcher]:
+def fetch(config: Config, logger: Logger) -> tuple[GZipFetcher, GZipFetcher]:
     """Fetches the Debian packages & sources manifest files"""
     package_source = config.pm_config.source[0]
     sources_source = config.pm_config.source[1]
@@ -64,61 +62,14 @@ def fetch(config: Config) -> tuple[GZipFetcher, GZipFetcher]:
     return package_fetcher, sources_fetcher
 
 
-def run_pipeline(config: Config, db: DebianDB):
-    """A diff-based approach to loading debian data into CHAI"""
+def diff(
+    data: list[DebianData], config: Config, cache: Cache, db: DebianDB, logger: Logger
+) -> DiffResult:
+    # Keeps track of all the new packages we're adding
+    seen: dict[str, UUID] = {}
+    seen_new_pkg_urls: set[tuple[UUID, UUID]] = set()
 
-    package_fetcher, sources_fetcher = fetch(config)
-    input_dir = f"{sources_fetcher.output}/latest"
-
-    # Build package-to-source mapping first
-    sources_file_path = os.path.join(input_dir, "sources")
-    if not os.path.exists(sources_file_path):
-        logger.error(f"Sources file not found at {sources_file_path}")
-        return
-    source_mapping = build_package_to_source_mapping(sources_file_path, logger)
-
-    # Parse packages file
-    packages_file_path = os.path.join(input_dir, "packages")
-    if not os.path.exists(packages_file_path):
-        logger.error(f"Packages file not found at {packages_file_path}")
-        return
-
-    with open(packages_file_path) as f:
-        packages_content = f.read()
-    packages_parser = DebianParser(packages_content)
-
-    # Process each package and enrich with source information
-    enriched_packages: list[DebianData] = []
-    for package_data in packages_parser.parse():
-        enriched_package = enrich_package_with_source(
-            package_data, source_mapping, logger
-        )
-        enriched_packages.append(enriched_package)
-
-    logger.log(f"Processed {len(enriched_packages)} enriched packages")
-
-    # Grab all the URLs from enriched packages
-    all_urls: set[str] = set()
-    for package in enriched_packages:
-        all_urls.add(package.homepage)
-        all_urls.add(package.vcs_browser)
-        all_urls.add(package.vcs_git)
-
-    logger.log(f"Found {len(all_urls)} URLs to load")
-
-    # Set up cache
-    db.set_current_graph()
-    db.set_current_urls(all_urls)
-    logger.log("Set current URLs")
-
-    cache = Cache(
-        db.graph.package_map,
-        db.urls.url_map,
-        db.urls.package_urls,
-        db.graph.dependencies,
-    )
-
-    # Initialize differential loading collections
+    # Objects that we will return
     new_packages: list[Package] = []
     new_urls: dict[URLKey, URL] = {}
     new_package_urls: list[PackageURL] = []
@@ -131,8 +82,7 @@ def run_pipeline(config: Config, db: DebianDB):
     diff = DebianDiff(config, cache, db, logger)
 
     # Process each enriched package
-    for i, debian_data in enumerate(enriched_packages):
-        logger.debug(f"Processing package {i}: {debian_data.package}")
+    for i, debian_data in enumerate(data):
         import_id = f"debian/{debian_data.package}"
         if not import_id:
             logger.warn(f"Skipping package with empty name at index {i}")
@@ -141,9 +91,15 @@ def run_pipeline(config: Config, db: DebianDB):
         # Diff the package
         pkg_id, pkg_obj, update_payload = diff.diff_pkg(import_id, debian_data)
 
-        if pkg_obj:
+        # Guard: if pkg_obj is not None, that means it's a new package
+        # If it's new, **and** we have seen it before, set the ID to what is seen
+        # So, duplicates absorb all URLs & Dependencies under one umbrella
+        resolved_pkg_id = seen.get(pkg_obj.import_id, pkg_id)
+
+        if pkg_obj and pkg_obj.import_id not in seen:
             logger.debug(f"New package: {pkg_obj.name}")
             new_packages.append(pkg_obj)
+            seen[pkg_obj.import_id] = resolved_pkg_id
         if update_payload:
             logger.debug(f"Updated package: {update_payload['id']}")
             updated_packages.append(update_payload)
@@ -152,10 +108,16 @@ def run_pipeline(config: Config, db: DebianDB):
         resolved_urls = diff.diff_url(import_id, debian_data, new_urls)
 
         # Diff package URLs
-        new_links, updated_links = diff.diff_pkg_url(pkg_id, resolved_urls)
+        new_links, updated_links = diff.diff_pkg_url(resolved_pkg_id, resolved_urls)
         if new_links:
             logger.debug(f"New package URLs: {len(new_links)}")
-            new_package_urls.extend(new_links)
+
+            # guard: only add truly new links
+            for link in new_links:
+                if (link.package_id, link.url_id) not in seen_new_pkg_urls:
+                    new_package_urls.append(link)
+                    seen_new_pkg_urls.add((link.package_id, link.url_id))
+
         if updated_links:
             updated_package_urls.extend(updated_links)
 
@@ -171,25 +133,70 @@ def run_pipeline(config: Config, db: DebianDB):
         if config.exec_config.test and i > 2:
             break
 
-    # Convert new_urls dict to list for ingestion
-    final_new_urls = list(new_urls.values())
-
-    # Ingest all diffs
-    db.ingest(
+    return DiffResult(
         new_packages,
-        final_new_urls,
+        new_urls,
         new_package_urls,
-        new_deps,
-        removed_deps,
         updated_packages,
         updated_package_urls,
+        new_deps,
+        removed_deps,
     )
 
+
+def run_pipeline(config: Config, db: DebianDB, logger: Logger):
+    """The Debian Indexer"""
+
+    package_fetcher, sources_fetcher = fetch(config, logger)
+    input_dir = f"{sources_fetcher.output}/latest"
+
+    # Build package-to-source mapping first
+    sources_file_path = file_exists(input_dir, "sources")
+    source_mapping = build_package_to_source_mapping(sources_file_path, logger)
+
+    # Parse packages file
+    packages_file_path = file_exists(input_dir, "packages")
+    with open(packages_file_path) as f:
+        packages_content = f.read()
+    packages_parser = DebianParser(packages_content)
+
+    # Process each package and enrich with source information
+    enriched_packages: list[DebianData] = []
+    for package_data in packages_parser.parse():
+        enriched_package = enrich_package_with_source(
+            package_data, source_mapping, logger
+        )
+        enriched_packages.append(enriched_package)
+    logger.log(f"Processed {len(enriched_packages)} enriched packages")
+
+    # Grab all the URLs from enriched packages
+    all_urls: set[str] = set()
+    for package in enriched_packages:
+        all_urls.add(package.homepage)
+        all_urls.add(package.vcs_browser)
+        all_urls.add(package.vcs_git)
+    logger.log(f"Found {len(all_urls)} URLs to load")
+
+    # Set up cache
+    db.set_current_graph()
+    db.set_current_urls(all_urls)
+    cache = Cache(
+        db.graph.package_map,
+        db.urls.url_map,
+        db.urls.package_urls,
+        db.graph.dependencies,
+    )
+    logger.log("Setup cache")
+
+    # Perform the diff
+    result = diff(enriched_packages, config, cache, db, logger)
+
+    # Ingest all diffs
+    db.ingest(result)
+
     if config.exec_config.no_cache:
-        if package_fetcher:
-            package_fetcher.cleanup()
-        if sources_fetcher:
-            sources_fetcher.cleanup()
+        package_fetcher.cleanup()
+        sources_fetcher.cleanup()
 
 
 def main(config: Config, db: DebianDB):
@@ -220,4 +227,5 @@ def main(config: Config, db: DebianDB):
 if __name__ == "__main__":
     config = Config(PackageManager.DEBIAN)
     db = DebianDB("debian_db", config)
-    main(config, db)
+    logger = Logger("debian")
+    main(config, db, logger)

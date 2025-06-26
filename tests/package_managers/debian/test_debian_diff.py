@@ -3,6 +3,7 @@ from uuid import uuid4
 from core.models import URL, LegacyDependency, Package, PackageURL
 from core.structs import Cache, URLKey
 from package_managers.debian.diff import DebianDiff
+from package_managers.debian.main import diff as main_diff
 from tests.package_managers.debian.conftest import create_debian_package
 
 
@@ -529,3 +530,32 @@ class TestDebianDifferentialLoading:
         for dep in new_deps:
             assert dep.dependency_type_id == mock_config.dependency_types.runtime
             assert dep.dependency_id in [p2_id, p3_id]
+
+
+class TestDebianDiffFunction:
+    """Test cases for the main.diff function"""
+
+    def test_duplicate_package_paragraphs(self, mock_config, mock_logger, mock_db):
+        """Tests the case when the Debian Packages file contains duplicate packages"""
+        d1 = Package(id=uuid4(), derived_id="debian/d1", name="d1", import_id="d1")
+        d2 = Package(id=uuid4(), derived_id="debian/d2", name="d2", import_id="d2")
+        p1 = create_debian_package(
+            package="linux-doc", homepage="homepage.org", depends=["d1"]
+        )
+        p2 = create_debian_package(
+            package="linux-doc", homepage="homepage.org", depends=["d2"]
+        )
+        cache = Cache(
+            package_map={"debian/d1": d1, "debian/d2": d2},
+            url_map={},
+            package_urls={},
+            dependencies={},
+        )
+
+        data = [p1, p2]
+
+        result = main_diff(data, mock_config, cache, mock_db, mock_logger)
+
+        assert len(result.new_packages) == 1
+        assert len(result.new_package_urls) == 1
+        assert len(result.new_deps) == 0  # bc we don't load dependencies of new pkgs

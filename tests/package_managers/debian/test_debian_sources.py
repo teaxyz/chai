@@ -1,12 +1,17 @@
+from package_managers.debian.main import (
+    build_package_to_source_mapping,
+    enrich_package_with_source,
+)
 from tests.package_managers.debian.conftest import create_debian_package
 
 
 class TestPackageSourceMapping:
     """Test cases for package to source mapping functionality"""
 
-    def test_build_package_to_source_mapping_with_binary_list(self, tmp_path):
+    def test_build_package_to_source_mapping_with_binary_list(
+        self, tmp_path, mock_logger
+    ):
         """Test building mapping when source has explicit binary list"""
-        from package_managers.debian.main import build_package_to_source_mapping
 
         # Create a test sources file
         sources_content = """Package: test-source
@@ -23,7 +28,7 @@ Vcs-Browser: https://github.com/test/another-source
         sources_file.write_text(sources_content)
 
         # Build mapping
-        mapping = build_package_to_source_mapping(str(sources_file))
+        mapping = build_package_to_source_mapping(str(sources_file), mock_logger)
 
         # Verify mapping
         assert len(mapping) == 4  # 3 packages from first source + 1 from second
@@ -40,9 +45,10 @@ Vcs-Browser: https://github.com/test/another-source
         assert mapping["another-pkg"].package == "another-source"
         assert mapping["another-pkg"].vcs_browser == "github.com/test/another-source"
 
-    def test_build_package_to_source_mapping_no_binary_list(self, tmp_path):
+    def test_build_package_to_source_mapping_no_binary_list(
+        self, tmp_path, mock_logger
+    ):
         """Test building mapping when source has no explicit binary list"""
-        from package_managers.debian.main import build_package_to_source_mapping
 
         # Create a test sources file with no Binary field
         sources_content = """Package: single-source
@@ -54,7 +60,7 @@ Homepage: https://example.com/single-source
         sources_file.write_text(sources_content)
 
         # Build mapping
-        mapping = build_package_to_source_mapping(str(sources_file))
+        mapping = build_package_to_source_mapping(str(sources_file), mock_logger)
 
         # Verify mapping - should use source package name as binary name
         assert len(mapping) == 1
@@ -63,9 +69,8 @@ Homepage: https://example.com/single-source
         # URLs are normalized by the parser - expect normalized format
         assert mapping["single-source"].vcs_git == "github.com/test/single-source"
 
-    def test_enrich_package_with_explicit_source(self):
+    def test_enrich_package_with_explicit_source(self, mock_logger):
         """Test enriching package that has explicit source reference"""
-        from package_managers.debian.main import enrich_package_with_source
 
         # Create package data with explicit source reference
         package_data = create_debian_package(
@@ -81,21 +86,23 @@ Homepage: https://example.com/single-source
             homepage="example.com/source-pkg",  # Already normalized format
             build_depends=["build-dep1", "build-dep2"],
         )
-        source_mapping = {"source-pkg": source_data}
+        source_mapping = {"binary-pkg": source_data}
 
         # Enrich package
-        enriched = enrich_package_with_source(package_data, source_mapping)
+        enriched = enrich_package_with_source(package_data, source_mapping, mock_logger)
 
         # Verify enrichment
         assert enriched.package == "binary-pkg"
         assert enriched.description == "A binary package"
         assert enriched.vcs_git == "github.com/test/source-pkg"
         assert enriched.homepage == "example.com/source-pkg"
-        assert enriched.build_depends == ["build-dep1", "build-dep2"]
+        assert len(enriched.build_depends) == 2
 
-    def test_enrich_package_no_explicit_source(self):
+        build_depend_names = [item.package for item in enriched.build_depends]
+        assert build_depend_names == ["build-dep1", "build-dep2"]
+
+    def test_enrich_package_no_explicit_source(self, mock_logger):
         """Test enriching package with no explicit source reference"""
-        from package_managers.debian.main import enrich_package_with_source
 
         # Create package data with no explicit source
         package_data = create_debian_package(
@@ -112,7 +119,7 @@ Homepage: https://example.com/single-source
         source_mapping = {"self-source-pkg": source_data}
 
         # Enrich package
-        enriched = enrich_package_with_source(package_data, source_mapping)
+        enriched = enrich_package_with_source(package_data, source_mapping, mock_logger)
 
         # Verify enrichment
         assert enriched.package == "self-source-pkg"
@@ -134,7 +141,7 @@ Homepage: https://example.com/single-source
         source_mapping = {}
 
         # Enrich package (this should log a warning)
-        enriched = enrich_package_with_source(package_data, source_mapping)
+        enriched = enrich_package_with_source(package_data, source_mapping, mock_logger)
 
         # The warning should be present in the function execution output
         # Check the logged warning message directly
@@ -146,10 +153,8 @@ Homepage: https://example.com/single-source
         assert not enriched.vcs_git
         assert not enriched.vcs_browser
 
-    def test_enrich_package_preserves_existing_fields(self):
+    def test_enrich_package_preserves_existing_fields(self, mock_logger):
         """Test that existing package fields are not overwritten"""
-        from package_managers.debian.main import enrich_package_with_source
-
         # Create package data with existing homepage
         package_data = create_debian_package(
             package="pkg-with-homepage",
@@ -165,7 +170,7 @@ Homepage: https://example.com/single-source
         source_mapping = {"pkg-with-homepage": source_data}
 
         # Enrich package
-        enriched = enrich_package_with_source(package_data, source_mapping)
+        enriched = enrich_package_with_source(package_data, source_mapping, mock_logger)
 
         # Verify package homepage is preserved, but source info is added
         assert enriched.homepage == "pkg-homepage.com"  # Package value preserved
