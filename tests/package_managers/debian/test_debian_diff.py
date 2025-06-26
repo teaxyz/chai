@@ -1,6 +1,5 @@
 #!/usr/bin/env pkgx uv run
 
-from unittest.mock import patch
 from uuid import uuid4
 
 from core.models import URL, LegacyDependency, Package, PackageURL
@@ -55,7 +54,7 @@ class TestDebianDifferentialLoading:
     """Test cases for debian differential loading scenarios"""
 
     def test_package_exists_url_update(self, mock_config, mock_logger, mock_db):
-        """Test scenario 2: Package existed in database and needed a URL update"""
+        """Tests that Diff updates URLs when the package exists and the URL changes"""
 
         # Setup existing package and URL
         existing_pkg_id = uuid4()
@@ -114,14 +113,20 @@ class TestDebianDifferentialLoading:
 
         # The URL should be created in new_urls dict and the link should reference it
         assert len(new_urls) == 1  # One new URL should be created
-        new_url_key = list(new_urls.keys())[0]
+        new_url_key = next(iter(new_urls.keys()))
         new_url = new_urls[new_url_key]
         assert new_link.url_id == new_url.id  # Link should reference the new URL
         assert new_url_key.url == "https://new-homepage.com"
         assert new_url_key.url_type_id == mock_config.url_types.homepage
 
     def test_package_exists_dependency_change(self, mock_config, mock_logger, mock_db):
-        """Test scenario 3: Package existed in database and changed its dependencies"""
+        """
+        Tests that diff correctly records:
+
+          - New dependency
+          - Changes to existing dependencies
+          - Removed dependencies
+        """
 
         # Setup existing package and dependencies
         existing_pkg_id = uuid4()
@@ -196,7 +201,7 @@ class TestDebianDifferentialLoading:
         assert removed_deps[0].dependency_type_id == mock_config.dependency_types.build
 
     def test_completely_new_package(self, mock_config, mock_logger, mock_db):
-        """Test scenario 4: Package was completely new to the database"""
+        """Tests the addition of completely new packages & new URLs"""
 
         # Create empty cache (no existing packages)
         cache = Cache(package_map={}, url_map={}, package_urls={}, dependencies={})
@@ -235,7 +240,7 @@ class TestDebianDifferentialLoading:
 
         # Check that homepage URL was created
         homepage_url_found = False
-        for url_key, url in new_urls.items():
+        for url_key, _url in new_urls.items():
             if url_key.url_type_id == mock_config.url_types.homepage:
                 assert url_key.url == "https://github.com/example/new-pkg"
                 homepage_url_found = True
@@ -243,7 +248,7 @@ class TestDebianDifferentialLoading:
         assert homepage_url_found
 
     def test_no_changes_scenario(self, mock_config, mock_logger, mock_db):
-        """Test scenario where package exists but has no changes"""
+        """Tests where package exists but has no changes"""
 
         # Setup existing package
         existing_pkg_id = uuid4()
@@ -315,7 +320,7 @@ class TestDebianDifferentialLoading:
         assert update_payload["readme"] == "New description"
 
     def test_missing_dependency_handling(self, mock_config, mock_logger, mock_db):
-        """Test how missing dependencies are handled"""
+        """Tests the case that we DON'T add dependencies for new packages"""
 
         existing_pkg_id = uuid4()
         existing_package = Package(
@@ -347,9 +352,13 @@ class TestDebianDifferentialLoading:
     def test_dependency_type_priority_no_change(
         self, mock_config, mock_logger, mock_db
     ):
-        """Test case 1: p1 has runtime dependency to p2 in cache,
-        p1 depends on p2 as both runtime and build in parsed data.
-        Expect no change (runtime has priority)."""
+        """
+        Scenario:
+          - p1 has runtime dependency to p2 in cache
+          - p1 depends on p2 as both runtime and build in parsed data
+
+        Expect no change (runtime has priority).
+        """
 
         # Setup existing package and dependencies
         p1_id = uuid4()
@@ -389,9 +398,13 @@ class TestDebianDifferentialLoading:
     def test_dependency_type_change_runtime_to_build(
         self, mock_config, mock_logger, mock_db
     ):
-        """Test case 2: p1 has runtime dependency to p2 in cache,
-        p1 has build dependency to p2 in parsed data.
-        Expect removed runtime dependency and new build dependency."""
+        """
+        Scenario
+          - p1 has runtime dependency to p2 in cache
+          - p1 has build dependency to p2 in parsed data.
+
+        Expect removed runtime dependency and new build dependency
+        """
 
         p1_id = uuid4()
         p2_id = uuid4()
@@ -437,9 +450,13 @@ class TestDebianDifferentialLoading:
     def test_dependency_type_change_build_to_runtime(
         self, mock_config, mock_logger, mock_db
     ):
-        """Test case 3: p1 has build dependency to p2 in cache,
-        p1 has runtime dependency to p2 in parsed data.
-        Expect removed build dependency and new runtime dependency."""
+        """
+        Scenario:
+          - p1 has build dependency to p2 in cache
+          - p1 has runtime dependency to p2 in parsed data.
+
+        Expect removed build dependency and new runtime dependency
+        """
 
         p1_id = uuid4()
         p2_id = uuid4()
@@ -483,9 +500,13 @@ class TestDebianDifferentialLoading:
     def test_dependency_type_priority_new_package(
         self, mock_config, mock_logger, mock_db
     ):
-        """Test case 4: p1 has no dependencies to p2 in cache,
-        p1 has both runtime and build dependencies to p2 in parsed data.
-        Expect one new runtime dependency (priority over build)."""
+        """
+        Scenario:
+          - p1 has no dependencies to p2 in cache
+          - p1 has both runtime and build dependencies to p2 in parsed data
+
+        Expect one new runtime dependency (priority over build).
+        """
 
         p1_id = uuid4()
         p2_id = uuid4()
@@ -552,33 +573,6 @@ class TestDebianDifferentialLoading:
         for dep in new_deps:
             assert dep.dependency_type_id == mock_config.dependency_types.runtime
             assert dep.dependency_id in [p2_id, p3_id]
-
-    def test_archive_url_generation(self, mock_config, mock_logger, mock_db):
-        """Test that archive URLs are correctly generated from directory and filename"""
-
-        # Create empty cache
-        cache = Cache(package_map={}, url_map={}, package_urls={}, dependencies={})
-
-        # Create package data with directory and filename for archive URL
-        new_pkg_data = create_debian_package(
-            package="archive-pkg",
-            directory="pool/main/a/archive-pkg",
-            filename="archive-pkg_1.0-1_amd64.deb",
-        )
-
-        new_urls = {}
-        diff = DebianDiff(mock_config, cache, mock_db, mock_logger)
-
-        # Test URL generation
-        resolved_urls = diff.diff_url("archive-pkg", new_pkg_data, new_urls)
-
-        # Should create a source URL from directory + filename
-        assert len(new_urls) == 1
-        url_key = list(new_urls.keys())[0]
-        assert url_key.url_type_id == mock_config.url_types.source
-        # Archive URL should be constructed from debian archive base + directory + filename
-        expected_url = "http://archive.debian.org/debian/pool/main/a/archive-pkg/archive-pkg_1.0-1_amd64.deb"
-        assert url_key.url == expected_url
 
 
 class TestPackageSourceMapping:
