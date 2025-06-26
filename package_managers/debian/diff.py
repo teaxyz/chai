@@ -10,6 +10,7 @@ from core.structs import Cache, URLKey
 from core.utils import is_github_url
 from package_managers.debian.db import DebianDB
 from package_managers.debian.parser import DebianData
+from package_managers.debian.structs import Depends
 
 
 class DebianDiff:
@@ -172,18 +173,13 @@ class DebianDiff:
             self.config.dependency_types.test: 3,
         }
 
-        def process_deps(dependencies: list, dep_type: UUID) -> None:
+        def process_deps(dependencies: list[Depends], dep_type: UUID) -> None:
             """Helper to process dependencies of a given type with priority"""
             for dep in dependencies:
-                # Handle build_depends which is list[str] vs other deps which are list[Depends]
-                dep_name = dep if isinstance(dep, str) else dep.package
-                lookup_dep_name = f"debian/{dep_name}"
-
-                if not dep_name:
-                    continue
+                dep_name = f"debian/{dep.package}"  # bc the map is by import_id
 
                 # Get the dependency package from cache
-                dependency = self.caches.package_map.get(lookup_dep_name)
+                dependency = self.caches.package_map.get(dep_name)
 
                 # try debian/dependency
                 if not dependency:
@@ -197,9 +193,7 @@ class DebianDiff:
                     )
                     new_priority = priority_order.get(dep_type, 999)
 
-                    if (
-                        new_priority < existing_priority
-                    ):  # Lower number = higher priority
+                    if new_priority < existing_priority:  # Lower is better!
                         old_type_id = dependency_map[dep_name]
                         dependency_map[dep_name] = dep_type
                         self.logger.debug(

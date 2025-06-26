@@ -91,24 +91,25 @@ class TestDebianDifferentialLoading:
         dep2_id = uuid4()
         dep3_id = uuid4()
 
+        existing_import_id = "debian/dep-pkg"
         existing_package = Package(
             id=existing_pkg_id,
-            derived_id="debian/dep-pkg",
+            derived_id=existing_import_id,
             name="dep-pkg",
             package_manager_id=mock_config.pm_config.pm_id,
-            import_id="dep-pkg",
+            import_id=existing_import_id,
             readme="",
         )
 
         # Create dependency packages
         dep1_pkg = Package(
-            id=dep1_id, derived_id="debian/dep1", name="dep1", import_id="dep1"
+            id=dep1_id, derived_id="debian/dep1", name="dep1", import_id="debian/dep1"
         )
         dep2_pkg = Package(
-            id=dep2_id, derived_id="debian/dep2", name="dep2", import_id="dep2"
+            id=dep2_id, derived_id="debian/dep2", name="dep2", import_id="debian/dep2"
         )
         dep3_pkg = Package(
-            id=dep3_id, derived_id="debian/dep3", name="dep3", import_id="dep3"
+            id=dep3_id, derived_id="debian/dep3", name="dep3", import_id="debian/dep3"
         )
 
         # Create existing dependencies (dep1 as runtime, dep2 as build)
@@ -126,10 +127,10 @@ class TestDebianDifferentialLoading:
         # Create cache
         cache = Cache(
             package_map={
-                "dep-pkg": existing_package,
-                "dep1": dep1_pkg,
-                "dep2": dep2_pkg,
-                "dep3": dep3_pkg,
+                existing_import_id: existing_package,
+                "debian/dep1": dep1_pkg,
+                "debian/dep2": dep2_pkg,
+                "debian/dep3": dep3_pkg,
             },
             url_map={},
             package_urls={},
@@ -146,7 +147,7 @@ class TestDebianDifferentialLoading:
 
         # Test the diff
         diff = DebianDiff(mock_config, cache, mock_db, mock_logger)
-        new_deps, removed_deps = diff.diff_deps("dep-pkg", new_pkg_data)
+        new_deps, removed_deps = diff.diff_deps(existing_import_id, new_pkg_data)
 
         # Assertions
         assert len(new_deps) == 1  # dep3 should be added
