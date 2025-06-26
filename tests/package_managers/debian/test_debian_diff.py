@@ -175,13 +175,13 @@ class TestDebianDifferentialLoading:
 
         # Test the diff
         diff = DebianDiff(mock_config, cache, mock_db, mock_logger)
-        pkg_id, pkg_obj, update_payload = diff.diff_pkg("new-pkg", new_pkg_data)
+        pkg_id, pkg_obj, update_payload = diff.diff_pkg("debian/new-pkg", new_pkg_data)
 
         # Assertions
         assert pkg_obj is not None  # New package should be created
         assert pkg_obj.derived_id == "debian/new-pkg"
         assert pkg_obj.name == "new-pkg"
-        assert pkg_obj.import_id == "new-pkg"
+        assert pkg_obj.import_id == "debian/new-pkg"
         assert pkg_obj.package_manager_id == mock_config.pm_config.pm_id
         assert pkg_obj.readme == "A new package"
         assert update_payload == {}  # No updates for new package
@@ -502,12 +502,12 @@ class TestDebianDifferentialLoading:
         p2_id = uuid4()
         p3_id = uuid4()
 
-        p1_pkg = Package(id=p1_id, derived_id="debian/p1", name="p1", import_id="p1")
-        p2_pkg = Package(id=p2_id, derived_id="debian/p2", name="p2", import_id="p2")
-        p3_pkg = Package(id=p3_id, derived_id="debian/p3", name="p3", import_id="p3")
+        p1_pkg = Package(id=p1_id, derived_id="debian/p1", name="p1")
+        p2_pkg = Package(id=p2_id, derived_id="debian/p2", name="p2")
+        p3_pkg = Package(id=p3_id, derived_id="debian/p3", name="p3")
 
         cache = Cache(
-            package_map={"p1": p1_pkg, "p2": p2_pkg, "p3": p3_pkg},
+            package_map={"debian/p1": p1_pkg, "debian/p2": p2_pkg, "debian/p3": p3_pkg},
             url_map={},
             package_urls={},
             dependencies={},
@@ -521,7 +521,7 @@ class TestDebianDifferentialLoading:
         )
 
         diff = DebianDiff(mock_config, cache, mock_db, mock_logger)
-        new_deps, removed_deps = diff.diff_deps("p1", new_pkg_data)
+        new_deps, removed_deps = diff.diff_deps("debian/p1", new_pkg_data)
 
         # Should create runtime dependencies for both recommends and suggests
         assert len(removed_deps) == 0

@@ -36,10 +36,11 @@ class DebianDiff:
 
         if import_id not in self.caches.package_map:
             # new package
+            name = import_id.split("/")[1]
             p = Package(
                 id=uuid4(),
                 derived_id=import_id,
-                name=import_id,
+                name=name,
                 package_manager_id=self.config.pm_config.pm_id,
                 import_id=import_id,
                 readme=debian_data.description,
