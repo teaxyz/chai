@@ -333,7 +333,7 @@ class TestDebianDifferentialLoading:
         )
 
         cache = Cache(
-            package_map={"p1": p1_pkg, "p2": p2_pkg},
+            package_map={"debian/p1": p1_pkg, "debian/p2": p2_pkg},
             url_map={},
             package_urls={},
             dependencies={p1_id: {existing_runtime_dep}},
@@ -347,7 +347,7 @@ class TestDebianDifferentialLoading:
         )
 
         diff = DebianDiff(mock_config, cache, mock_db, mock_logger)
-        new_deps, removed_deps = diff.diff_deps("p1", new_pkg_data)
+        new_deps, removed_deps = diff.diff_deps("debian/p1", new_pkg_data)
 
         # Should have no changes - runtime priority means no change needed
         assert len(new_deps) == 0
@@ -378,7 +378,7 @@ class TestDebianDifferentialLoading:
         )
 
         cache = Cache(
-            package_map={"p1": p1_pkg, "p2": p2_pkg},
+            package_map={"debian/p1": p1_pkg, "debian/p2": p2_pkg},
             url_map={},
             package_urls={},
             dependencies={p1_id: {existing_runtime_dep}},
@@ -392,7 +392,7 @@ class TestDebianDifferentialLoading:
         )
 
         diff = DebianDiff(mock_config, cache, mock_db, mock_logger)
-        new_deps, removed_deps = diff.diff_deps("p1", new_pkg_data)
+        new_deps, removed_deps = diff.diff_deps("debian/p1", new_pkg_data)
 
         # Should remove runtime and add build
         assert len(removed_deps) == 1
@@ -430,7 +430,7 @@ class TestDebianDifferentialLoading:
         )
 
         cache = Cache(
-            package_map={"p1": p1_pkg, "p2": p2_pkg},
+            package_map={"debian/p1": p1_pkg, "debian/p2": p2_pkg},
             url_map={},
             package_urls={},
             dependencies={p1_id: {existing_build_dep}},
@@ -444,7 +444,7 @@ class TestDebianDifferentialLoading:
         )
 
         diff = DebianDiff(mock_config, cache, mock_db, mock_logger)
-        new_deps, removed_deps = diff.diff_deps("p1", new_pkg_data)
+        new_deps, removed_deps = diff.diff_deps("debian/p1", new_pkg_data)
 
         # Should remove build and add runtime
         assert len(removed_deps) == 1
@@ -473,7 +473,7 @@ class TestDebianDifferentialLoading:
         p2_pkg = Package(id=p2_id, derived_id="debian/p2", name="p2", import_id="p2")
 
         cache = Cache(
-            package_map={"p1": p1_pkg, "p2": p2_pkg},
+            package_map={"debian/p1": p1_pkg, "debian/p2": p2_pkg},
             url_map={},
             package_urls={},
             dependencies={},  # No existing dependencies
@@ -487,7 +487,7 @@ class TestDebianDifferentialLoading:
         )
 
         diff = DebianDiff(mock_config, cache, mock_db, mock_logger)
-        new_deps, removed_deps = diff.diff_deps("p1", new_pkg_data)
+        new_deps, removed_deps = diff.diff_deps("debian/p1", new_pkg_data)
 
         # Should only create one new dependency - runtime (higher priority)
         assert len(removed_deps) == 0
