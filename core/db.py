@@ -1,13 +1,11 @@
 import os
 from collections import defaultdict
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from sqlalchemy import Insert, Result, Update, create_engine, select, update
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, sessionmaker
 
 from core.logger import Logger
@@ -158,168 +156,6 @@ class DB:
             result: Result[tuple[Package, PackageURL, URL]] = session.execute(stmt)
             return self._build_current_urls(result)
 
-    # TODO: we should add the Cache class to the core structure, and have the individual
-    # transformers inherit from it. For now, keeping this as `Any`
-    def load_urls(self, data: dict[str, Any]) -> None:
-        """
-        Better way to load URLs by actually calculating the diff instead of relying on
-        the db **not** to do something on a conflict
-
-        - gets the current state of URLs in the database
-        - checks the inputted data against the current state
-        - identifies:
-          - new URLs
-          - new package-URL links
-          - updates all package-URL links to right now (TODO: easiest optimization)
-        """
-
-        @dataclass
-        class DiffResult:
-            new_urls: list[URL]
-            new_package_urls: list[PackageURL]
-            urls_to_update: list[PackageURL]
-
-        def get_desired_state() -> dict[UUID, set[URL]]:
-            """Based on the cache, return the map of package ID to URLs"""
-            desired_state: dict[UUID, set[URL]] = {}
-            for cache in data.values():
-                # first, a check
-                if not hasattr(cache.package, "id") or cache.package.id is None:
-                    self.logger.warn(
-                        f"Package {cache.package.name} has no ID, skipping"
-                    )
-                    continue
-
-                pkg_id = cache.package.id
-                if pkg_id not in desired_state:
-                    desired_state[pkg_id] = set()
-
-                for url in cache.urls:
-                    desired_state[pkg_id].add(url)
-
-            return desired_state
-
-        def diff(
-            current_state: CurrentURLs, desired_state: dict[UUID, set[URL]]
-        ) -> DiffResult:
-            """
-            Returns a DiffResult object with the new URLs, new package-URL links,
-            and package-URL links to update.
-            """
-            # define all results as dictionaries, to prevent uniqueness constraints
-            # from being violated
-            new_urls: dict[URLKey, URL] = {}
-            new_package_urls: dict[tuple[UUID, UUID], PackageURL] = {}
-            urls_to_update: dict[tuple[UUID, UUID], PackageURL] = {}
-
-            for pkg_id, urls in desired_state.items():
-                # what are the current URLs for this package?
-                current_package_urls: set[PackageURL] | None = (
-                    current_state.package_urls.get(pkg_id)
-                )
-
-                # let's make the current URLs a dictionary of URL ID to PackageURL
-                # object, so that it's easy to figure out which PackageURL we need
-                # to update later
-                # create it now, so it could be empty if the package has no URLs
-                # from the desired state loaded into the table
-                current_urls: dict[UUID, PackageURL] = {}
-
-                if current_package_urls:
-                    current_urls = {
-                        current_package_url.url_id: current_package_url
-                        for current_package_url in current_package_urls
-                    }
-
-                # what are the desired URLs for this package?
-                for url in urls:
-                    # does this url exist in current?
-                    url_key = URLKey(url.url, url.url_type_id)
-                    url_obj = current_state.url_map.get(url_key)
-
-                    # if not:
-                    if not url_obj:
-                        # track as a new URL
-                        if url_key not in new_urls:
-                            new_urls[url_key] = URL(
-                                id=uuid4(), url=url.url, url_type_id=url.url_type_id
-                            )
-
-                        # we'll use this ID to link the package to the URL
-                        url_id = new_urls[url_key].id
-                    else:
-                        url_id = url_obj.id
-
-                    # cool, so we have the ID now. we also know if we need to create it.
-                    # now, let's do the diff to check if this URL is already linked to
-                    # this package
-                    if url_id not in current_urls:
-                        if (pkg_id, url_id) not in new_package_urls:
-                            new_package_url = PackageURL(
-                                id=uuid4(),
-                                package_id=pkg_id,
-                                url_id=url_id,
-                                created_at=self.now,
-                                updated_at=self.now,
-                            )
-                            new_package_urls[(pkg_id, url_id)] = new_package_url
-                    else:
-                        # if it's already linked, just update the updated_at for now
-                        # TODO: I think this we should have a latest tag in this table
-                        # so we don't need to constantly ensure we're doing this update
-                        to_update = current_urls[url_id]
-                        to_update.updated_at = self.now
-                        if (pkg_id, url_id) not in urls_to_update:
-                            urls_to_update[(pkg_id, url_id)] = to_update
-
-            result = DiffResult(
-                new_urls=list(new_urls.values()),
-                new_package_urls=list(new_package_urls.values()),
-                urls_to_update=list(urls_to_update.values()),
-            )
-            return result
-
-        #  first, get the desired state of all the URL relationships
-        desired_state = get_desired_state()
-        self.logger.debug(f"Length of desired state: {len(desired_state)}")
-
-        # check if the URL strings from the above exist in the current state
-        desired_urls = {url.url for urls in desired_state.values() for url in urls}
-        current_state = self.current_urls(desired_urls)
-
-        # now, let's do the diff
-        result = diff(current_state, desired_state)
-
-        self.logger.debug(f"{len(result.new_urls)} new URLs")
-        self.logger.debug(f"{len(result.new_package_urls)} new package-URL links")
-        self.logger.debug(f"{len(result.urls_to_update)} package-URL links to update")
-
-        with self.session() as session:
-            try:
-                # use batch insert
-                self.logger.debug("Inserting new URLs")
-                self.load(session, result.new_urls, pg_insert(URL))
-
-                self.logger.debug("Inserting new package-URL links")
-                self.load(session, result.new_package_urls, pg_insert(PackageURL))
-
-                self.logger.debug("Updating package-URL links")
-                if result.urls_to_update:
-                    # values for batch updates needs to be explicitly specified on pkeys
-                    # https://docs.sqlalchemy.org/en/20/orm/queryguide/dml.html#orm-queryguide-bulk-update
-                    values = [
-                        {"id": pkg_url.id, "updated_at": pkg_url.updated_at}
-                        for pkg_url in result.urls_to_update
-                    ]
-                    stmt = update(PackageURL)
-                    session.execute(stmt, values)
-
-                session.commit()
-
-            except Exception as e:
-                self.logger.error("Error inserting URLs or PackageURLs")
-                raise e
-
     def load(
         self, session: Session, data: list[BaseModel], stmt: Insert | Update
     ) -> None:
@@ -404,27 +240,11 @@ class DB:
         with self.session() as session:
             try:
                 # 1. Add all new objects with granular flushes
-                if new_packages:
-                    session.add_all(new_packages)
-                    session.flush()
-
-                if new_urls:
-                    session.add_all(new_urls)
-                    session.flush()
-
-                if new_package_urls:
-                    session.add_all(new_package_urls)
-                    session.flush()
-
-                # 2. remove all items we need to remove
-                if removed_deps:
-                    for dep in removed_deps:
-                        session.delete(dep)
-                    session.flush()
-
-                if new_deps:
-                    session.add_all(new_deps)
-                    session.flush()
+                self.execute(session, new_packages, "add", "new packages")
+                self.execute(session, new_urls, "add", "new urls")
+                self.execute(session, new_package_urls, "add", "new package urls")
+                self.execute(session, removed_deps, "delete", "removed dependencies")
+                self.execute(session, new_deps, "add", "new dependencies")
 
                 # 2. Perform updates (these will now operate on a flushed state)
                 if updated_packages:
@@ -440,6 +260,26 @@ class DB:
                 self.logger.error(f"Error during batched ingest: {e}")
                 session.rollback()
                 raise e
+
+    def execute(self, session: Session, data: list[Any], method: str, log: str) -> None:
+        if method not in ["add", "delete"]:
+            raise ValueError(f"db.execute({method}) is unknown")
+
+        if data:
+            match method:
+                case "add":
+                    session.add_all(data)
+                case "delete":
+                    self.remove_all(session, data)
+                case _:
+                    pass
+
+            session.flush()
+        self.logger.log(f"✅ {len(data):,} {log}")
+
+    def remove_all(self, session: Session, data: list[Any]) -> None:
+        for item in data:
+            session.delete(item)
 
 
 class ConfigDB(DB):

@@ -153,34 +153,12 @@ rm -rf db/data data .venv
 docker compose build
 ```
 
-### start
+### start-all
 
 Requires: build
 
 ```sh
 docker compose up -d
-```
-
-### test
-
-Inputs: PACKAGE_MANAGER
-Env: PYTHONPATH=.
-Env: FETCH=false
-Env: TEST=true
-Env: DEBUG=true
-
-```sh
-pkgx uv run package_managers/$PACKAGE_MANAGER/main_v2.py
-```
-
-### full-test
-
-Requires: build
-Env: TEST=true
-Env: DEBUG=true
-
-```sh
-docker compose up
 ```
 
 ### stop
@@ -247,18 +225,6 @@ alembic downgrade -$STEP
 psql "postgresql://postgres:s3cr3t@localhost:5435/chai"
 ```
 
-### db-list-packages
-
-```sh
-psql "postgresql://postgres:s3cr3t@localhost:5435/chai" -c "SELECT count(id) FROM packages;"
-```
-
-### db-list-history
-
-```sh
-psql "postgresql://postgres:s3cr3t@localhost:5435/chai" -c "SELECT * FROM load_history;"
-```
-
 ### restart-api
 
 Refreshes table knowledge from the db.
@@ -273,7 +239,7 @@ docker compose restart api
 docker compose down --remove-orphans
 ```
 
-### run-pipeline
+### start-service
 
 Inputs: SERVICE
 Env: CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@host.docker.internal:5435/chai

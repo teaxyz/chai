@@ -22,7 +22,6 @@ from core.config import (
 )
 from core.db import DB
 from core.logger import Logger
-from core.models import Source
 
 
 @pytest.fixture
@@ -47,10 +46,10 @@ def mock_url_types():
     url_types = MagicMock(spec=URLTypes)
 
     # Set up URL type attributes directly
-    url_types.homepage = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000001"))
-    url_types.repository = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000002"))
-    url_types.documentation = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000003"))
-    url_types.source = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000004"))
+    url_types.homepage = uuid.UUID("00000000-0000-0000-0000-000000000001")
+    url_types.repository = uuid.UUID("00000000-0000-0000-0000-000000000002")
+    url_types.documentation = uuid.UUID("00000000-0000-0000-0000-000000000003")
+    url_types.source = uuid.UUID("00000000-0000-0000-0000-000000000004")
 
     return url_types
 
@@ -65,13 +64,13 @@ def mock_dependency_types():
     dep_types = MagicMock(spec=DependencyTypes)
 
     # Set up dependency type attributes directly
-    dep_types.runtime = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000010"))
-    dep_types.build = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000011"))
-    dep_types.dev = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000012"))
-    dep_types.test = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000013"))
+    dep_types.runtime = uuid.UUID("00000000-0000-0000-0000-000000000010")
+    dep_types.build = uuid.UUID("00000000-0000-0000-0000-000000000011")
+    dep_types.dev = uuid.UUID("00000000-0000-0000-0000-000000000012")
+    dep_types.test = uuid.UUID("00000000-0000-0000-0000-000000000013")
     dep_types.development = dep_types.dev  # Alias for development
-    dep_types.recommended = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000014"))
-    dep_types.optional = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000015"))
+    dep_types.recommended = uuid.UUID("00000000-0000-0000-0000-000000000014")
+    dep_types.optional = uuid.UUID("00000000-0000-0000-0000-000000000015")
 
     return dep_types
 
@@ -84,19 +83,11 @@ def mock_sources():
     Returns a dict mapping source names to mock Source objects.
     """
     return {
-        "github": Mock(
-            spec=Source, id=uuid.UUID("00000000-0000-0000-0000-000000000020")
-        ),
-        "crates": Mock(
-            spec=Source, id=uuid.UUID("00000000-0000-0000-0000-000000000021")
-        ),
-        "homebrew": Mock(
-            spec=Source, id=uuid.UUID("00000000-0000-0000-0000-000000000022")
-        ),
-        "debian": Mock(
-            spec=Source, id=uuid.UUID("00000000-0000-0000-0000-000000000023")
-        ),
-        "pkgx": Mock(spec=Source, id=uuid.UUID("00000000-0000-0000-0000-000000000024")),
+        "github": uuid.UUID("00000000-0000-0000-0000-000000000020"),
+        "crates": uuid.UUID("00000000-0000-0000-0000-000000000021"),
+        "homebrew": uuid.UUID("00000000-0000-0000-0000-000000000022"),
+        "debian": uuid.UUID("00000000-0000-0000-0000-000000000023"),
+        "pkgx": uuid.UUID("00000000-0000-0000-0000-000000000024"),
     }
 
 
@@ -110,12 +101,10 @@ def mock_package_managers():
     package_managers = MagicMock(spec=PackageManagers)
 
     # Set up package manager attributes directly
-    package_managers.crates = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000030"))
-    package_managers.homebrew = Mock(
-        id=uuid.UUID("00000000-0000-0000-0000-000000000031")
-    )
-    package_managers.debian = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000032"))
-    package_managers.pkgx = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000033"))
+    package_managers.crates = uuid.UUID("00000000-0000-0000-0000-000000000030")
+    package_managers.homebrew = uuid.UUID("00000000-0000-0000-0000-000000000031")
+    package_managers.debian = uuid.UUID("00000000-0000-0000-0000-000000000032")
+    package_managers.pkgx = uuid.UUID("00000000-0000-0000-0000-000000000033")
 
     return package_managers
 
@@ -128,13 +117,17 @@ def mock_pm_config(mock_package_managers):
     Returns a mock PMConf object with a default package manager ID.
     """
     pm_config = MagicMock(spec=PMConf)
-    pm_config.pm_id = mock_package_managers.crates.id
+    pm_config.pm_id = mock_package_managers.crates
     return pm_config
 
 
 @pytest.fixture
 def mock_config(
-    mock_url_types, mock_dependency_types, mock_package_managers, mock_pm_config
+    mock_url_types,
+    mock_dependency_types,
+    mock_package_managers,
+    mock_pm_config,
+    mock_sources,
 ):
     """
     Mock Config object with all necessary sub-configurations.
@@ -157,24 +150,10 @@ def mock_config(
 
     # Mock DB that returns consistent source objects
     mock_db = MagicMock()
-    mock_sources_dict = {
-        "github": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000020")),
-        "crates": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000021")),
-        "homebrew": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000022")),
-        "debian": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000023")),
-        "pkgx": Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000024")),
-    }
+    mock_db.select_source_by_name.side_effect = lambda name: mock_sources.get(name)
+    mock_db.select_url_types_by_name.side_effect = lambda name: mock_url_types.get(name)
 
-    mock_db.select_source_by_name.side_effect = lambda name: mock_sources_dict.get(name)
-
-    # Create a function to get URL types by name
-    def get_url_type_by_name(name):
-        if hasattr(mock_url_types, name):
-            return getattr(mock_url_types, name)
-        return None
-
-    mock_db.select_url_types_by_name.side_effect = get_url_type_by_name
-
+    # Set the db for config to be a minimal mock db created
     config.db = mock_db
 
     return config
