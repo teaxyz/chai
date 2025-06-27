@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Callable
 from uuid import UUID, uuid4
 
 import pytest
