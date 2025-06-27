@@ -60,13 +60,13 @@ def mock_dependency_types():
     dep_types = MagicMock(spec=DependencyTypes)
 
     # Set up dependency type attributes directly
-    dep_types.runtime = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000010"))
-    dep_types.build = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000011"))
-    dep_types.dev = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000012"))
-    dep_types.test = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000013"))
+    dep_types.runtime = uuid.UUID("00000000-0000-0000-0000-000000000010")
+    dep_types.build = uuid.UUID("00000000-0000-0000-0000-000000000011")
+    dep_types.dev = uuid.UUID("00000000-0000-0000-0000-000000000012")
+    dep_types.test = uuid.UUID("00000000-0000-0000-0000-000000000013")
     dep_types.development = dep_types.dev  # Alias for development
-    dep_types.recommended = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000014"))
-    dep_types.optional = Mock(id=uuid.UUID("00000000-0000-0000-0000-000000000015"))
+    dep_types.recommended = uuid.UUID("00000000-0000-0000-0000-000000000014")
+    dep_types.optional = uuid.UUID("00000000-0000-0000-0000-000000000015")
 
     return dep_types
 
