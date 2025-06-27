@@ -65,9 +65,10 @@ jobs:
 
   complain:
     runs-on: ubuntu-latest
+    needs: check
     steps:
       - name: Complain about test failures
-        if: failure()
+        if: ${{ always() && needs.check.result == 'failure' }}
         uses: ./.github/actions/complain
         with:
           test_function: "pytest"
