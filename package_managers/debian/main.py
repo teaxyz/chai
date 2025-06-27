@@ -130,6 +130,7 @@ def diff(
             logger.debug(f"Removed dependencies: {len(removed_dependencies)}")
             removed_deps.extend(removed_dependencies)
 
+        # In test mode, limit processing to the first 3 packages to reduce runtime and resource usage.
         if config.exec_config.test and i > 2:
             break
 
