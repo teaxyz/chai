@@ -14,7 +14,7 @@
 
 ## Approach
 
-There is a 1 to 1 mapping between Packages and Sources. During the load step, we
+There is a many to one mapping between Packages and Sources. During the load step, we
 populate the map between Packages and Sources (as in @investigate_sources), because
 information about a Debian package can be fetched from both data sources. While the
 parser currently captures all the information for each Package and Source (keep as-is),
