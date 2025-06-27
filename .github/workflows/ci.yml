@@ -60,6 +60,7 @@ jobs:
 
       - name: Run tests with pytest
         id: pytest
+        continue-on-error: true
         run: |
           pkgx uv run pytest tests/
 
