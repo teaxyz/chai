@@ -94,7 +94,7 @@ def diff(
         # Guard: if pkg_obj is not None, that means it's a new package
         # If it's new, **and** we have seen it before, set the ID to what is seen
         # So, duplicates absorb all URLs & Dependencies under one umbrella
-        resolved_pkg_id = seen.get(pkg_obj.import_id, pkg_id)
+        resolved_pkg_id = seen.get(pkg_obj.import_id, pkg_id) if pkg_obj else pkg_id
 
         if pkg_obj and pkg_obj.import_id not in seen:
             logger.debug(f"New package: {pkg_obj.name}")
@@ -192,24 +192,24 @@ def run_pipeline(config: Config, db: DebianDB, logger: Logger):
     result = diff(enriched_packages, config, cache, db, logger)
 
     # Ingest all diffs
-    db.ingest(result)
+    db.ingest_wrapper(result)
 
     if config.exec_config.no_cache:
         package_fetcher.cleanup()
         sources_fetcher.cleanup()
 
 
-def main(config: Config, db: DebianDB):
+def main(config: Config, db: DebianDB, logger: Logger):
     logger.log("Initializing Debian package manager")
     logger.debug(f"Config: {config}")
 
     if SCHEDULER_ENABLED:
         logger.log("Scheduler enabled. Starting schedule.")
         scheduler = Scheduler("debian_scheduler")
-        scheduler.start(run_pipeline, config)
+        scheduler.start(run_pipeline, config, db, logger)
 
         # run immediately as well when scheduling
-        scheduler.run_now(run_pipeline, config, db)
+        scheduler.run_now(run_pipeline, config, db, logger)
 
         # keep the main thread alive for scheduler
         try:
@@ -220,7 +220,7 @@ def main(config: Config, db: DebianDB):
             logger.log("Scheduler stopped.")
     else:
         logger.log("Scheduler disabled. Running pipeline once.")
-        run_pipeline(config, db)
+        run_pipeline(config, db, logger)
         logger.log("Pipeline finished.")
 
 
