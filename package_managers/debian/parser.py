@@ -1,94 +1,20 @@
 import re
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+
+from permalint import normalize_url
+
+from package_managers.debian.structs import DebianData, Depends, Maintainer
 
 
-# structures
-@dataclass
-class Maintainer:
-    name: str = field(default_factory=str)
-    email: str = field(default_factory=str)
-
-
-@dataclass
-class File:
-    hash: str = field(default_factory=str)
-    size: int = field(default_factory=int)
-    filename: str = field(default_factory=str)
-
-
-@dataclass
-class Depends:
-    package: str = field(default_factory=str)
-    semver: str = field(default_factory=str)
-
-
-@dataclass
-class Tag:
-    name: str = field(default_factory=str)
-    value: str = field(default_factory=str)
-
-
-# this represents whatever we might get from Debian...either packages or sources
-# it's immaterial what it is, we just need to know how to parse it
-@dataclass
-class DebianData:
-    # Package fields
-    package: str = field(default_factory=str)
-    source: str = field(default_factory=str)
-    version: str = field(default_factory=str)
-    installed_size: int = field(default_factory=int)
-    maintainer: Maintainer = field(default_factory=Maintainer)
-    architecture: str = field(default_factory=str)
-    description: str = field(default_factory=str)
-    homepage: str = field(default_factory=str)
-    description_md5: str = field(default_factory=str)
-    tag: str = field(default_factory=str)
-    section: str = field(default_factory=str)
-    priority: str = field(default_factory=str)
-    filename: str = field(default_factory=str)
-    size: int = field(default_factory=int)
-    md5sum: str = field(default_factory=str)
-    sha256: str = field(default_factory=str)
-
-    # Dependency fields
-    replaces: list[Depends] = field(default_factory=list)
-    provides: list[Depends] = field(default_factory=list)
-    depends: list[Depends] = field(default_factory=list)
-    pre_depends: list[Depends] = field(default_factory=list)
-    recommends: list[Depends] = field(default_factory=list)
-    suggests: list[Depends] = field(default_factory=list)
-    breaks: list[Depends] = field(default_factory=list)
-    conflicts: list[Depends] = field(default_factory=list)
-    build_depends: list[str] = field(default_factory=list)  # source only
-
-    # Source fields
-    binary: list[str] = field(default_factory=list)
-    uploaders: list[Maintainer] = field(default_factory=list)
-    standards_version: str = field(default_factory=str)
-    format: str = field(default_factory=str)
-    files: list[File] = field(default_factory=list)
-    vcs_browser: str = field(default_factory=str)
-    vcs_git: str = field(default_factory=str)
-    checksums_sha256: list[File] = field(default_factory=list)
-    package_list: list[str] = field(default_factory=list)
-    directory: str = field(default_factory=str)
-    testsuite: str = field(default_factory=str)
-    testsuite_triggers: str = field(default_factory=str)
-
-
+# NOTE: The DebianParser is the one which normalizes all the URLs!
 class DebianParser:
-    def __init__(self, content: str, test: bool = False):
+    def __init__(self, content: str):
         # content is the Packages or Sources file
         self.content = content
-        self.test = test
 
     def parse(self) -> Iterator[DebianData]:
         """Yield packages and sources from the Packages and Sources files."""
         paragraphs = self.content.split("\n\n")
-
-        if self.test:
-            paragraphs = paragraphs[:10]
 
         # iterate over the lines
         for paragraph in paragraphs:
@@ -99,8 +25,13 @@ class DebianParser:
             # each paragraph represents one object
             obj = DebianData()
 
+            # State for handling multiline fields
+            current_field = None
+            current_value = ""
+
             # populate the object
-            for line in paragraph.split("\n"):
+            lines = paragraph.split("\n")
+            for _i, line in enumerate(lines):
                 # if the line is empty, then move on
                 if not line.strip():
                     continue
@@ -108,10 +39,26 @@ class DebianParser:
                 # if the line starts with a tab or space, then it's a continuation of
                 # the previous field
                 if line[0] == " " or line[0] == "\t":
+                    # Append continuation line to current field value
+                    if current_field is not None:
+                        current_value += " " + line.strip()
                     continue
 
-                # split the line into key and value
-                self.handle_line(obj, line)
+                # Process any accumulated field before starting new one
+                if current_field is not None:
+                    self.mapper(obj, current_field, current_value)
+
+                # Start new field
+                if ":" not in line:
+                    continue
+
+                key, value = line.split(":", 1)
+                current_field = key.strip()
+                current_value = value.strip()
+
+            # Process the final accumulated field
+            if current_field is not None:
+                self.mapper(obj, current_field, current_value)
 
             if obj.package:
                 yield obj
@@ -138,7 +85,7 @@ class DebianParser:
             case "Description":
                 obj.description = value.strip()
             case "Homepage":
-                obj.homepage = value.strip()
+                obj.homepage = normalize_url(value.strip())
             case "Description-md5":
                 obj.description_md5 = value.strip()
             case "Tag":
@@ -160,9 +107,9 @@ class DebianParser:
             case "Format":
                 obj.format = value.strip()
             case "Vcs-Browser":
-                obj.vcs_browser = value.strip()
+                obj.vcs_browser = normalize_url(value.strip())
             case "Vcs-Git":
-                obj.vcs_git = value.strip()
+                obj.vcs_git = normalize_url(value.strip())
             case "Directory":
                 obj.directory = value.strip()
             case "Testsuite":
@@ -170,7 +117,7 @@ class DebianParser:
             case "Testsuite-Triggers":
                 obj.testsuite_triggers = value.strip()
             case "Binary":
-                obj.binary = [bin.strip() for bin in value.split(",")]
+                obj.binary = [bin.strip() for bin in value.split(",") if bin.strip()]
             case "Package-List":
                 obj.package_list = [pkg.strip() for pkg in value.split(",")]
 
@@ -244,11 +191,23 @@ class DebianParser:
 
 # Helpers for handling specific fields in the mapper
 def handle_depends(dependency: str) -> Depends:
+    # Handle various dependency formats:
     # 0ad-data (>= 0.0.26)
-    # use regex to match the `()`, because a split won't work
+    # lib32gcc1-amd64-cross [amd64 arm64 i386 ppc64el x32]
+    # gm2-11 [!powerpc !ppc64 !x32]
+    # debhelper-compat (= 13)
+    # gcc-11-source (>= 11.3.0-11~)
+
+    # First, strip platform specifications in square brackets
+    # Remove platform specs like [amd64 arm64 i386 ppc64el x32] or [!powerpc !ppc64 !x32]
+    platform_match = re.search(r"\s*\[[^\]]+\]", dependency)
+    if platform_match:
+        dependency = dependency.replace(platform_match.group(0), "").strip()
+
+    # Now handle version constraints in parentheses
     match = re.match(r"^(.*?)(\s*\((.*)\))?$", dependency)
     if match:
-        dep = match.group(1)
+        dep = match.group(1).strip()
         if match.group(2):
             semver = match.group(3)
             return Depends(package=dep, semver=semver)
