@@ -60,16 +60,18 @@ jobs:
 
       - name: Run tests with pytest
         id: pytest
-        continue-on-error: true
         run: |
           pkgx uv run pytest tests/
 
   complain:
+    needs: check
+    if: failure()
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
     steps:
-      - name: Complain about test failures
-        if: failure()
-        uses: ./.github/actions/complain
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/complain
         with:
           test_function: "pytest"
           token: ${{ secrets.GITHUB_TOKEN }}
