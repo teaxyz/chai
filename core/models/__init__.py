@@ -1,10 +1,13 @@
 # __init__.py
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     MetaData,
     String,
@@ -22,7 +25,20 @@ naming_convention = {
     "pk": "pk_%(table_name)s",
 }
 metadata = MetaData(naming_convention=naming_convention)
-Base = declarative_base(metadata=metadata)
+
+
+class BaseModel:
+    # we have UUIDs, strings, datetimes, ints, and floats
+    def to_dict_v2(self) -> dict[str, str | UUID | datetime | int | float]:
+        """Return a dictionary of all non-None attributes."""
+        return {
+            attr: getattr(self, attr)
+            for attr in self.__table__.columns.keys()  # noqa: SIM118
+            if getattr(self, attr) is not None
+        }
+
+
+Base = declarative_base(metadata=metadata, cls=BaseModel)
 
 
 class Package(Base):
@@ -117,8 +133,8 @@ class Version(Base):
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
 
-    package: Mapped["Package"] = relationship()
-    license: Mapped["License"] = relationship()
+    package: Mapped[Package] = relationship()
+    license: Mapped[License] = relationship()
 
     def to_dict(self):
         return {
@@ -184,9 +200,9 @@ class DependsOn(Base):
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
 
-    version: Mapped["Version"] = relationship()
-    dependency: Mapped["Package"] = relationship()
-    dependency_type: Mapped["DependsOnType"] = relationship()
+    version: Mapped[Version] = relationship()
+    dependency: Mapped[Package] = relationship()
+    dependency_type: Mapped[DependsOnType] = relationship()
 
     def to_dict(self):
         return {
@@ -261,7 +277,13 @@ class URL(Base):
         default=func.uuid_generate_v4(),
         server_default=func.uuid_generate_v4(),
     )
-    url = Column(String, nullable=False, index=True)
+    url_trgm_idx = Index(
+        "ix_urls_url_trgm",
+        "url",
+        postgresql_using="gin",
+        postgresql_ops={"url": "gin_trgm_ops"},
+    )
+    url = Column(String, nullable=False)
     url_type_id = Column(
         UUID(as_uuid=True), ForeignKey("url_types.id"), nullable=False, index=True
     )
@@ -298,9 +320,6 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("source_id", "import_id", name="uq_source_import_id"),
-    )
-    __table_args__ = (
-        UniqueConstraint("source_id", "username", name="uq_source_username"),
     )
     id = Column(
         UUID(as_uuid=True),
@@ -412,8 +431,122 @@ class PackageURL(Base):
         DateTime, nullable=False, default=func.now(), server_default=func.now()
     )
 
+    # TODO: deprecated
     def to_dict(self):
         return {
             "package_id": self.package_id,
             "url_id": self.url_id,
         }
+
+
+class LegacyDependency(Base):
+    __tablename__ = "legacy_dependencies"
+    __table_args__ = (
+        UniqueConstraint("package_id", "dependency_id", name="uq_package_dependency"),
+    )
+    id = Column(Integer, primary_key=True)
+    package_id = Column(
+        UUID(as_uuid=True), ForeignKey("packages.id"), nullable=False, index=True
+    )
+    dependency_id = Column(
+        UUID(as_uuid=True), ForeignKey("packages.id"), nullable=False, index=True
+    )
+    dependency_type_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("depends_on_types.id"),
+        nullable=False,
+        index=True,
+    )
+    semver_range = Column(String, nullable=True)
+    created_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+    updated_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+
+
+class Canon(Base):
+    __tablename__ = "canons"
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=func.uuid_generate_v4(),
+        server_default=func.uuid_generate_v4(),
+    )
+    url_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("urls.id"),
+        nullable=False,
+        index=True,
+        unique=True,
+    )
+    name_trgm_idx = Index(
+        "ix_canons_name_trgm",
+        "name",
+        postgresql_using="gin",
+        postgresql_ops={"name": "gin_trgm_ops"},
+    )
+    name = Column(String, nullable=False)
+    created_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+    updated_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+
+    url: Mapped[URL] = relationship()
+
+
+class CanonPackage(Base):
+    __tablename__ = "canon_packages"
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    canon_id = Column(
+        UUID(as_uuid=True), ForeignKey("canons.id"), nullable=False, index=True
+    )
+    package_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("packages.id"),
+        nullable=False,
+        index=True,
+        unique=True,
+    )
+    created_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+    updated_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+
+
+class TeaRankRun(Base):
+    __tablename__ = "tea_rank_runs"
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=func.uuid_generate_v4(),
+        server_default=func.uuid_generate_v4(),
+    )
+    run = Column(Integer, nullable=False)
+    split_ratio = Column(String, nullable=False)
+    created_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )
+
+
+class TeaRank(Base):
+    __tablename__ = "tea_ranks"
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=func.uuid_generate_v4(),
+        server_default=func.uuid_generate_v4(),
+    )
+    tea_rank_run = Column(Integer, nullable=False, index=True)
+    canon_id = Column(
+        UUID(as_uuid=True), ForeignKey("canons.id"), nullable=False, index=True
+    )
+    rank = Column(String, nullable=False)
+    created_at = Column(
+        DateTime, nullable=False, default=func.now(), server_default=func.now()
+    )

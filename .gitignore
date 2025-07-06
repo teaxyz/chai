@@ -168,3 +168,14 @@ db/data
 # examples
 examples/sbom-meta/sbom-meta
 *.svg
+
+# cursor
+.cursorrules
+.cursor/
+TASKS.md
+
+# DS Store
+.DS_Store
+
+# Profiling
+*.prof

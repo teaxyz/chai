@@ -89,12 +89,12 @@ class DB:
     def connect(self) -> None:
         if not CHAI_DATABASE_URL:
             raise RuntimeError("Environment variable CHAI_DATABASE_URL is not set.")
-            
+
         try:
             self.conn = psycopg2.connect(CHAI_DATABASE_URL)
             self.cursor = self.conn.cursor()
         except psycopg2.OperationalError as e:
-            raise RuntimeError(f"Failed to connect to the database: {e}")
+            raise RuntimeError(f"Failed to connect to the database: {e}") from e
 
     def select_id(self, package: str) -> int:
         self.cursor.execute("EXECUTE select_id (%s)", (package,))
@@ -242,7 +242,7 @@ def draw(graph: Graph, package: str, img_type: str = "svg"):
         }
         return out_dict
 
-    label = f"<{package} (big red dot) <br/>depth: {max_depth} <br/>nodes: {str(total_nodes)} <br/>edges: {str(total_edges)}>"  # noqa: E501
+    label = f"<{package} (big red dot) <br/>depth: {max_depth} <br/>nodes: {total_nodes!s} <br/>edges: {total_edges!s}>"
     graph_attr = {
         "beautify": "True",
         "splines": "none",

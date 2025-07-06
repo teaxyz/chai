@@ -17,11 +17,11 @@ ON CONFLICT (name) DO NOTHING;
 
 -- sources
 INSERT INTO "sources" ("type")
-VALUES ('crates'), ('npm'), ('pypi'), ('rubygems'), ('github'), ('homebrew')
+VALUES ('crates'), ('npm'), ('pypi'), ('rubygems'), ('github'), ('homebrew'), ('debian'), ('pkgx')
 ON CONFLICT (type) DO NOTHING;
 
 INSERT INTO "package_managers" ("source_id")
 SELECT id
 FROM "sources"
-WHERE "type" IN ('crates', 'npm', 'pypi', 'rubygems', 'github', 'homebrew')
+WHERE "type" IN ('crates', 'npm', 'pypi', 'rubygems', 'github', 'homebrew', 'debian', 'pkgx')
 ON CONFLICT (source_id) DO NOTHING;

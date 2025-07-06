@@ -1,3 +1,5 @@
+import gzip
+import json
 import os
 import tarfile
 from dataclasses import dataclass
@@ -6,9 +8,9 @@ from io import BytesIO
 from shutil import rmtree
 from typing import Any
 
+import git
 from requests import get
 
-from core.config import Config
 from core.logger import Logger
 
 
@@ -20,13 +22,13 @@ class Data:
 
 
 class Fetcher:
-    def __init__(self, name: str, config: Config):
+    def __init__(self, name: str, source: str, no_cache: bool, test: bool):
         self.name = name
-        self.source = config.pm_config.source
+        self.source = source
         self.output = f"data/{name}"
         self.logger = Logger(f"{name}_fetcher")
-        self.no_cache = config.exec_config.no_cache
-        self.test = config.exec_config.test
+        self.no_cache = no_cache
+        self.test = test
 
     def write(self, files: list[Data]):
         """generic write function for some collection of files"""
@@ -38,6 +40,7 @@ class Fetcher:
         # write
         # it can be anything - json, tarball, etc.
         for item in files:
+            self.logger.debug(f"writing {item.file_path}/{item.file_name}")
             file_path = item.file_path
             file_name = item.file_name
             file_content = item.content
@@ -47,7 +50,14 @@ class Fetcher:
             os.makedirs(full_path, exist_ok=True)
 
             with open(os.path.join(full_path, file_name), "wb") as f:
-                self.logger.debug(f"writing {full_path}")
+                if isinstance(file_content, list | dict):
+                    # Convert JSON-serializable objects to string
+                    file_content = json.dumps(file_content)
+
+                # Ensure content is bytes before writing
+                if isinstance(file_content, str):
+                    file_content = file_content.encode("utf-8")
+
                 f.write(file_content)
 
         # update the latest symlink
@@ -62,26 +72,28 @@ class Fetcher:
         self.logger.debug(f"creating symlink {latest_symlink} -> {latest_path}")
         os.symlink(latest_path, latest_symlink)
 
-    def fetch(self):
-        if self.source:
-            response = get(self.source)
-            try:
-                response.raise_for_status()
-            except Exception as e:
-                self.logger.error(f"error fetching {self.source}: {e}")
-                raise e
+    def fetch(self) -> bytes:
+        if not self.source:
+            raise ValueError("source is not set")
 
-            return response.content
+        response = get(self.source)
+        try:
+            response.raise_for_status()
+        except Exception as e:
+            self.logger.error(f"error fetching {self.source}: {e}")
+            raise e
+        return response.content
 
     def cleanup(self):
         if self.no_cache:
+            # TODO: it's deleting everything here
             rmtree(self.output, ignore_errors=True)
             os.makedirs(self.output, exist_ok=True)
 
 
 class TarballFetcher(Fetcher):
-    def __init__(self, name: str, config: Config):
-        super().__init__(name, config)
+    def __init__(self, name: str, source: str, no_cache: bool, test: bool):
+        super().__init__(name, source, no_cache, test)
 
     def fetch(self) -> list[Data]:
         content = super().fetch()
@@ -103,17 +115,50 @@ class TarballFetcher(Fetcher):
         return files
 
 
-class JSONFetcher(Fetcher):
-    def __init__(self, name: str, config: Config):
-        super().__init__(name, config)
+# GZip compresses only one file, so file_path and file_name are not used
+class GZipFetcher(Fetcher):
+    def __init__(
+        self,
+        name: str,
+        source: str,
+        no_cache: bool,
+        test: bool,
+        file_path: str,
+        file_name: str,
+    ):
+        super().__init__(name, source, no_cache, test)
+        self.file_path = file_path
+        self.file_name = file_name
 
-    def fetch(self):
-        pass
+    def fetch(self) -> list[Data]:
+        content = super().fetch()
+        files = []
+
+        decompressed = gzip.decompress(content).decode("utf-8")
+        files.append(Data(self.file_path, self.file_name, decompressed.encode("utf-8")))
+
+        return files
 
 
-class YAMLFetcher(Fetcher):
-    def __init__(self, name: str, config: Config):
-        super().__init__(name, config)
+class GitFetcher(Fetcher):
+    def __init__(self, name: str, source: str, no_cache: bool, test: bool):
+        super().__init__(name, source, no_cache, test)
 
-    def fetch(self):
-        pass
+    def fetch(self) -> str:
+        # assume that source is a git repo whose main branch needs to be cloned
+        # we'll first prep the output directory, then clone, then update the symlinks
+        # NOTE: this is what the main Fetcher does, but slightly modified for this case
+
+        now = datetime.now().strftime("%Y-%m-%d")
+        root_dir = f"{self.output}/{now}"
+        os.makedirs(root_dir, exist_ok=True)
+
+        # now, clone the repo here
+        self.logger.debug(f"Cloning {self.source} into {root_dir}...")
+        _ = git.Repo.clone_from(self.source, root_dir, depth=1, branch="main")
+        self.logger.debug("Repository cloned successfully.")
+
+        # update the symlinks
+        self.update_symlink(now)
+
+        return root_dir

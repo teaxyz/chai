@@ -1,0 +1,48 @@
+name: teaxyz/chai/complain
+description: creates an issue for any failing tests
+
+inputs:
+  test_function:
+    description: test function to complain about
+    required: true
+  token:
+    description: github token
+    required: true
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Find Issue
+      uses: actions-cool/issues-helper@v3
+      id: find
+      with:
+        actions: "find-issues"
+        token: ${{ inputs.token }}
+        issue-state: "open"
+        title-includes: "❌ test failure"
+        labels: "test-failure"
+
+    - name: Create Issue
+      uses: actions-cool/issues-helper@v3
+      id: create
+      if: ${{ steps.find.outputs.issues == '[]' }}
+      with:
+        actions: "create-issue"
+        token: ${{ inputs.token }}
+        title: "❌ test failure"
+        body: "Running log of test failure for ${{ inputs.test_function }}"
+        labels: "test-failure"
+        assignees: "sanchitram1"
+
+    - name: Log Comment
+      uses: actions-cool/issues-helper@v3
+      with:
+        actions: "create-comment"
+        token: ${{ inputs.token }}
+        issue-number: ${{ steps.create.outputs.issue-number || fromJSON(steps.find.outputs.issues)[0].number }}
+        body: |
+          # Test failure
+          ## ${{ inputs.test_function }}
+
+          logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

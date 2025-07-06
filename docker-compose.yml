@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres
+    shm_size: 256m
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=s3cr3t
@@ -19,8 +20,8 @@ services:
       context: .
       dockerfile: ./alembic/Dockerfile
     environment:
-      - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
-      - PGPASSWORD=s3cr3t
+      - CHAI_DATABASE_URL=${CHAI_DATABASE_URL:-postgresql://postgres:s3cr3t@db:5432/chai}
+      - PGPASSWORD=${CHAI_DB_PASSWORD:-s3cr3t}
     depends_on:
       db:
         condition: service_healthy
@@ -32,13 +33,14 @@ services:
       context: .
       dockerfile: ./package_managers/crates/Dockerfile
     environment:
-      - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
-      - NO_CACHE=${NO_CACHE:-false}
+      - CHAI_DATABASE_URL=${CHAI_DATABASE_URL:-postgresql://postgres:s3cr3t@db:5432/chai}
+      - NO_CACHE=${NO_CACHE:-true}
       - PYTHONPATH=/
       - DEBUG=${DEBUG:-false}
       - TEST=${TEST:-false}
       - FETCH=${FETCH:-true}
       - FREQUENCY=${FREQUENCY:-24}
+      - ENABLE_SCHEDULER=${ENABLE_SCHEDULER:-true}
     volumes:
       - ./data/crates:/data/crates
     depends_on:
@@ -52,17 +54,16 @@ services:
       context: .
       dockerfile: ./package_managers/homebrew/Dockerfile
     environment:
-      - CHAI_DATABASE_URL=postgresql://postgres:s3cr3t@db:5432/chai
+      - CHAI_DATABASE_URL=${CHAI_DATABASE_URL:-postgresql://postgres:s3cr3t@db:5432/chai}
       - NO_CACHE=${NO_CACHE:-false}
+      - DEBUG=${DEBUG:-false}
       - TEST=${TEST:-false}
       - FETCH=${FETCH:-true}
-      - FREQUENCY=${FREQUENCY:-24}
-      - SOURCE=https://formulae.brew.sh/api/formula.json
-      - CODE_DIR=/package_managers/homebrew
-      - DATA_DIR=/data/homebrew
+      - FREQUENCY=${FREQUENCY:-1}
+      - ENABLE_SCHEDULER=${ENABLE_SCHEDULER:-true}
+      - PYTHONPATH=/
     volumes:
       - ./data/homebrew:/data/homebrew
-      - ./logs/homebrew:/var/log
     depends_on:
       db:
         condition: service_healthy
@@ -92,16 +93,63 @@ services:
       retries: 3
       start_period: 5s
 
-  monitor:
+  debian:
     build:
-      context: ./monitor
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./package_managers/debian/Dockerfile
     environment:
-      - DOCKER_HOST=${DOCKER_HOST:-unix:///var/run/docker.sock}
+      - CHAI_DATABASE_URL=${CHAI_DATABASE_URL:-postgresql://postgres:s3cr3t@db:5432/chai}
+      - NO_CACHE=${NO_CACHE:-false}
+      - PYTHONPATH=/
+      - DEBUG=${DEBUG:-false}
+      - TEST=${TEST:-false}
+      - FETCH=${FETCH:-true}
+      - FREQUENCY=${FREQUENCY:-24}
+      - ENABLE_SCHEDULER=${ENABLE_SCHEDULER:-true}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data/debian:/data/debian
     depends_on:
-      crates:
-        condition: service_started
-      homebrew:
-        condition: service_started
+      db:
+        condition: service_healthy
+      alembic:
+        condition: service_completed_successfully
+
+  pkgx:
+    build:
+      context: .
+      dockerfile: ./package_managers/pkgx/Dockerfile
+    environment:
+      - CHAI_DATABASE_URL=${CHAI_DATABASE_URL:-postgresql://postgres:s3cr3t@db:5432/chai}
+      - NO_CACHE=${NO_CACHE:-false}
+      - PYTHONPATH=/
+      - DEBUG=${DEBUG:-false}
+      - TEST=${TEST:-false}
+      - FETCH=${FETCH:-true}
+      - FREQUENCY=${FREQUENCY:-24}
+      - ENABLE_SCHEDULER=${ENABLE_SCHEDULER:-true}
+    volumes:
+      - ./data/pkgx:/data/pkgx
+    depends_on:
+      db:
+        condition: service_healthy
+      alembic:
+        condition: service_completed_successfully
+
+  ranker:
+    build:
+      context: .
+      dockerfile: ./ranker/Dockerfile
+    environment:
+      - CHAI_DATABASE_URL=${CHAI_DATABASE_URL:-postgresql://postgres:s3cr3t@db:5432/chai}
+      - PYTHONPATH=/
+      - LOAD=${LOAD:-false}
+      - DEBUG=${DEBUG:-false}
+    depends_on:
+      db:
+        condition: service_healthy
+      alembic:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 8G

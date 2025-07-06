@@ -1,9 +1,10 @@
 import csv
 import os
-from typing import Dict
 
+from permalint import normalize_url, possible_names
 from sqlalchemy import UUID
 
+from core.db import DB
 from core.logger import Logger
 
 # this is a temporary fix, but sometimes the raw files have weird characters
@@ -21,14 +22,14 @@ class Transformer:
         self.name = name
         self.input = f"data/{name}/latest"
         self.logger = Logger(f"{name}_transformer")
-        self.files: Dict[str, str] = {
+        self.files: dict[str, str] = {
             "projects": "",
             "versions": "",
             "dependencies": "",
             "users": "",
             "urls": "",
         }
-        self.url_types: Dict[str, UUID] = {}
+        self.url_types: dict[str, UUID] = {}
 
     def finder(self, file_name: str) -> str:
         input_dir = os.path.realpath(self.input)
@@ -40,11 +41,15 @@ class Transformer:
             self.logger.error(f"{file_name} not found in {input_dir}")
             raise FileNotFoundError(f"Missing {file_name} file")
 
-    def packages(self):
-        pass
+    def open(self, file_name: str) -> str:
+        file_path = self.finder(file_name)
+        with open(file_path) as file:
+            return file.read()
 
-    def versions(self):
-        pass
+    def canonicalize(self, url: str) -> str:
+        return normalize_url(url)
 
-    def dependencies(self):
-        pass
+    def guess(self, db_client: DB, url: str, package_managers: list[UUID]) -> list[str]:
+        names = possible_names(url)
+        urls = db_client.search_names(names, package_managers)
+        return urls

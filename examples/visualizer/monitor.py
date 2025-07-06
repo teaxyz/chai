@@ -1,20 +1,20 @@
 import argparse
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable
 
 from main import DB, latest
 
+METRICS: list[str] = [
+    "total_execution_time",
+    "query_count",
+    "total_query_time",
+    "non_query_time",
+]
+
 
 class Result:
-    METRICS = [
-        "total_execution_time",
-        "query_count",
-        "total_query_time",
-        "non_query_time",
-    ]
-
     def __init__(self, **kwargs):
         for metric in self.METRICS:
             setattr(self, metric, kwargs[metric])

@@ -1,0 +1,4 @@
+dependencies:
+  - python@3.11
+  - postgresql.org@16
+  - astral.sh/uv

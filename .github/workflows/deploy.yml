@@ -1,0 +1,220 @@
+name: "Release Chai"
+run-name: Release Chai - ${{ inputs.env || 'auto' }} - ${{ inputs.ref || github.ref }}
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      env:
+        description: "The environment to deploy to"
+        required: true
+        type: choice
+        options:
+          - dev
+          - sepolia
+          - testnet
+          - mainnet
+      ref:
+        description: "The git ref (SHA or tag) to deploy"
+        required: false
+      deploy_latest:
+        description: "Force deploy all components from latest commit"
+        required: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      crates: ${{ steps.filter.outputs.crates }}
+      homebrew: ${{ steps.filter.outputs.homebrew }}
+      debian: ${{ steps.filter.outputs.debian }}
+      pkgx: ${{ steps.filter.outputs.pkgx }}
+      alembic: ${{ steps.filter.outputs.alembic }}
+      ranker: ${{ steps.filter.outputs.ranker }}
+      any_changes: ${{ steps.filter.outputs.any_changes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            crates:
+              - 'package_managers/crates/**'
+              - 'core/**'
+            homebrew:
+              - 'package_managers/homebrew/**'
+              - 'core/**'
+            debian:
+              - 'package_managers/debian/**'
+              - 'core/**'
+            pkgx:
+              - 'package_managers/pkgx/**'
+              - 'core/**'
+            alembic:
+              - 'alembic/**'
+              - 'core/models/**'
+            ranker:
+              - 'ranker/**'
+          
+      - name: Set any_changes output
+        id: set-any-changes
+        run: |
+          if [[ "${{ steps.filter.outputs.crates }}" == "true" || \
+                "${{ steps.filter.outputs.homebrew }}" == "true" || \
+                "${{ steps.filter.outputs.debian }}" == "true" || \
+                "${{ steps.filter.outputs.pkgx }}" == "true" || \
+                "${{ steps.filter.outputs.ranker }}" == "true" || \
+                "${{ steps.filter.outputs.alembic }}" == "true" ]]; then  
+            echo "any_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "any_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: changes
+    if: ${{ needs.changes.outputs.any_changes == 'true' || github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true }}
+    environment: ${{ inputs.env || 'dev' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: ${{ secrets.TEA_AWS_ROLE }}
+          aws-region: us-east-1
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Set deployment ref
+        id: set-ref
+        run: |
+          DEPLOY_REF=${{ inputs.ref || github.sha }}
+          echo "DEPLOY_REF=${DEPLOY_REF}" >> $GITHUB_ENV
+          echo "deploy_ref=${DEPLOY_REF}" >> $GITHUB_OUTPUT
+      
+      - name: Set environment
+        id: set-env
+        run: |
+          DEPLOY_ENV=${{ inputs.env || 'dev' }}
+          echo "DEPLOY_ENV=${DEPLOY_ENV}" >> $GITHUB_ENV
+          echo "deploy_env=${DEPLOY_ENV}" >> $GITHUB_OUTPUT
+      
+      - name: Build and push Crates indexer image
+        if: ${{ needs.changes.outputs.crates == 'true' || (github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true) }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./package_managers/crates/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/crates:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/crates:latest
+      
+      - name: Build and push Homebrew indexer image
+        if: ${{ needs.changes.outputs.homebrew == 'true' || (github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true) }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./package_managers/homebrew/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/homebrew:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/homebrew:latest
+      
+      - name: Build and push Debian indexer image
+        if: ${{ needs.changes.outputs.debian == 'true' || (github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true) }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./package_managers/debian/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/debian:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/debian:latest
+      
+      - name: Build and push Pkgx indexer image
+        if: ${{ needs.changes.outputs.pkgx == 'true' || (github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true) }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./package_managers/pkgx/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/pkgx:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/pkgx:latest
+      
+      - name: Build and push Alembic image
+        if: ${{ needs.changes.outputs.alembic == 'true' || (github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true) }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./alembic/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/alembic:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/alembic:latest
+  
+      - name: Build and push Ranker indexer image
+        if: ${{ needs.changes.outputs.ranker == 'true' || (github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true) }}
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./ranker/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/ranker:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/ranker:latest
+
+      - name: Build and push chai-api image
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ./api
+          file: ./api/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/chai-api:${{ env.DEPLOY_REF }}-${{ env.DEPLOY_ENV }}
+            ${{ steps.login-ecr.outputs.registry }}/chai-v2/chai-api:latest
+  deploy:
+    needs: [changes, build]
+    if: ${{ needs.changes.outputs.any_changes == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.env || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: ${{ secrets.TEA_AWS_ROLE }}
+          aws-region: us-east-1
+      
+      - name: Set deployment ref
+        id: set-ref
+        run: |
+          DEPLOY_REF=${{ inputs.ref }}
+          echo "DEPLOY_REF=${DEPLOY_REF}" >> $GITHUB_ENV
+          echo "deploy_ref=${DEPLOY_REF}" >> $GITHUB_OUTPUT
+      
+      - name: Set environment
+        id: set-env
+        run: |
+          DEPLOY_ENV=${{ inputs.env }}
+          echo "DEPLOY_ENV=${DEPLOY_ENV}" >> $GITHUB_ENV
+          echo "deploy_env=${DEPLOY_ENV}" >> $GITHUB_OUTPUT
+
+      - name: Deploy chai-api
+        run: |
+          aws ecs update-service --cluster chai-${{ env.DEPLOY_ENV }} \
+                                 --service ${{ env.DEPLOY_ENV }}-chai-api \
+                                 --force-new-deployment
