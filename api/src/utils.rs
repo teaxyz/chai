@@ -23,36 +23,63 @@ pub fn rows_to_json(rows: &[Row]) -> Vec<Value> {
             let mut map = serde_json::Map::new();
             for (i, column) in row.columns().iter().enumerate() {
                 let value: Value = match *column.type_() {
-                    Type::INT2 => json!(row.get::<_, i16>(i)),
-                    Type::INT4 => json!(row.get::<_, i32>(i)),
-                    Type::INT8 => json!(row.get::<_, i64>(i)),
-                    Type::FLOAT4 => json!(row.get::<_, f32>(i)),
-                    Type::FLOAT8 => json!(row.get::<_, f64>(i)),
-                    Type::BOOL => json!(row.get::<_, bool>(i)),
-                    Type::VARCHAR | Type::TEXT | Type::BPCHAR => json!(row.get::<_, String>(i)),
-                    Type::TIMESTAMP => {
-                        let ts: NaiveDateTime = row.get(i);
-                        json!(ts.to_string())
+                    Type::INT2 => match row.try_get::<_, Option<i16>>(i) {
+                        Ok(Some(val)) => json!(val),
+                        _ => Value::Null,
+                    },
+                    Type::INT4 => match row.try_get::<_, Option<i32>>(i) {
+                        Ok(Some(val)) => json!(val),
+                        _ => Value::Null,
+                    },
+                    Type::INT8 => match row.try_get::<_, Option<i64>>(i) {
+                        Ok(Some(val)) => json!(val),
+                        _ => Value::Null,
+                    },
+                    Type::FLOAT4 => match row.try_get::<_, Option<f32>>(i) {
+                        Ok(Some(val)) => json!(val),
+                        _ => Value::Null,
+                    },
+                    Type::FLOAT8 => match row.try_get::<_, Option<f64>>(i) {
+                        Ok(Some(val)) => json!(val),
+                        _ => Value::Null,
+                    },
+                    Type::BOOL => match row.try_get::<_, Option<bool>>(i) {
+                        Ok(Some(val)) => json!(val),
+                        _ => Value::Null,
+                    },
+                    Type::VARCHAR | Type::TEXT | Type::BPCHAR => {
+                        match row.try_get::<_, Option<String>>(i) {
+                            Ok(Some(val)) => json!(val),
+                            _ => Value::Null,
+                        }
                     }
-                    Type::TIMESTAMPTZ => {
-                        let ts: DateTime<Utc> = row.get(i);
-                        json!(ts.to_rfc3339())
-                    }
-                    Type::DATE => {
-                        let date: NaiveDate = row.get(i);
-                        json!(date.to_string())
-                    }
+                    Type::TIMESTAMP => match row.try_get::<_, Option<NaiveDateTime>>(i) {
+                        Ok(Some(val)) => json!(val.to_string()),
+                        _ => Value::Null,
+                    },
+                    Type::TIMESTAMPTZ => match row.try_get::<_, Option<DateTime<Utc>>>(i) {
+                        Ok(Some(val)) => json!(val.to_rfc3339()),
+                        _ => Value::Null,
+                    },
+                    Type::DATE => match row.try_get::<_, Option<NaiveDate>>(i) {
+                        Ok(Some(val)) => json!(val.to_string()),
+                        _ => Value::Null,
+                    },
                     Type::JSON | Type::JSONB => {
-                        let json_value: serde_json::Value = row.get(i);
-                        json_value
+                        match row.try_get::<_, Option<serde_json::Value>>(i) {
+                            Ok(Some(val)) => val,
+                            _ => Value::Null,
+                        }
                     }
-                    Type::UUID => {
-                        let uuid: Uuid = row.get(i);
-                        json!(uuid.to_string())
-                    }
+                    Type::UUID => match row.try_get::<_, Option<Uuid>>(i) {
+                        Ok(Some(val)) => json!(val.to_string()),
+                        _ => Value::Null,
+                    },
                     Type::TEXT_ARRAY | Type::VARCHAR_ARRAY => {
-                        let array: Vec<String> = row.get(i);
-                        json!(array)
+                        match row.try_get::<_, Option<Vec<String>>>(i) {
+                            Ok(Some(val)) => json!(val),
+                            _ => Value::Null,
+                        }
                     }
                     _ => Value::Null,
                 };

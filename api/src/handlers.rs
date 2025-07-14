@@ -196,6 +196,142 @@ pub async fn get_projects(path: web::Path<Uuid>, data: web::Data<AppState>) -> i
     }
 }
 
+#[get("/projects/batch/{ids}")]
+pub async fn get_projects_batch(
+    path: web::Path<String>,
+    data: web::Data<AppState>,
+) -> impl Responder {
+    let ids_str = path.into_inner();
+
+    // Parse comma-separated UUIDs
+    let ids: Result<Vec<Uuid>, _> = ids_str
+        .split(',')
+        .map(|s| s.trim().parse::<Uuid>())
+        .collect();
+
+    let ids = match ids {
+        Ok(ids) => ids,
+        Err(e) => {
+            return HttpResponse::BadRequest().json(json!({
+                "error": format!("Invalid UUID format: {}", e)
+            }));
+        }
+    };
+
+    if ids.is_empty() {
+        return HttpResponse::BadRequest().json(json!({
+            "error": "No project IDs provided"
+        }));
+    }
+
+    // Construct the query
+    let query = r#"
+        SELECT DISTINCT ON (c.id)
+            c.id AS "projectId",
+            u_homepage.url AS homepage,
+            c.name,
+            u_source.url AS source,
+            COALESCE(tr.rank,'0') AS "teaRank",
+            tr.created_at AS "teaRankCalculatedAt",
+            (
+                SELECT ARRAY_AGG(DISTINCT s.type)
+                FROM canon_packages cp2
+                JOIN packages p2 ON cp2.package_id = p2.id
+                JOIN package_managers pm2 ON p2.package_manager_id = pm2.id
+                JOIN sources s ON pm2.source_id = s.id
+                WHERE cp2.canon_id = c.id
+            ) AS "packageManagers"
+        FROM canons c
+        JOIN urls u_homepage ON u_homepage.id = c.url_id 
+        JOIN canon_packages cp ON cp.canon_id = c.id
+        JOIN package_urls pu ON pu.package_id = cp.package_id
+        JOIN urls u_source ON pu.url_id = u_source.id
+        JOIN url_types ut ON ut.id = u_source.url_type_id
+        LEFT JOIN tea_ranks tr ON tr.canon_id = c.id
+        WHERE c.id = ANY($1::uuid[]) AND ut.name = 'source'
+        ORDER BY c.id, tr.created_at DESC, u_source.url;"#;
+
+    match data.pool.get().await {
+        Ok(client) => match client.query(query, &[&ids]).await {
+            Ok(rows) => {
+                let json = rows_to_json(&rows);
+                HttpResponse::Ok().json(json)
+            }
+            Err(e) => {
+                log::error!("Database query error: {}", e);
+                HttpResponse::InternalServerError().json(json!({
+                    "error": format!("Database error: {}", e)
+                }))
+            }
+        },
+        Err(e) => {
+            log::error!("Failed to get database connection: {}", e);
+            HttpResponse::InternalServerError().body("Failed to get database connection")
+        }
+    }
+}
+
+#[get("/projectSearch/{name}")]
+pub async fn search_projects(path: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
+    let name = path.into_inner();
+
+    if name.trim().is_empty() {
+        return HttpResponse::BadRequest().json(json!({
+            "error": "Search name cannot be empty"
+        }));
+    }
+
+    let wildcard = format!("%{}%", name);
+
+    // Construct the query
+    let query = r#"
+        SELECT *
+        FROM (
+            SELECT DISTINCT ON (c.id)
+                c.id AS "projectId",
+                u_homepage.url AS homepage,
+                c.name,
+                u_source.url AS source,
+                (
+                    SELECT ARRAY_AGG(DISTINCT s.type)
+                    FROM canon_packages cp2
+                    JOIN packages p2 ON cp2.package_id = p2.id
+                    JOIN package_managers pm2 ON p2.package_manager_id = pm2.id
+                    JOIN sources s ON pm2.source_id = s.id
+                    WHERE cp2.canon_id = c.id
+                ) AS "packageManagers"
+            FROM canons c
+            JOIN urls u_homepage ON c.url_id = u_homepage.id
+            JOIN canon_packages cp ON cp.canon_id = c.id
+            JOIN package_urls pu ON pu.package_id = cp.package_id
+            JOIN urls u_source ON pu.url_id = u_source.id
+            JOIN url_types ut_source ON ut_source.id = u_source.url_type_id
+            WHERE ut_source.name = 'source' AND (c.name ILIKE $1)
+            ORDER BY c.id
+        ) sub
+        ORDER BY LENGTH(name), name
+        LIMIT 10;"#;
+
+    match data.pool.get().await {
+        Ok(client) => match client.query(query, &[&wildcard]).await {
+            Ok(rows) => {
+                let json = rows_to_json(&rows);
+                HttpResponse::Ok().json(json)
+            }
+            Err(e) => {
+                log::error!("Database query error: {}", e);
+                HttpResponse::InternalServerError().json(json!({
+                    "error": format!("Database error: {}", e)
+                }))
+            }
+        },
+        Err(e) => {
+            log::error!("Failed to get database connection: {}", e);
+            HttpResponse::InternalServerError().body("Failed to get database connection")
+        }
+    }
+}
+
 #[get("/{table}/{id}")]
 pub async fn get_table_row(
     path: web::Path<(String, Uuid)>,
