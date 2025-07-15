@@ -211,7 +211,7 @@ pub async fn get_projects_batch(
 
     let Ok(ids) = ids else {
         return HttpResponse::BadRequest()
-            .json(json!({"error": format!("Invalid UUID format: {}", e)}));
+            .json(json!({"error": format!("Invalid UUID format in project IDs")}));
     };
 
     if ids.is_empty() {

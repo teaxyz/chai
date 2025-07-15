@@ -17,7 +17,7 @@ pub fn get_column_names(rows: &[Row]) -> Vec<String> {
     }
 }
 
-pub fn convert_optional_to_json<T>(result: Result<Option<T>, _>) -> Value
+pub fn convert_optional_to_json<T, E>(result: Result<Option<T>, E>) -> Value
 where
     T: serde::Serialize,
 {
@@ -55,6 +55,10 @@ pub fn rows_to_json(rows: &[Row]) -> Vec<Value> {
                     Type::UUID => convert_optional_to_json(row.try_get::<_, Option<Uuid>>(i)),
                     Type::TEXT_ARRAY | Type::VARCHAR_ARRAY => {
                         convert_optional_to_json(row.try_get::<_, Option<Vec<String>>>(i))
+                    }
+                    _ => {
+                        // For unsupported types, try to convert to string
+                        convert_optional_to_json(row.try_get::<_, Option<String>>(i))
                     }
                 };
                 map.insert(column.name().to_string(), value);
