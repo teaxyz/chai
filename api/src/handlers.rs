@@ -134,7 +134,7 @@ pub async fn get_table(
     }
 }
 
-#[get("/projects/{id}")]
+#[get("/project/{id}")]
 pub async fn get_projects(path: web::Path<Uuid>, data: web::Data<AppState>) -> impl Responder {
     // Check if the table exists
     let id = path.into_inner();
@@ -196,7 +196,7 @@ pub async fn get_projects(path: web::Path<Uuid>, data: web::Data<AppState>) -> i
     }
 }
 
-#[get("/projects/batch/{ids}")]
+#[get("/project/batch/{ids}")]
 pub async fn get_projects_batch(
     path: web::Path<String>,
     data: web::Data<AppState>,
@@ -209,13 +209,9 @@ pub async fn get_projects_batch(
         .map(|s| s.trim().parse::<Uuid>())
         .collect();
 
-    let ids = match ids {
-        Ok(ids) => ids,
-        Err(e) => {
-            return HttpResponse::BadRequest().json(json!({
-                "error": format!("Invalid UUID format: {}", e)
-            }));
-        }
+    let Ok(ids) = ids else {
+        return HttpResponse::BadRequest()
+            .json(json!({"error": format!("Invalid UUID format: {}", e)}));
     };
 
     if ids.is_empty() {
@@ -271,7 +267,7 @@ pub async fn get_projects_batch(
     }
 }
 
-#[get("/projectSearch/{name}")]
+#[get("/project/search/{name}")]
 pub async fn search_projects(path: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
     let name = path.into_inner();
 

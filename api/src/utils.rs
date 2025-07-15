@@ -17,71 +17,45 @@ pub fn get_column_names(rows: &[Row]) -> Vec<String> {
     }
 }
 
+pub fn convert_optional_to_json<T>(result: Result<Option<T>, _>) -> Value
+where
+    T: serde::Serialize,
+{
+    match result {
+        Ok(Some(val)) => json!(val),
+        _ => Value::Null,
+    }
+}
+
 pub fn rows_to_json(rows: &[Row]) -> Vec<Value> {
     rows.iter()
         .map(|row| {
             let mut map = serde_json::Map::new();
             for (i, column) in row.columns().iter().enumerate() {
                 let value: Value = match *column.type_() {
-                    Type::INT2 => match row.try_get::<_, Option<i16>>(i) {
-                        Ok(Some(val)) => json!(val),
-                        _ => Value::Null,
-                    },
-                    Type::INT4 => match row.try_get::<_, Option<i32>>(i) {
-                        Ok(Some(val)) => json!(val),
-                        _ => Value::Null,
-                    },
-                    Type::INT8 => match row.try_get::<_, Option<i64>>(i) {
-                        Ok(Some(val)) => json!(val),
-                        _ => Value::Null,
-                    },
-                    Type::FLOAT4 => match row.try_get::<_, Option<f32>>(i) {
-                        Ok(Some(val)) => json!(val),
-                        _ => Value::Null,
-                    },
-                    Type::FLOAT8 => match row.try_get::<_, Option<f64>>(i) {
-                        Ok(Some(val)) => json!(val),
-                        _ => Value::Null,
-                    },
-                    Type::BOOL => match row.try_get::<_, Option<bool>>(i) {
-                        Ok(Some(val)) => json!(val),
-                        _ => Value::Null,
-                    },
+                    Type::INT2 => convert_optional_to_json(row.try_get::<_, Option<i16>>(i)),
+                    Type::INT4 => convert_optional_to_json(row.try_get::<_, Option<i32>>(i)),
+                    Type::INT8 => convert_optional_to_json(row.try_get::<_, Option<i64>>(i)),
+                    Type::FLOAT4 => convert_optional_to_json(row.try_get::<_, Option<f32>>(i)),
+                    Type::FLOAT8 => convert_optional_to_json(row.try_get::<_, Option<f64>>(i)),
+                    Type::BOOL => convert_optional_to_json(row.try_get::<_, Option<bool>>(i)),
                     Type::VARCHAR | Type::TEXT | Type::BPCHAR => {
-                        match row.try_get::<_, Option<String>>(i) {
-                            Ok(Some(val)) => json!(val),
-                            _ => Value::Null,
-                        }
+                        convert_optional_to_json(row.try_get::<_, Option<String>>(i))
                     }
-                    Type::TIMESTAMP => match row.try_get::<_, Option<NaiveDateTime>>(i) {
-                        Ok(Some(val)) => json!(val.to_string()),
-                        _ => Value::Null,
-                    },
-                    Type::TIMESTAMPTZ => match row.try_get::<_, Option<DateTime<Utc>>>(i) {
-                        Ok(Some(val)) => json!(val.to_rfc3339()),
-                        _ => Value::Null,
-                    },
-                    Type::DATE => match row.try_get::<_, Option<NaiveDate>>(i) {
-                        Ok(Some(val)) => json!(val.to_string()),
-                        _ => Value::Null,
-                    },
+                    Type::TIMESTAMP => {
+                        convert_optional_to_json(row.try_get::<_, Option<NaiveDateTime>>(i))
+                    }
+                    Type::TIMESTAMPTZ => {
+                        convert_optional_to_json(row.try_get::<_, Option<DateTime<Utc>>>(i))
+                    }
+                    Type::DATE => convert_optional_to_json(row.try_get::<_, Option<NaiveDate>>(i)),
                     Type::JSON | Type::JSONB => {
-                        match row.try_get::<_, Option<serde_json::Value>>(i) {
-                            Ok(Some(val)) => val,
-                            _ => Value::Null,
-                        }
+                        convert_optional_to_json(row.try_get::<_, Option<serde_json::Value>>(i))
                     }
-                    Type::UUID => match row.try_get::<_, Option<Uuid>>(i) {
-                        Ok(Some(val)) => json!(val.to_string()),
-                        _ => Value::Null,
-                    },
+                    Type::UUID => convert_optional_to_json(row.try_get::<_, Option<Uuid>>(i)),
                     Type::TEXT_ARRAY | Type::VARCHAR_ARRAY => {
-                        match row.try_get::<_, Option<Vec<String>>>(i) {
-                            Ok(Some(val)) => json!(val),
-                            _ => Value::Null,
-                        }
+                        convert_optional_to_json(row.try_get::<_, Option<Vec<String>>>(i))
                     }
-                    _ => Value::Null,
                 };
                 map.insert(column.name().to_string(), value);
             }
