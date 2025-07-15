@@ -375,3 +375,151 @@ pub async fn get_table_row(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use actix_web::test;
+    use actix_web::web::Query;
+    use serde_json::json;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_check_table_exists_with_valid_table() {
+        let tables = vec!["users".to_string(), "posts".to_string(), "comments".to_string()];
+        let result = check_table_exists("users", &tables);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_check_table_exists_with_invalid_table() {
+        let tables = vec!["users".to_string(), "posts".to_string(), "comments".to_string()];
+        let result = check_table_exists("invalid_table", &tables);
+        assert!(result.is_some());
+        
+        let response = result.unwrap();
+        assert_eq!(response.status(), 404);
+    }
+
+    #[test]
+    fn test_check_table_exists_with_empty_tables() {
+        let tables = vec![];
+        let result = check_table_exists("any_table", &tables);
+        assert!(result.is_some());
+        
+        let response = result.unwrap();
+        assert_eq!(response.status(), 404);
+    }
+
+    #[test]
+    fn test_check_table_exists_case_sensitivity() {
+        let tables = vec!["users".to_string(), "Posts".to_string()];
+        
+        // Should not find "Users" when table is "users"
+        let result = check_table_exists("Users", &tables);
+        assert!(result.is_some());
+        
+        // Should find exact match
+        let result = check_table_exists("users", &tables);
+        assert!(result.is_none());
+        
+        // Should find exact match for "Posts"
+        let result = check_table_exists("Posts", &tables);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_pagination_params_deserialization() {
+        // Test default values
+        let query = Query::from_query("").unwrap();
+        let params: &PaginationParams = &query;
+        assert_eq!(params.page, None);
+        assert_eq!(params.limit, None);
+        
+        // Test with values
+        let query = Query::from_query("page=2&limit=50").unwrap();
+        let params: &PaginationParams = &query;
+        assert_eq!(params.page, Some(2));
+        assert_eq!(params.limit, Some(50));
+        
+        // Test with only page
+        let query = Query::from_query("page=3").unwrap();
+        let params: &PaginationParams = &query;
+        assert_eq!(params.page, Some(3));
+        assert_eq!(params.limit, None);
+        
+        // Test with only limit
+        let query = Query::from_query("limit=100").unwrap();
+        let params: &PaginationParams = &query;
+        assert_eq!(params.page, None);
+        assert_eq!(params.limit, Some(100));
+    }
+
+    #[test]
+    fn test_pagination_params_with_invalid_values() {
+        // Test with invalid page value (should be handled gracefully)
+        let query_result = Query::from_query("page=invalid");
+        assert!(query_result.is_err());
+        
+        // Test with invalid limit value
+        let query_result = Query::from_query("limit=invalid");
+        assert!(query_result.is_err());
+    }
+
+    #[test]
+    fn test_pagination_params_with_negative_values() {
+        // Test with negative page
+        let query = Query::from_query("page=-1").unwrap();
+        let params: &PaginationParams = &query;
+        assert_eq!(params.page, Some(-1));
+        
+        // Test with negative limit
+        let query = Query::from_query("limit=-10").unwrap();
+        let params: &PaginationParams = &query;
+        assert_eq!(params.limit, Some(-10));
+    }
+
+    #[test]
+    fn test_paginated_response_serialization() {
+        let response = PaginatedResponse {
+            table: "test_table".to_string(),
+            total_count: 100,
+            page: 2,
+            limit: 25,
+            total_pages: 4,
+            columns: vec!["id".to_string(), "name".to_string()],
+            data: vec![
+                json!({"id": 1, "name": "Alice"}),
+                json!({"id": 2, "name": "Bob"}),
+            ],
+        };
+        
+        let json_string = serde_json::to_string(&response).unwrap();
+        assert!(json_string.contains("test_table"));
+        assert!(json_string.contains("100"));
+        assert!(json_string.contains("Alice"));
+        assert!(json_string.contains("Bob"));
+    }
+
+    #[test]
+    fn test_paginated_response_structure() {
+        let response = PaginatedResponse {
+            table: "users".to_string(),
+            total_count: 50,
+            page: 1,
+            limit: 10,
+            total_pages: 5,
+            columns: vec!["id".to_string(), "email".to_string()],
+            data: vec![json!({"id": 1, "email": "test@example.com"})],
+        };
+        
+        // Test that all fields are accessible
+        assert_eq!(response.table, "users");
+        assert_eq!(response.total_count, 50);
+        assert_eq!(response.page, 1);
+        assert_eq!(response.limit, 10);
+        assert_eq!(response.total_pages, 5);
+        assert_eq!(response.columns.len(), 2);
+        assert_eq!(response.data.len(), 1);
+    }
+}

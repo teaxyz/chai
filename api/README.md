@@ -166,3 +166,54 @@ The database contains the following tables:
 | versions | Package versions |
 
 By default, the API will be available at `http://localhost:8080`.
+
+## Testing
+
+The CHAI API includes a comprehensive test suite that covers utility functions, handlers, and basic integration tests. The tests are designed to run without requiring a live database connection.
+
+### Quick Start
+
+```bash
+# Run all tests
+cargo test
+
+# Or use the test runner script
+./run_tests.sh
+
+# Run specific test categories
+./run_tests.sh unit        # Unit tests only
+./run_tests.sh integration # Integration tests only
+./run_tests.sh utils       # Utils module tests only
+./run_tests.sh verbose     # All tests with output
+```
+
+### Test Coverage
+
+The test suite includes:
+
+- **Utils Tests** - Complete coverage of data transformation functions
+- **Handlers Tests** - Input validation and response formatting
+- **Database Tests** - Configuration parsing and URL handling
+- **Integration Tests** - Basic endpoint testing with mock data
+- **App State Tests** - Application structure validation
+
+### Test Documentation
+
+For detailed information about the test suite, including:
+- Test structure and organization
+- Running specific tests
+- Adding new tests
+- Debugging test failures
+- CI/CD integration
+
+See: [`TEST_SUITE.md`](TEST_SUITE.md)
+
+### Test Files
+
+- `src/utils.rs` - Unit tests for utility functions
+- `src/handlers.rs` - Unit tests for handler logic
+- `src/db.rs` - Unit tests for database configuration
+- `src/app_state.rs` - Unit tests for application state
+- `tests/integration_tests.rs` - Integration tests for API endpoints
+- `run_tests.sh` - Test runner script
+- `TEST_SUITE.md` - Comprehensive test documentation

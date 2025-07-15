@@ -8,6 +8,14 @@ readme = "README.md"
 license = "MIT"
 repository = "https://github.com/teaxyz/chai-oss"
 
+[lib]
+name = "chai_api"
+path = "src/lib.rs"
+
+[[bin]]
+name = "chai-api"
+path = "src/main.rs"
+
 [dependencies]
 uuid = { version = "1.11.0", features = ["serde", "v4"] }
 actix-web = "4.3"
@@ -25,3 +33,7 @@ tokio-postgres = { version = "0.7", features = [
 ] }
 deadpool-postgres = "0.10.0"
 url = "2.5.2"
+
+[dev-dependencies]
+tokio-test = "0.4"
+mockall = "0.11"
