@@ -64,12 +64,12 @@ pub async fn heartbeat(data: web::Data<AppState>) -> impl Responder {
         Ok(client) => match client.query_one("SELECT 1", &[]).await {
             Ok(_) => HttpResponse::Ok().body("OK - Database connection is healthy"),
             Err(e) => {
-                log::error!("Database query failed: {}", e);
+                log::error!("Database query failed: {e}");
                 HttpResponse::InternalServerError().body("Database query failed")
             }
         },
         Err(e) => {
-            log::error!("Failed to get database connection: {}", e);
+            log::error!("Failed to get database connection: {e}");
             HttpResponse::InternalServerError().body("Failed to get database connection")
         }
     }
@@ -86,14 +86,14 @@ pub async fn get_table(
         return response;
     }
 
-    let count_query = format!("SELECT COUNT(*) FROM {}", table);
+    let count_query = format!("SELECT COUNT(*) FROM {table}");
     match data.pool.get().await {
         Ok(client) => match client.query_one(&count_query, &[]).await {
             Ok(count_row) => {
                 let total_count: i64 = count_row.get(0);
                 let pagination = Pagination::new(query, total_count);
 
-                let data_query = format!("SELECT * FROM {} LIMIT $1 OFFSET $2", table);
+                let data_query = format!("SELECT * FROM {table} LIMIT $1 OFFSET $2");
                 match client
                     .query(&data_query, &[&pagination.limit, &pagination.offset])
                     .await
@@ -113,7 +113,7 @@ pub async fn get_table(
                         HttpResponse::Ok().json(response)
                     }
                     Err(e) => {
-                        log::error!("Database query error: {}", e);
+                        log::error!("Database query error: {e}");
                         HttpResponse::InternalServerError().json(json!({
                             "error": "An error occurred while querying the database"
                         }))
@@ -121,14 +121,14 @@ pub async fn get_table(
                 }
             }
             Err(e) => {
-                log::error!("Database count query error: {}", e);
+                log::error!("Database count query error: {e}");
                 HttpResponse::InternalServerError().json(json!({
                     "error": "An error occurred while counting rows in the database"
                 }))
             }
         },
         Err(e) => {
-            log::error!("Failed to get database connection: {}", e);
+            log::error!("Failed to get database connection: {e}");
             HttpResponse::InternalServerError().body("Failed to get database connection")
         }
     }
@@ -190,7 +190,7 @@ pub async fn get_projects(path: web::Path<Uuid>, data: web::Data<AppState>) -> i
             }
         },
         Err(e) => {
-            log::error!("Failed to get database connection: {}", e);
+            log::error!("Failed to get database connection: {e}");
             HttpResponse::InternalServerError().body("Failed to get database connection")
         }
     }
@@ -254,14 +254,14 @@ pub async fn get_projects_batch(
                 HttpResponse::Ok().json(json)
             }
             Err(e) => {
-                log::error!("Database query error: {}", e);
+                log::error!("Database query error: {e}");
                 HttpResponse::InternalServerError().json(json!({
                     "error": format!("Database error: {}", e)
                 }))
             }
         },
         Err(e) => {
-            log::error!("Failed to get database connection: {}", e);
+            log::error!("Failed to get database connection: {e}");
             HttpResponse::InternalServerError().body("Failed to get database connection")
         }
     }
@@ -277,7 +277,7 @@ pub async fn search_projects(path: web::Path<String>, data: web::Data<AppState>)
         }));
     }
 
-    let wildcard = format!("%{}%", name);
+    let wildcard = format!("%{name}%");
 
     // Construct the query
     let query = r#"
@@ -315,14 +315,14 @@ pub async fn search_projects(path: web::Path<String>, data: web::Data<AppState>)
                 HttpResponse::Ok().json(json)
             }
             Err(e) => {
-                log::error!("Database query error: {}", e);
+                log::error!("Database query error: {e}");
                 HttpResponse::InternalServerError().json(json!({
-                    "error": format!("Database error: {}", e)
+                    "error": format!("Database error: {e}")
                 }))
             }
         },
         Err(e) => {
-            log::error!("Failed to get database connection: {}", e);
+            log::error!("Failed to get database connection: {e}");
             HttpResponse::InternalServerError().body("Failed to get database connection")
         }
     }
@@ -339,7 +339,7 @@ pub async fn get_table_row(
         return response;
     }
 
-    let query = format!("SELECT * FROM {} WHERE id = $1", table_name);
+    let query = format!("SELECT * FROM {table_name} WHERE id = $1");
 
     match data.pool.get().await {
         Ok(client) => match client.query_one(&query, &[&id]).await {
@@ -370,7 +370,7 @@ pub async fn get_table_row(
             }
         },
         Err(e) => {
-            log::error!("Failed to get database connection: {}", e);
+            log::error!("Failed to get database connection: {e}");
             HttpResponse::InternalServerError().body("Failed to get database connection")
         }
     }

@@ -23,12 +23,12 @@ async fn main() -> std::io::Result<()> {
 
     let host = env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
-    let bind_address = format!("{}:{}", host, port);
+    let bind_address = format!("{host}:{port}");
 
     let (pool, tables) = db::initialize_db().await;
 
-    log::info!("Available tables: {:?}", tables);
-    log::info!("Starting server at http://{}", bind_address);
+    log::info!("Available tables: {tables:?}");
+    log::info!("Starting server at http://{bind_address}");
 
     HttpServer::new(move || {
         App::new()
