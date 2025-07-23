@@ -1,4 +1,5 @@
 # CHAI
+[![CI](https://github.com/teaxyz/chai/actions/workflows/ci.yml/badge.svg)](https://github.com/teaxyz/chai/actions/workflows/ci.yml)
 
 CHAI is an attempt at an open-source data pipeline for package managers. The
 goal is to have a pipeline that can use the data from any package manager and
@@ -101,6 +102,30 @@ There are many other potential use cases for this data:
    is used as `CHAI_DATABASE_URL` in the environment. `psql CHAI_DATABASE_URL`
    will connect you to the database.
 2. If you're orchestrating via docker, swap `localhost` for `host.docker.internal`
+
+## Troubleshooting / Common Errors
+
+### Docker Compose fails to start db
+- Make sure port 5435 is not already used by another service.
+- If you get a permission error on the data folder, run your terminal as administrator or fix the permissions for the `./data` folder.
+
+### Migration error (alembic)
+- Ensure you have run `docker compose build --no-cache db alembic` before `docker compose up alembic`.
+- Check that the `CHAI_DATABASE_URL` environment variable is set correctly.
+
+### Database connection refused
+- Make sure the `db` service is healthy before starting other services.
+- If you are using Docker Desktop on Windows/Mac, use `host.docker.internal` as the database host.
+
+### Out of disk space
+- Fetching package manager data can consume more than 5GB. Ensure you have enough storage before running the pipeline.
+
+### Permission denied when deleting ./data
+- Run `rm -rf ./data` with administrator/root privileges.
+
+### Service stuck or not responding
+- Check logs with `docker compose logs <service>` to see detailed errors.
+- Restart the service with `docker compose restart <service>`.
 
 ## Managing Dependencies
 
