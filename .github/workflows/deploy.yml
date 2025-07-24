@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   build:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_latest == true }}
     environment: ${{ inputs.env || 'dev' }}
     runs-on: ubuntu-latest
     steps:
