@@ -1,11 +1,11 @@
-FROM python:3.11
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 
 # Copy everything from the root directory (build context)
 COPY . .
 
-# Install core requirements
+# Install core requirements using uv
 WORKDIR /core
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --system -r requirements.txt
 
 WORKDIR /
 
