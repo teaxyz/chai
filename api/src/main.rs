@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use crate::app_state::AppState;
 use crate::handlers::{
-    get_projects, get_projects_batch, get_table, get_table_row, heartbeat, list_tables,
-    search_projects,
+    get_leaderboard, get_projects, get_projects_batch, get_table, get_table_row, heartbeat,
+    list_tables, search_projects,
 };
 use crate::logging::setup_logger;
 
@@ -39,6 +39,7 @@ async fn main() -> std::io::Result<()> {
             }))
             .service(list_tables)
             .service(heartbeat)
+            .service(get_leaderboard)
             .service(get_projects)
             .service(get_projects_batch)
             .service(search_projects)

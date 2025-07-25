@@ -328,6 +328,79 @@ pub async fn search_projects(path: web::Path<String>, data: web::Data<AppState>)
     }
 }
 
+#[get("/leaderboard/{limit}")]
+pub async fn get_leaderboard(path: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
+    let limit_str = path.into_inner();
+
+    // Parse and validate limit parameter
+    let limit: i64 = match limit_str.parse() {
+        Ok(n) => n,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(json!({
+                "error": "Invalid number format in limit"
+            }));
+        }
+    };
+
+    if limit <= 0 || limit > 100 {
+        return HttpResponse::BadRequest().json(json!({
+            "error": "Invalid number format in limit"
+        }));
+    }
+
+    // Construct the query
+    let query = r#"
+        SELECT *
+        FROM (
+            SELECT DISTINCT ON (c.id)
+                c.id AS "projectId",
+                u_homepage.url AS homepage,
+                c.name,
+                u_source.url AS source,
+                COALESCE(tr.rank,'0') AS "teaRank",
+                tr.created_at AS "teaRankCalculatedAt",
+                (
+                    SELECT ARRAY_AGG(DISTINCT s.type)
+                    FROM canon_packages cp2
+                    JOIN packages p2 ON cp2.package_id = p2.id
+                    JOIN package_managers pm2 ON p2.package_manager_id = pm2.id
+                    JOIN sources s ON pm2.source_id = s.id
+                    WHERE cp2.canon_id = c.id
+                ) AS "packageManagers"
+            FROM canons c
+            JOIN urls u_homepage ON c.url_id = u_homepage.id
+            JOIN canon_packages cp ON cp.canon_id = c.id
+            JOIN package_urls pu ON pu.package_id = cp.package_id
+            JOIN urls u_source ON pu.url_id = u_source.id
+            JOIN url_types ut_source ON ut_source.id = u_source.url_type_id
+            LEFT JOIN tea_ranks tr ON tr.canon_id = c.id
+            WHERE ut_source.name = 'source'
+            AND CAST(tr.rank AS NUMERIC) > 0
+            ORDER BY c.id, tr.created_at DESC, u_source.url
+        ) sub
+        ORDER BY CAST("teaRank" AS NUMERIC) DESC NULLS LAST
+        LIMIT $1"#;
+
+    match data.pool.get().await {
+        Ok(client) => match client.query(query, &[&limit]).await {
+            Ok(rows) => {
+                let json = rows_to_json(&rows);
+                HttpResponse::Ok().json(json)
+            }
+            Err(e) => {
+                log::error!("Database query error: {e}");
+                HttpResponse::InternalServerError().json(json!({
+                    "error": format!("Database error: {}", e)
+                }))
+            }
+        },
+        Err(e) => {
+            log::error!("Failed to get database connection: {e}");
+            HttpResponse::InternalServerError().body("Failed to get database connection")
+        }
+    }
+}
+
 #[get("/{table}/{id}")]
 pub async fn get_table_row(
     path: web::Path<(String, Uuid)>,
