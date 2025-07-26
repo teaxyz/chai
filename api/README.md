@@ -297,6 +297,87 @@ GET /project/search/python
 }
 ```
 
+### Get Leaderboard
+
+```
+POST /leaderboard
+```
+
+Returns detailed information about specified projects, ordered by tea rank in descending order. This endpoint allows filtering by project IDs and limiting the number of results.
+
+**Request Body**
+
+```json
+{
+  "projectIds": ["uuid1", "uuid2", "..."],
+  "limit": 10
+}
+```
+
+**Parameters**
+
+- `projectIds`: Array of project UUIDs to include in the leaderboard (required, max 100)
+- `limit`: Maximum number of results to return (required, 1-100)
+
+**Example Request**
+
+```bash
+curl -X POST http://localhost:8080/leaderboard \
+  -H "Content-Type: application/json" \
+  -d '{
+    "projectIds": [
+      "1e233f1b-2b49-4ada-9953-1763785fba2c",
+      "2c24aa45-4fe2-4f2b-ae58-09d4b9a4ad28"
+    ],
+    "limit": 2
+  }'
+```
+
+**Response**
+
+```json
+[
+  {
+    "projectId": "1e233f1b-2b49-4ada-9953-1763785fba2c",
+    "homepage": "https://example.com",
+    "name": "example-project",
+    "source": "https://github.com/example/project",
+    "teaRank": "150",
+    "teaRankCalculatedAt": "2024-12-27T08:04:03.991832",
+    "packageManagers": ["homebrew", "crates"]
+  },
+  {
+    "projectId": "2c24aa45-4fe2-4f2b-ae58-09d4b9a4ad28",
+    "homepage": "https://another-example.com",
+    "name": "another-project",
+    "source": "https://github.com/another/project",
+    "teaRank": "75",
+    "teaRankCalculatedAt": "2024-12-26T10:15:22.123456",
+    "packageManagers": ["debian", "pkgx"]
+  }
+]
+```
+
+**Response (Validation Errors)**
+
+```json
+{
+  "error": "At least one project ID is required"
+}
+```
+
+```json
+{
+  "error": "Too many project IDs (maximum 100 allowed)"
+}
+```
+
+```json
+{
+  "error": "Invalid limit 150: must be between 1 and 100"
+}
+```
+
 ## Available Tables
 
 The database contains the following tables:
@@ -387,3 +468,23 @@ Ensure the following environment variables are configured in your task definitio
 - [ECS Task Definitions](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_definitions.html)
 - [ECS Services](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs_services.html)
 - [AWS CLI ECS Commands](https://docs.aws.amazon.com/cli/latest/reference/ecs/)
+
+## Tasks
+
+### Format
+
+```bash
+cargo fmt --all --
+```
+
+### Build
+
+```bash
+cargo build --release
+```
+
+### Validate
+
+```bash
+cargo clippy --all-targets --all-features -- -D warnings
+```

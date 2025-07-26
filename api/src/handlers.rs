@@ -1,4 +1,4 @@
-use actix_web::{get, web, HttpResponse, Responder};
+use actix_web::{get, post, web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio_postgres::error::SqlState;
@@ -22,6 +22,13 @@ struct PaginatedResponse {
     total_pages: i64,
     columns: Vec<String>,
     data: Vec<Value>,
+}
+
+#[derive(Deserialize)]
+pub struct LeaderboardRequest {
+    #[serde(rename = "projectIds")]
+    pub project_ids: Vec<Uuid>,
+    pub limit: i64,
 }
 
 pub fn check_table_exists(table: &str, tables: &[String]) -> Option<HttpResponse> {
@@ -328,23 +335,29 @@ pub async fn search_projects(path: web::Path<String>, data: web::Data<AppState>)
     }
 }
 
-#[get("/leaderboard/{limit}")]
-pub async fn get_leaderboard(path: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
-    let limit_str = path.into_inner();
+#[post("/leaderboard")]
+pub async fn get_leaderboard(
+    req: web::Json<LeaderboardRequest>,
+    data: web::Data<AppState>,
+) -> impl Responder {
+    const RESPONSE_LIMIT: i64 = 100;
 
-    // Parse and validate limit parameter
-    let limit: i64 = match limit_str.parse() {
-        Ok(n) => n,
-        Err(_) => {
-            return HttpResponse::BadRequest().json(json!({
-                "error": "Invalid number format in limit"
-            }));
-        }
-    };
-
-    if limit <= 0 || limit > 100 {
+    // Validation
+    if req.project_ids.is_empty() {
         return HttpResponse::BadRequest().json(json!({
-            "error": "Invalid number format in limit"
+            "error": "At least one project ID is required"
+        }));
+    }
+
+    if req.project_ids.len() > RESPONSE_LIMIT as usize {
+        return HttpResponse::BadRequest().json(json!({
+            "error": format!("Too many project IDs (maximum {} allowed)", RESPONSE_LIMIT)
+        }));
+    }
+
+    if req.limit <= 0 || req.limit > RESPONSE_LIMIT {
+        return HttpResponse::BadRequest().json(json!({
+            "error": format!("Invalid limit {}: must be between 1 and {}", req.limit, RESPONSE_LIMIT)
         }));
     }
 
@@ -374,15 +387,17 @@ pub async fn get_leaderboard(path: web::Path<String>, data: web::Data<AppState>)
             JOIN urls u_source ON pu.url_id = u_source.id
             JOIN url_types ut_source ON ut_source.id = u_source.url_type_id
             LEFT JOIN tea_ranks tr ON tr.canon_id = c.id
-            WHERE ut_source.name = 'source'
+            WHERE 
+            c.id = ANY($1::uuid[]) AND ut_source.name = 'source'
+            AND ut_source.name = 'source'
             AND CAST(tr.rank AS NUMERIC) > 0
             ORDER BY c.id, tr.created_at DESC, u_source.url
         ) sub
         ORDER BY CAST("teaRank" AS NUMERIC) DESC NULLS LAST
-        LIMIT $1"#;
+        LIMIT $2"#;
 
     match data.pool.get().await {
-        Ok(client) => match client.query(query, &[&limit]).await {
+        Ok(client) => match client.query(query, &[&req.project_ids, &req.limit]).await {
             Ok(rows) => {
                 let json = rows_to_json(&rows);
                 HttpResponse::Ok().json(json)
