@@ -88,7 +88,7 @@ pub async fn heartbeat(data: web::Data<AppState>) -> impl Responder {
     }
 }
 
-#[get("/{table}")]
+#[get("/tables/{table}")]
 pub async fn get_table(
     path: web::Path<String>,
     query: web::Query<PaginationParams>,
@@ -147,8 +147,56 @@ pub async fn get_table(
     }
 }
 
+#[get("/tables/{table}/{id}")]
+pub async fn get_table_row(
+    path: web::Path<(String, Uuid)>,
+    data: web::Data<AppState>,
+) -> impl Responder {
+    let (table_name, id) = path.into_inner();
+
+    if let Some(response) = check_table_exists(&table_name, &data.tables) {
+        return response;
+    }
+
+    let query = format!("SELECT * FROM {table_name} WHERE id = $1");
+
+    match data.pool.get().await {
+        Ok(client) => match client.query_one(&query, &[&id]).await {
+            Ok(row) => {
+                let json = rows_to_json(&[row]);
+                let value = json.first().unwrap();
+                HttpResponse::Ok().json(value)
+            }
+            Err(e) => {
+                if e.as_db_error()
+                    .is_some_and(|db_err| db_err.code() == &SqlState::UNDEFINED_TABLE)
+                {
+                    HttpResponse::NotFound().json(json!({
+                        "error": format!("Table '{}' not found", table_name)
+                    }))
+                } else if e
+                    .as_db_error()
+                    .is_some_and(|e| e.code() == &SqlState::NO_DATA_FOUND)
+                {
+                    HttpResponse::NotFound().json(json!({
+                        "error": format!("No row found with id '{}' in table '{}'", id, table_name)
+                    }))
+                } else {
+                    HttpResponse::InternalServerError().json(json!({
+                        "error": format!("Database error: {}", e)
+                    }))
+                }
+            }
+        },
+        Err(e) => {
+            log::error!("Failed to get database connection: {e}");
+            HttpResponse::InternalServerError().body("Failed to get database connection")
+        }
+    }
+}
+
 #[get("/project/{id}")]
-pub async fn get_projects(path: web::Path<Uuid>, data: web::Data<AppState>) -> impl Responder {
+pub async fn get_project(path: web::Path<Uuid>, data: web::Data<AppState>) -> impl Responder {
     // Check if the table exists
     let id = path.into_inner();
 
@@ -210,7 +258,7 @@ pub async fn get_projects(path: web::Path<Uuid>, data: web::Data<AppState>) -> i
 }
 
 #[post("/project/batch")]
-pub async fn get_projects_batch(
+pub async fn list_projects_by_id(
     req: web::Json<ProjectBatchRequest>,
     data: web::Data<AppState>,
 ) -> impl Responder {
@@ -268,7 +316,10 @@ pub async fn get_projects_batch(
 }
 
 #[get("/project/search/{name}")]
-pub async fn search_projects(path: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
+pub async fn list_projects_by_name(
+    path: web::Path<String>,
+    data: web::Data<AppState>,
+) -> impl Responder {
     let name = path.into_inner();
 
     if name.trim().is_empty() {
@@ -400,54 +451,6 @@ pub async fn get_leaderboard(
                 HttpResponse::InternalServerError().json(json!({
                     "error": format!("Database error: {}", e)
                 }))
-            }
-        },
-        Err(e) => {
-            log::error!("Failed to get database connection: {e}");
-            HttpResponse::InternalServerError().body("Failed to get database connection")
-        }
-    }
-}
-
-#[get("/{table}/{id}")]
-pub async fn get_table_row(
-    path: web::Path<(String, Uuid)>,
-    data: web::Data<AppState>,
-) -> impl Responder {
-    let (table_name, id) = path.into_inner();
-
-    if let Some(response) = check_table_exists(&table_name, &data.tables) {
-        return response;
-    }
-
-    let query = format!("SELECT * FROM {table_name} WHERE id = $1");
-
-    match data.pool.get().await {
-        Ok(client) => match client.query_one(&query, &[&id]).await {
-            Ok(row) => {
-                let json = rows_to_json(&[row]);
-                let value = json.first().unwrap();
-                HttpResponse::Ok().json(value)
-            }
-            Err(e) => {
-                if e.as_db_error()
-                    .is_some_and(|db_err| db_err.code() == &SqlState::UNDEFINED_TABLE)
-                {
-                    HttpResponse::NotFound().json(json!({
-                        "error": format!("Table '{}' not found", table_name)
-                    }))
-                } else if e
-                    .as_db_error()
-                    .is_some_and(|e| e.code() == &SqlState::NO_DATA_FOUND)
-                {
-                    HttpResponse::NotFound().json(json!({
-                        "error": format!("No row found with id '{}' in table '{}'", id, table_name)
-                    }))
-                } else {
-                    HttpResponse::InternalServerError().json(json!({
-                        "error": format!("Database error: {}", e)
-                    }))
-                }
             }
         },
         Err(e) => {
