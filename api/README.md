@@ -202,19 +202,40 @@ Returns detailed information about a specific canon by its canonical ID.
 ### Get Projects Batch
 
 ```
-GET /project/batch/{ids}
+POST /project/batch
 ```
 
 Returns detailed information about multiple projects by their canonical IDs.
 
-**Path Parameters**
+**Request Body**
 
-- `ids`: Comma-separated list of project UUIDs
+```json
+{
+  "projectIds": ["uuid1", "uuid2", "..."]
+}
+```
+
+**Parameters**
+
+- `projectIds`: Array of project UUIDs to include in the leaderboard (required, max 100)
 
 **Example**
 
 ```
-GET /project/batch/550e8400-e29b-41d4-a716-446655440000,6ba7b810-9dad-11d1-80b4-00c04fd430c8
+POST /project/batch
+```
+
+**Example Request**
+
+```bash
+curl -X POST http://localhost:8080/project/batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "projectIds": [
+      "550e8400-e29b-41d4-a716-446655440000",
+      "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+    ]
+  }'
 ```
 
 **Response**
@@ -256,7 +277,8 @@ GET /project/batch/550e8400-e29b-41d4-a716-446655440000,6ba7b810-9dad-11d1-80b4-
 GET /project/search/{name}
 ```
 
-Searches for projects by name using case-insensitive partial matching. Results are ordered by name length and limited to 10 items.
+Searches for projects by name using case-insensitive partial matching. Results are
+ordered by name length and limited to 10 items.
 
 **Path Parameters**
 
@@ -297,13 +319,14 @@ GET /project/search/python
 }
 ```
 
-### Get Leaderboard
+### Leaderboard
 
 ```
 POST /leaderboard
 ```
 
-Returns detailed information about specified projects, ordered by tea rank in descending order. This endpoint allows filtering by project IDs and limiting the number of results.
+Returns detailed information about specified projects, ordered by tea rank in descending
+order. This endpoint allows filtering by project IDs and limiting the number of results.
 
 **Request Body**
 
@@ -487,4 +510,12 @@ cargo build --release
 
 ```bash
 cargo clippy --all-targets --all-features -- -D warnings
+```
+
+### Run
+
+Env: DATABASE_URL=postgresql://postgres:s3cr3t@localhost:5435/chai
+
+```bash
+target/release/chai-api
 ```

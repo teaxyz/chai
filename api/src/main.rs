@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use crate::app_state::AppState;
 use crate::handlers::{
-    get_leaderboard, get_projects, get_projects_batch, get_table, get_table_row, heartbeat,
-    list_tables, search_projects,
+    get_leaderboard, get_project, get_table, get_table_row, heartbeat, list_projects_by_id,
+    list_projects_by_name, list_tables,
 };
 use crate::logging::setup_logger;
 
@@ -37,14 +37,17 @@ async fn main() -> std::io::Result<()> {
                 pool: pool.clone(),
                 tables: Arc::clone(&tables),
             }))
-            .service(list_tables)
+            // HEALTH
             .service(heartbeat)
-            .service(get_leaderboard)
-            .service(get_projects)
-            .service(get_projects_batch)
-            .service(search_projects)
+            // SIMPLE CRUD OPERATIONS
+            .service(list_tables)
             .service(get_table)
             .service(get_table_row)
+            // BUSINESS LOGIC
+            .service(get_leaderboard)
+            .service(get_project)
+            .service(list_projects_by_id)
+            .service(list_projects_by_name)
     })
     .bind(&bind_address)?
     .run()
