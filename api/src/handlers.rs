@@ -31,6 +31,12 @@ pub struct LeaderboardRequest {
     pub limit: i64,
 }
 
+#[derive(Deserialize)]
+pub struct ProjectBatchRequest {
+    #[serde(rename = "projectIds")]
+    pub project_ids: Vec<Uuid>,
+}
+
 pub fn check_table_exists(table: &str, tables: &[String]) -> Option<HttpResponse> {
     if !tables.contains(&table.to_string()) {
         Some(HttpResponse::NotFound().json(json!({
@@ -203,25 +209,12 @@ pub async fn get_projects(path: web::Path<Uuid>, data: web::Data<AppState>) -> i
     }
 }
 
-#[get("/project/batch/{ids}")]
+#[post("/project/batch")]
 pub async fn get_projects_batch(
-    path: web::Path<String>,
+    req: web::Json<ProjectBatchRequest>,
     data: web::Data<AppState>,
 ) -> impl Responder {
-    let ids_str = path.into_inner();
-
-    // Parse comma-separated UUIDs
-    let ids: Result<Vec<Uuid>, _> = ids_str
-        .split(',')
-        .map(|s| s.trim().parse::<Uuid>())
-        .collect();
-
-    let Ok(ids) = ids else {
-        return HttpResponse::BadRequest()
-            .json(json!({"error": format!("Invalid UUID format in project IDs")}));
-    };
-
-    if ids.is_empty() {
+    if req.project_ids.is_empty() {
         return HttpResponse::BadRequest().json(json!({
             "error": "No project IDs provided"
         }));
@@ -255,7 +248,7 @@ pub async fn get_projects_batch(
         ORDER BY c.id, tr.created_at DESC, u_source.url;"#;
 
     match data.pool.get().await {
-        Ok(client) => match client.query(query, &[&ids]).await {
+        Ok(client) => match client.query(query, &[&req.project_ids]).await {
             Ok(rows) => {
                 let json = rows_to_json(&rows);
                 HttpResponse::Ok().json(json)
@@ -388,7 +381,7 @@ pub async fn get_leaderboard(
             JOIN url_types ut_source ON ut_source.id = u_source.url_type_id
             LEFT JOIN tea_ranks tr ON tr.canon_id = c.id
             WHERE 
-            c.id = ANY($1::uuid[]) AND ut_source.name = 'source'
+            c.id = ANY($1::uuid[])
             AND ut_source.name = 'source'
             AND CAST(tr.rank AS NUMERIC) > 0
             ORDER BY c.id, tr.created_at DESC, u_source.url
