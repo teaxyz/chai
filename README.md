@@ -27,7 +27,7 @@ Use [Docker](https://docker.com)
 > - pkgx
 >
 > You can run a single package manager by running
-> `docker compose up -e ... <package_manager>`
+> `PACKAGE_MANAGER=<name> docker compose up`
 >
 > We are planning on supporting `NPM`, `PyPI`, and `rubygems` next.
 
