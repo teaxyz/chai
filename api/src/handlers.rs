@@ -386,7 +386,7 @@ pub async fn get_leaderboard(
     req: web::Json<LeaderboardRequest>,
     data: web::Data<AppState>,
 ) -> impl Responder {
-    let Some(project_ids) = req.project_ids.clone() else {
+    let Some(project_ids) = req.project_ids.as_deref() else {
         return get_top_projects(data, req.limit).await;
     };
 
