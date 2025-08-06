@@ -7,6 +7,8 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::utils::{get_column_names, rows_to_json, Pagination};
 
+const RESPONSE_LIMIT: i64 = 100;
+
 #[derive(Deserialize)]
 pub struct PaginationParams {
     pub page: Option<i64>,
@@ -27,7 +29,7 @@ struct PaginatedResponse {
 #[derive(Deserialize)]
 pub struct LeaderboardRequest {
     #[serde(rename = "projectIds")]
-    pub project_ids: Vec<Uuid>,
+    pub project_ids: Option<Vec<Uuid>>,
     pub limit: i64,
 }
 
@@ -384,28 +386,18 @@ pub async fn get_leaderboard(
     req: web::Json<LeaderboardRequest>,
     data: web::Data<AppState>,
 ) -> impl Responder {
-    const RESPONSE_LIMIT: i64 = 100;
+    let Some(project_ids) = req.project_ids.clone() else {
+        return get_top_projects(data, req.limit).await;
+    };
 
-    // Validation
-    if req.project_ids.is_empty() {
-        return HttpResponse::BadRequest().json(json!({
-            "error": "At least one project ID is required"
-        }));
-    }
-
-    if req.project_ids.len() > RESPONSE_LIMIT as usize {
+    if project_ids.len() > RESPONSE_LIMIT as usize {
         return HttpResponse::BadRequest().json(json!({
             "error": format!("Too many project IDs (maximum {} allowed)", RESPONSE_LIMIT)
         }));
     }
 
-    if req.limit <= 0 || req.limit > RESPONSE_LIMIT {
-        return HttpResponse::BadRequest().json(json!({
-            "error": format!("Invalid limit {}: must be between 1 and {}", req.limit, RESPONSE_LIMIT)
-        }));
-    }
+    let limit = req.limit.clamp(1, RESPONSE_LIMIT);
 
-    // Construct the query
     let query = r#"
         SELECT *
         FROM (
@@ -431,7 +423,7 @@ pub async fn get_leaderboard(
             JOIN urls u_source ON pu.url_id = u_source.id
             JOIN url_types ut_source ON ut_source.id = u_source.url_type_id
             LEFT JOIN tea_ranks tr ON tr.canon_id = c.id
-            WHERE 
+            WHERE
             c.id = ANY($1::uuid[])
             AND ut_source.name = 'source'
             AND CAST(tr.rank AS NUMERIC) > 0
@@ -441,7 +433,7 @@ pub async fn get_leaderboard(
         LIMIT $2"#;
 
     match data.pool.get().await {
-        Ok(client) => match client.query(query, &[&req.project_ids, &req.limit]).await {
+        Ok(client) => match client.query(query, &[&project_ids, &limit]).await {
             Ok(rows) => {
                 let json = rows_to_json(&rows);
                 HttpResponse::Ok().json(json)
@@ -458,4 +450,42 @@ pub async fn get_leaderboard(
             HttpResponse::InternalServerError().body("Failed to get database connection")
         }
     }
+}
+
+async fn get_top_projects(data: web::Data<AppState>, limit: i64) -> HttpResponse {
+    // get client
+    let Ok(client) = data.pool.get().await else {
+        return HttpResponse::InternalServerError().body("Failed to get database connection");
+    };
+
+    // get latest run id
+    let run_query = r#"SELECT MAX(run) from tea_rank_runs"#;
+    let Ok(run_row) = client.query_one(run_query, &[]).await else {
+        return HttpResponse::InternalServerError().body("Failed to get latest run");
+    };
+    let run: i32 = run_row.get(0);
+
+    // get top projects (1-RESPONSE_LIMIT)
+    let top_ranks_query = r#"SELECT
+            canon_id as "projectId",
+            name,
+            rank as "teaRank"
+        FROM
+            tea_ranks
+            JOIN canons ON canon_id = canons.id
+        WHERE
+            tea_rank_run = $1
+        ORDER BY
+            rank DESC
+        LIMIT $2"#;
+    let Ok(top_ranks) = client
+        .query(top_ranks_query, &[&run, &limit.clamp(1, RESPONSE_LIMIT)])
+        .await
+    else {
+        return HttpResponse::InternalServerError().json(json!({
+            "error": "Failed to fetch top ranks"
+        }));
+    };
+    let json = rows_to_json(&top_ranks);
+    HttpResponse::Ok().json(json)
 }
