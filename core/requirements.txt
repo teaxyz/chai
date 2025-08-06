@@ -54,7 +54,7 @@ typing-extensions==4.14.0
     # via
     #   alembic
     #   sqlalchemy
-urllib3==2.4.0
+urllib3==2.5.0
     # via
     #   chai (pyproject.toml:indexers)
     #   requests
