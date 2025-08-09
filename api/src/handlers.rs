@@ -469,7 +469,15 @@ async fn get_top_projects(data: web::Data<AppState>, limit: i64) -> HttpResponse
     let top_ranks_query = r#"SELECT
             canon_id as "projectId",
             name,
-            rank as "teaRank"
+            rank as "teaRank",
+            (
+                SELECT ARRAY_AGG(DISTINCT s.type)
+                FROM canon_packages cp2
+                JOIN packages p2 ON cp2.package_id = p2.id
+                JOIN package_managers pm2 ON p2.package_manager_id = pm2.id
+                JOIN sources s ON pm2.source_id = s.id
+                WHERE cp2.canon_id = canon_id
+            ) AS "packageManagers"
         FROM
             tea_ranks
             JOIN canons ON canon_id = canons.id
