@@ -1,4 +1,4 @@
-use actix_web::{get, web, HttpResponse, Responder};
+use actix_web::{get, post, web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio_postgres::error::SqlState;
@@ -6,6 +6,8 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::utils::{get_column_names, rows_to_json, Pagination};
+
+const RESPONSE_LIMIT: i64 = 100;
 
 #[derive(Deserialize)]
 pub struct PaginationParams {
@@ -22,6 +24,19 @@ struct PaginatedResponse {
     total_pages: i64,
     columns: Vec<String>,
     data: Vec<Value>,
+}
+
+#[derive(Deserialize)]
+pub struct LeaderboardRequest {
+    #[serde(rename = "projectIds")]
+    pub project_ids: Option<Vec<Uuid>>,
+    pub limit: i64,
+}
+
+#[derive(Deserialize)]
+pub struct ProjectBatchRequest {
+    #[serde(rename = "projectIds")]
+    pub project_ids: Vec<Uuid>,
 }
 
 pub fn check_table_exists(table: &str, tables: &[String]) -> Option<HttpResponse> {
@@ -75,7 +90,7 @@ pub async fn heartbeat(data: web::Data<AppState>) -> impl Responder {
     }
 }
 
-#[get("/{table}")]
+#[get("/tables/{table}")]
 pub async fn get_table(
     path: web::Path<String>,
     query: web::Query<PaginationParams>,
@@ -134,8 +149,56 @@ pub async fn get_table(
     }
 }
 
+#[get("/tables/{table}/{id}")]
+pub async fn get_table_row(
+    path: web::Path<(String, Uuid)>,
+    data: web::Data<AppState>,
+) -> impl Responder {
+    let (table_name, id) = path.into_inner();
+
+    if let Some(response) = check_table_exists(&table_name, &data.tables) {
+        return response;
+    }
+
+    let query = format!("SELECT * FROM {table_name} WHERE id = $1");
+
+    match data.pool.get().await {
+        Ok(client) => match client.query_one(&query, &[&id]).await {
+            Ok(row) => {
+                let json = rows_to_json(&[row]);
+                let value = json.first().unwrap();
+                HttpResponse::Ok().json(value)
+            }
+            Err(e) => {
+                if e.as_db_error()
+                    .is_some_and(|db_err| db_err.code() == &SqlState::UNDEFINED_TABLE)
+                {
+                    HttpResponse::NotFound().json(json!({
+                        "error": format!("Table '{}' not found", table_name)
+                    }))
+                } else if e
+                    .as_db_error()
+                    .is_some_and(|e| e.code() == &SqlState::NO_DATA_FOUND)
+                {
+                    HttpResponse::NotFound().json(json!({
+                        "error": format!("No row found with id '{}' in table '{}'", id, table_name)
+                    }))
+                } else {
+                    HttpResponse::InternalServerError().json(json!({
+                        "error": format!("Database error: {}", e)
+                    }))
+                }
+            }
+        },
+        Err(e) => {
+            log::error!("Failed to get database connection: {e}");
+            HttpResponse::InternalServerError().body("Failed to get database connection")
+        }
+    }
+}
+
 #[get("/project/{id}")]
-pub async fn get_projects(path: web::Path<Uuid>, data: web::Data<AppState>) -> impl Responder {
+pub async fn get_project(path: web::Path<Uuid>, data: web::Data<AppState>) -> impl Responder {
     // Check if the table exists
     let id = path.into_inner();
 
@@ -155,7 +218,19 @@ pub async fn get_projects(path: web::Path<Uuid>, data: web::Data<AppState>) -> i
                 JOIN package_managers pm2 ON p2.package_manager_id = pm2.id
                 JOIN sources s ON pm2.source_id = s.id
                 WHERE cp2.canon_id = c.id
-            ) AS "packageManagers"
+            ) AS "packageManagers",
+            (
+                SELECT COUNT(*)::bigint
+                FROM legacy_dependencies ld
+                JOIN canon_packages cp_out ON cp_out.package_id = ld.package_id
+                WHERE cp_out.canon_id = c.id
+            ) AS "dependenciesCount",
+            (
+                SELECT COUNT(*)::bigint
+                FROM legacy_dependencies ld
+                JOIN canon_packages cp_in ON cp_in.package_id = ld.dependency_id
+                WHERE cp_in.canon_id = c.id
+            ) AS "dependentsCount"
         FROM canons c
         JOIN urls u_homepage ON c.url_id = u_homepage.id 
         JOIN canon_packages cp ON cp.canon_id = c.id
@@ -196,25 +271,12 @@ pub async fn get_projects(path: web::Path<Uuid>, data: web::Data<AppState>) -> i
     }
 }
 
-#[get("/project/batch/{ids}")]
-pub async fn get_projects_batch(
-    path: web::Path<String>,
+#[post("/project/batch")]
+pub async fn list_projects_by_id(
+    req: web::Json<ProjectBatchRequest>,
     data: web::Data<AppState>,
 ) -> impl Responder {
-    let ids_str = path.into_inner();
-
-    // Parse comma-separated UUIDs
-    let ids: Result<Vec<Uuid>, _> = ids_str
-        .split(',')
-        .map(|s| s.trim().parse::<Uuid>())
-        .collect();
-
-    let Ok(ids) = ids else {
-        return HttpResponse::BadRequest()
-            .json(json!({"error": format!("Invalid UUID format in project IDs")}));
-    };
-
-    if ids.is_empty() {
+    if req.project_ids.is_empty() {
         return HttpResponse::BadRequest().json(json!({
             "error": "No project IDs provided"
         }));
@@ -248,7 +310,7 @@ pub async fn get_projects_batch(
         ORDER BY c.id, tr.created_at DESC, u_source.url;"#;
 
     match data.pool.get().await {
-        Ok(client) => match client.query(query, &[&ids]).await {
+        Ok(client) => match client.query(query, &[&req.project_ids]).await {
             Ok(rows) => {
                 let json = rows_to_json(&rows);
                 HttpResponse::Ok().json(json)
@@ -268,7 +330,10 @@ pub async fn get_projects_batch(
 }
 
 #[get("/project/search/{name}")]
-pub async fn search_projects(path: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
+pub async fn list_projects_by_name(
+    path: web::Path<String>,
+    data: web::Data<AppState>,
+) -> impl Responder {
     let name = path.into_inner();
 
     if name.trim().is_empty() {
@@ -328,45 +393,68 @@ pub async fn search_projects(path: web::Path<String>, data: web::Data<AppState>)
     }
 }
 
-#[get("/{table}/{id}")]
-pub async fn get_table_row(
-    path: web::Path<(String, Uuid)>,
+#[post("/leaderboard")]
+pub async fn get_leaderboard(
+    req: web::Json<LeaderboardRequest>,
     data: web::Data<AppState>,
 ) -> impl Responder {
-    let (table_name, id) = path.into_inner();
+    let Some(project_ids) = req.project_ids.as_deref() else {
+        return get_top_projects(data, req.limit).await;
+    };
 
-    if let Some(response) = check_table_exists(&table_name, &data.tables) {
-        return response;
+    if project_ids.len() > RESPONSE_LIMIT as usize {
+        return HttpResponse::BadRequest().json(json!({
+            "error": format!("Too many project IDs (maximum {} allowed)", RESPONSE_LIMIT)
+        }));
     }
 
-    let query = format!("SELECT * FROM {table_name} WHERE id = $1");
+    let limit = req.limit.clamp(1, RESPONSE_LIMIT);
+
+    let query = r#"
+        SELECT *
+        FROM (
+            SELECT DISTINCT ON (c.id)
+                c.id AS "projectId",
+                u_homepage.url AS homepage,
+                c.name,
+                u_source.url AS source,
+                COALESCE(tr.rank,'0') AS "teaRank",
+                tr.created_at AS "teaRankCalculatedAt",
+                (
+                    SELECT ARRAY_AGG(DISTINCT s.type)
+                    FROM canon_packages cp2
+                    JOIN packages p2 ON cp2.package_id = p2.id
+                    JOIN package_managers pm2 ON p2.package_manager_id = pm2.id
+                    JOIN sources s ON pm2.source_id = s.id
+                    WHERE cp2.canon_id = c.id
+                ) AS "packageManagers"
+            FROM canons c
+            JOIN urls u_homepage ON c.url_id = u_homepage.id
+            JOIN canon_packages cp ON cp.canon_id = c.id
+            JOIN package_urls pu ON pu.package_id = cp.package_id
+            JOIN urls u_source ON pu.url_id = u_source.id
+            JOIN url_types ut_source ON ut_source.id = u_source.url_type_id
+            LEFT JOIN tea_ranks tr ON tr.canon_id = c.id
+            WHERE
+            c.id = ANY($1::uuid[])
+            AND ut_source.name = 'source'
+            AND CAST(tr.rank AS NUMERIC) > 0
+            ORDER BY c.id, tr.created_at DESC, u_source.url
+        ) sub
+        ORDER BY CAST("teaRank" AS NUMERIC) DESC NULLS LAST
+        LIMIT $2"#;
 
     match data.pool.get().await {
-        Ok(client) => match client.query_one(&query, &[&id]).await {
-            Ok(row) => {
-                let json = rows_to_json(&[row]);
-                let value = json.first().unwrap();
-                HttpResponse::Ok().json(value)
+        Ok(client) => match client.query(query, &[&project_ids, &limit]).await {
+            Ok(rows) => {
+                let json = rows_to_json(&rows);
+                HttpResponse::Ok().json(json)
             }
             Err(e) => {
-                if e.as_db_error()
-                    .is_some_and(|db_err| db_err.code() == &SqlState::UNDEFINED_TABLE)
-                {
-                    HttpResponse::NotFound().json(json!({
-                        "error": format!("Table '{}' not found", table_name)
-                    }))
-                } else if e
-                    .as_db_error()
-                    .is_some_and(|e| e.code() == &SqlState::NO_DATA_FOUND)
-                {
-                    HttpResponse::NotFound().json(json!({
-                        "error": format!("No row found with id '{}' in table '{}'", id, table_name)
-                    }))
-                } else {
-                    HttpResponse::InternalServerError().json(json!({
-                        "error": format!("Database error: {}", e)
-                    }))
-                }
+                log::error!("Database query error: {e}");
+                HttpResponse::InternalServerError().json(json!({
+                    "error": format!("Database error: {}", e)
+                }))
             }
         },
         Err(e) => {
@@ -374,4 +462,50 @@ pub async fn get_table_row(
             HttpResponse::InternalServerError().body("Failed to get database connection")
         }
     }
+}
+
+async fn get_top_projects(data: web::Data<AppState>, limit: i64) -> HttpResponse {
+    // get client
+    let Ok(client) = data.pool.get().await else {
+        return HttpResponse::InternalServerError().body("Failed to get database connection");
+    };
+
+    // get latest run id
+    let run_query = r#"SELECT MAX(run) from tea_rank_runs"#;
+    let Ok(run_row) = client.query_one(run_query, &[]).await else {
+        return HttpResponse::InternalServerError().body("Failed to get latest run");
+    };
+    let run: i32 = run_row.get(0);
+
+    // get top projects (1-RESPONSE_LIMIT)
+    let top_ranks_query = r#"SELECT
+            canon_id as "projectId",
+            name,
+            rank as "teaRank",
+            (
+                SELECT ARRAY_AGG(DISTINCT s.type)
+                FROM canon_packages cp2
+                JOIN packages p2 ON cp2.package_id = p2.id
+                JOIN package_managers pm2 ON p2.package_manager_id = pm2.id
+                JOIN sources s ON pm2.source_id = s.id
+                WHERE cp2.canon_id = canon_id
+            ) AS "packageManagers"
+        FROM
+            tea_ranks
+            JOIN canons ON canon_id = canons.id
+        WHERE
+            tea_rank_run = $1
+        ORDER BY
+            rank DESC
+        LIMIT $2"#;
+    let Ok(top_ranks) = client
+        .query(top_ranks_query, &[&run, &limit.clamp(1, RESPONSE_LIMIT)])
+        .await
+    else {
+        return HttpResponse::InternalServerError().json(json!({
+            "error": "Failed to fetch top ranks"
+        }));
+    };
+    let json = rows_to_json(&top_ranks);
+    HttpResponse::Ok().json(json)
 }
