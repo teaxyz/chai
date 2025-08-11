@@ -218,7 +218,19 @@ pub async fn get_project(path: web::Path<Uuid>, data: web::Data<AppState>) -> im
                 JOIN package_managers pm2 ON p2.package_manager_id = pm2.id
                 JOIN sources s ON pm2.source_id = s.id
                 WHERE cp2.canon_id = c.id
-            ) AS "packageManagers"
+            ) AS "packageManagers",
+            (
+                SELECT COUNT(*)::bigint
+                FROM legacy_dependencies ld
+                JOIN canon_packages cp_out ON cp_out.package_id = ld.package_id
+                WHERE cp_out.canon_id = c.id
+            ) AS "dependenciesCount",
+            (
+                SELECT COUNT(*)::bigint
+                FROM legacy_dependencies ld
+                JOIN canon_packages cp_in ON cp_in.package_id = ld.dependency_id
+                WHERE cp_in.canon_id = c.id
+            ) AS "dependentsCount"
         FROM canons c
         JOIN urls u_homepage ON c.url_id = u_homepage.id 
         JOIN canon_packages cp ON cp.canon_id = c.id
