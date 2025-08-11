@@ -114,7 +114,7 @@ uv add --group indexer requests
 
 # use the --all-groups flag to sync your venv for all dependencies
 uv sync --all-groups
-uv pip compile --group indexer -o core/requirements.txt
+uv pip compile --group indexers -o core/requirements.txt
 ```
 
 The last step writes the updated dependencies to a requirements.txt file, which is
