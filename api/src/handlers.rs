@@ -204,44 +204,61 @@ pub async fn get_project(path: web::Path<Uuid>, data: web::Data<AppState>) -> im
 
     // Construct the query
     let query = r#"
-        SELECT DISTINCT ON (c.id)
-            c.id AS "projectId",
-            u_homepage.url AS homepage,
-            c.name,
-            u_source.url AS source,
-            COALESCE(tr.rank,'0') AS "teaRank",
-            tr.created_at AS "teaRankCalculatedAt",
-            (
+        WITH base AS MATERIALIZED (
+            SELECT
+                c.id,
+                u_homepage.url AS homepage,
+                c.name,
+                COALESCE(tr_latest.rank, '0') AS "teaRank",
+                tr_latest.created_at AS "teaRankCalculatedAt",
+                (
                 SELECT ARRAY_AGG(DISTINCT s.type)
                 FROM canon_packages cp2
-                JOIN packages p2 ON cp2.package_id = p2.id
-                JOIN package_managers pm2 ON p2.package_manager_id = pm2.id
-                JOIN sources s ON pm2.source_id = s.id
+                JOIN packages p2           ON cp2.package_id = p2.id
+                JOIN package_managers pm2  ON p2.package_manager_id = pm2.id
+                JOIN sources s             ON pm2.source_id = s.id
                 WHERE cp2.canon_id = c.id
-            ) AS "packageManagers",
-            (
+                ) AS "packageManagers",
+                (
                 SELECT COUNT(*)::bigint
                 FROM legacy_dependencies ld
                 JOIN canon_packages cp_out ON cp_out.package_id = ld.package_id
                 WHERE cp_out.canon_id = c.id
-            ) AS "dependenciesCount",
-            (
+                ) AS "dependenciesCount",
+                (
                 SELECT COUNT(*)::bigint
                 FROM legacy_dependencies ld
                 JOIN canon_packages cp_in ON cp_in.package_id = ld.dependency_id
                 WHERE cp_in.canon_id = c.id
-            ) AS "dependentsCount"
-        FROM canons c
-        JOIN urls u_homepage ON c.url_id = u_homepage.id 
-        JOIN canon_packages cp ON cp.canon_id = c.id
-        JOIN package_urls pu ON pu.package_id = cp.package_id
-        JOIN urls u_source ON pu.url_id = u_source.id
-        JOIN url_types ut_source ON ut_source.id = u_source.url_type_id
-        LEFT JOIN tea_ranks tr ON tr.canon_id = c.id
-        WHERE 
-            c.id = $1 
-            AND ut_source.name = 'source'
-        ORDER BY c.id, tr.created_at DESC, u_source.url;"#;
+                ) AS "dependentsCount"
+            FROM canons c
+            JOIN urls u_homepage ON c.url_id = u_homepage.id
+            LEFT JOIN LATERAL (
+                SELECT tr.rank, tr.created_at
+                FROM tea_ranks tr
+                WHERE tr.canon_id = c.id
+                ORDER BY tr.created_at DESC
+                LIMIT 1
+            ) tr_latest ON TRUE
+            WHERE c.id = $1
+        )
+        SELECT DISTINCT ON (b.id)
+            b.id                AS "projectId",
+            b.homepage,
+            b.name,
+            u_source.url        AS source,
+            b."teaRank",
+            b."teaRankCalculatedAt",
+            b."packageManagers",
+            b."dependenciesCount",
+            b."dependentsCount"
+        FROM base b
+        JOIN canon_packages cp ON cp.canon_id = b.id
+        JOIN package_urls pu   ON pu.package_id = cp.package_id
+        JOIN urls u_source     ON pu.url_id = u_source.id
+        JOIN url_types ut      ON ut.id = u_source.url_type_id
+        WHERE ut.name = 'source'
+        ORDER BY b.id, b."teaRankCalculatedAt" DESC, u_source.url;"#;
 
     match data.pool.get().await {
         Ok(client) => match client.query_one(query, &[&id]).await {
