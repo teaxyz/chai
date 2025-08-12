@@ -34,7 +34,7 @@ jobs:
     environment: ${{ inputs.env || 'dev' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
@@ -143,7 +143,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.env || 'dev' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
