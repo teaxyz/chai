@@ -209,22 +209,8 @@ pub async fn get_project(path: web::Path<Uuid>, data: web::Data<AppState>) -> im
                 c.id,
                 u_homepage.url AS homepage,
                 c.name,
-                -- latest tea rank
-                COALESCE((
-                SELECT tr.rank
-                FROM tea_ranks tr
-                WHERE tr.canon_id = c.id
-                ORDER BY tr.created_at DESC
-                LIMIT 1
-                ), '0') AS "teaRank",
-                (
-                SELECT tr.created_at
-                FROM tea_ranks tr
-                WHERE tr.canon_id = c.id
-                ORDER BY tr.created_at DESC
-                LIMIT 1
-                ) AS "teaRankCalculatedAt",
-                -- same packageManagers subquery as before
+                COALESCE(tr_latest.rank, '0') AS "teaRank",
+                tr_latest.created_at AS "teaRankCalculatedAt",
                 (
                 SELECT ARRAY_AGG(DISTINCT s.type)
                 FROM canon_packages cp2
@@ -233,7 +219,6 @@ pub async fn get_project(path: web::Path<Uuid>, data: web::Data<AppState>) -> im
                 JOIN sources s             ON pm2.source_id = s.id
                 WHERE cp2.canon_id = c.id
                 ) AS "packageManagers",
-                -- the two counts, computed once per canon
                 (
                 SELECT COUNT(*)::bigint
                 FROM legacy_dependencies ld
@@ -248,6 +233,13 @@ pub async fn get_project(path: web::Path<Uuid>, data: web::Data<AppState>) -> im
                 ) AS "dependentsCount"
             FROM canons c
             JOIN urls u_homepage ON c.url_id = u_homepage.id
+            LEFT JOIN LATERAL (
+                SELECT tr.rank, tr.created_at
+                FROM tea_ranks tr
+                WHERE tr.canon_id = c.id
+                ORDER BY tr.created_at DESC
+                LIMIT 1
+            ) tr_latest ON TRUE
             WHERE c.id = $1
         )
         SELECT DISTINCT ON (b.id)
