@@ -1,6 +1,6 @@
 [package]
 name = "chai-api"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2021"
 authors = ["Jacob Heider <jacob@pkgx.dev>"]
 description = "A simple REST API for the CHAI database"
