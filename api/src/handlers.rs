@@ -455,7 +455,6 @@ pub async fn get_leaderboard(
                     JOIN package_managers pm2 ON p2.package_manager_id = pm2.id
                     JOIN sources s ON pm2.source_id = s.id
                     WHERE cp2.canon_id = c.id
-                    AND cp2.canon_id = ANY($1::uuid[])
                 ) AS "packageManagers"
             FROM canons c
             JOIN urls u_homepage ON c.url_id = u_homepage.id
@@ -487,10 +486,10 @@ pub async fn get_leaderboard(
                                 crate::app_state::ProjectCacheEntry::new(project.clone()),
                             );
                         } else {
-                            log::info!("Failed to parse project ID as UUID: {}", project_id);
+                            log::warn!("Failed to parse project ID as UUID: {}", project_id);
                         }
                     } else {
-                        log::info!("No projectId found in project: {:?}", project);
+                        log::warn!("No projectId found in project: {:?}", project);
                     }
                 }
 
@@ -524,9 +523,17 @@ fn sort_truncate_and_return(projects: Vec<Arc<Value>>, limit: i64) -> actix_web:
 
     // Sort projects by teaRank (descending) - Arc<Value> derefs to Value
     projects.sort_by(|a, b| {
-        let rank_a = a.get("teaRank").and_then(|v| v.as_str()).unwrap_or("0");
-        let rank_b = b.get("teaRank").and_then(|v| v.as_str()).unwrap_or("0");
-        rank_b.cmp(rank_a)
+        let rank_a = a
+            .get("teaRank")
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(0);
+        let rank_b = b
+            .get("teaRank")
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(0);
+        rank_b.cmp(&rank_a)
     });
 
     // Apply limit
