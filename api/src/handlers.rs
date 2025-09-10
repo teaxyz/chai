@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::utils::{get_column_names, rows_to_json, Pagination};
 
-const RESPONSE_LIMIT: i64 = 100;
+const RESPONSE_LIMIT: i64 = 1000;
 
 #[derive(Deserialize)]
 pub struct PaginationParams {
