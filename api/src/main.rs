@@ -5,6 +5,7 @@ mod logging;
 mod utils;
 
 use actix_web::{web, App, HttpServer};
+use dashmap::DashMap;
 use dotenv::dotenv;
 use std::env;
 use std::sync::Arc;
@@ -26,6 +27,8 @@ async fn main() -> std::io::Result<()> {
     let bind_address = format!("{host}:{port}");
 
     let (pool, tables) = db::initialize_db().await;
+    // Cache for project data to reduce database load on leaderboard routes
+    let project_cache = Arc::new(DashMap::new());
 
     log::info!("Available tables: {tables:?}");
     log::info!("Starting server at http://{bind_address}");
@@ -36,6 +39,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(AppState {
                 pool: pool.clone(),
                 tables: Arc::clone(&tables),
+                project_cache: Arc::clone(&project_cache),
             }))
             // HEALTH
             .service(heartbeat)

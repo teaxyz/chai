@@ -1,10 +1,12 @@
 use actix_web::web::Query;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
+use dashmap::DashMap;
 use serde_json::{json, Value};
+use std::sync::Arc;
 use tokio_postgres::{types::Type, Row};
 use uuid::Uuid;
 
-use crate::handlers::PaginationParams;
+use crate::{app_state::ProjectCacheEntry, handlers::PaginationParams};
 
 pub fn get_column_names(rows: &[Row]) -> Vec<String> {
     if let Some(row) = rows.first() {
@@ -90,4 +92,25 @@ impl Pagination {
             total_pages,
         }
     }
+}
+
+// Helper function to get cached projects and return missing ones
+pub fn get_cached_projects(
+    cache: Arc<DashMap<Uuid, ProjectCacheEntry>>,
+    project_ids: &[Uuid],
+) -> (Vec<Arc<Value>>, Vec<Uuid>) {
+    let mut cached_projects = Vec::new();
+    let mut missing_ids = Vec::new();
+
+    for &project_id in project_ids {
+        if let Some(entry) = cache.get(&project_id) {
+            if !entry.is_expired() {
+                cached_projects.push(entry.data.clone());
+                continue;
+            }
+        }
+        missing_ids.push(project_id);
+    }
+
+    (cached_projects, missing_ids)
 }

@@ -1,11 +1,12 @@
 use actix_web::{get, post, web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::sync::Arc;
 use tokio_postgres::error::SqlState;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::utils::{get_column_names, rows_to_json, Pagination};
+use crate::utils::{get_cached_projects, get_column_names, rows_to_json, Pagination};
 
 const RESPONSE_LIMIT: i64 = 1000;
 
@@ -317,7 +318,7 @@ pub async fn list_projects_by_id(
                 WHERE cp2.canon_id = c.id
             ) AS "packageManagers"
         FROM canons c
-        JOIN urls u_homepage ON u_homepage.id = c.url_id 
+        JOIN urls u_homepage ON u_homepage.id = c.url_id
         JOIN canon_packages cp ON cp.canon_id = c.id
         JOIN package_urls pu ON pu.package_id = cp.package_id
         JOIN urls u_source ON pu.url_id = u_source.id
@@ -415,8 +416,10 @@ pub async fn get_leaderboard(
     req: web::Json<LeaderboardRequest>,
     data: web::Data<AppState>,
 ) -> impl Responder {
+    let limit = req.limit.clamp(1, RESPONSE_LIMIT);
+
     let Some(project_ids) = req.project_ids.as_deref() else {
-        return get_top_projects(data, req.limit).await;
+        return get_top_projects(data, limit).await;
     };
 
     if project_ids.len() > RESPONSE_LIMIT as usize {
@@ -425,8 +428,16 @@ pub async fn get_leaderboard(
         }));
     }
 
-    let limit = req.limit.clamp(1, RESPONSE_LIMIT);
+    // Get cached projects and identify missing ones
+    let (cached_projects, missing_ids) =
+        get_cached_projects(data.project_cache.clone(), project_ids);
 
+    // If we have all projects cached, return them sorted
+    if missing_ids.is_empty() {
+        return sort_truncate_and_return(cached_projects, limit);
+    }
+
+    // Query for missing projects
     let query = r#"
         SELECT *
         FROM (
@@ -462,10 +473,35 @@ pub async fn get_leaderboard(
         LIMIT $2"#;
 
     match data.pool.get().await {
-        Ok(client) => match client.query(query, &[&project_ids, &limit]).await {
+        Ok(client) => match client.query(query, &[&missing_ids, &limit]).await {
             Ok(rows) => {
-                let json = rows_to_json(&rows);
-                HttpResponse::Ok().json(json)
+                let fresh_projects = rows_to_json(&rows);
+
+                // Cache the fresh projects
+                for project in &fresh_projects {
+                    if let Some(project_id) = project.get("projectId").and_then(|v| v.as_str()) {
+                        if let Ok(uuid) = Uuid::parse_str(project_id) {
+                            data.project_cache.insert(
+                                uuid,
+                                crate::app_state::ProjectCacheEntry::new(project.clone()),
+                            );
+                        } else {
+                            log::warn!("Failed to parse project ID as UUID: {}", project_id);
+                        }
+                    } else {
+                        log::warn!("No projectId found in project: {:?}", project);
+                    }
+                }
+
+                // Combine cached and fresh projects - keep Arc<Value> for cached ones
+                let mut all_projects: Vec<Arc<Value>> = cached_projects;
+
+                // Convert fresh projects to Arc<Value> to match the type
+                let fresh_arcs: Vec<Arc<Value>> =
+                    fresh_projects.into_iter().map(Arc::new).collect();
+                all_projects.extend(fresh_arcs);
+
+                sort_truncate_and_return(all_projects, limit)
             }
             Err(e) => {
                 log::error!("Database query error: {e}");
@@ -479,6 +515,36 @@ pub async fn get_leaderboard(
             HttpResponse::InternalServerError().body("Failed to get database connection")
         }
     }
+}
+
+// Helper function to sort, truncate, and return the final response
+fn sort_truncate_and_return(projects: Vec<Arc<Value>>, limit: i64) -> actix_web::HttpResponse {
+    let mut projects = projects;
+
+    // Sort projects by teaRank (descending) - Arc<Value> derefs to Value
+    projects.sort_by(|a, b| {
+        let rank_a = a
+            .get("teaRank")
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(0);
+        let rank_b = b
+            .get("teaRank")
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(0);
+        rank_b.cmp(&rank_a)
+    });
+
+    // Apply limit
+    projects.truncate(limit as usize);
+
+    // Convert to Vec<Value> only for the final response - Arc<Value> doesn't implement Serialize
+    let final_projects: Vec<Value> = projects
+        .into_iter()
+        .map(|arc_val| (*arc_val).clone())
+        .collect();
+    actix_web::HttpResponse::Ok().json(final_projects)
 }
 
 async fn get_top_projects(data: web::Data<AppState>, limit: i64) -> HttpResponse {
