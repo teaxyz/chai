@@ -200,7 +200,7 @@ class PkgxParser:
                 direct_deps.append(Dependency(name=dep_name, semver=semver))
 
             # Direct declaration, but sometimes the semvers are exact
-            elif isinstance(value, int) or isinstance(value, float):
+            elif isinstance(value, int | float):
                 dep_name = key
                 semver = str(value)
                 direct_deps.append(Dependency(name=dep_name, semver=semver))
