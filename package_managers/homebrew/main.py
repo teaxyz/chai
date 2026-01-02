@@ -1,13 +1,12 @@
 #! /usr/bin/env pkgx +python@3.11 uv run
 
 from datetime import datetime
-from typing import Dict, List, Tuple, Union
 from uuid import UUID
 
 from core.config import Config, PackageManager
 from core.logger import Logger
 from core.models import URL, LegacyDependency, Package, PackageURL
-from core.structs import Cache
+from core.structs import Cache, URLKey
 from package_managers.homebrew.db import HomebrewDB
 from package_managers.homebrew.diff import Diff
 from package_managers.homebrew.formulae import HomebrewFetcher
@@ -21,7 +20,7 @@ def main(config: Config, db: HomebrewDB) -> None:
     brew = fetcher.fetch()
 
     # get the URLs & set that
-    brew_urls = set(b.source for b in brew) | set(b.homepage for b in brew)
+    brew_urls = {b.source for b in brew} | {b.homepage for b in brew}
     db.set_current_urls(brew_urls)
     logger.log("Set current URLs")
 
@@ -34,13 +33,13 @@ def main(config: Config, db: HomebrewDB) -> None:
     )
 
     # total set of updates we'll make are:
-    new_packages: List[Package] = []
-    new_urls: Dict[Tuple[str, UUID], URL] = {}  # we'll convert this later
-    new_package_urls: List[PackageURL] = []
-    updated_packages: List[Dict[str, Union[UUID, str, datetime]]] = []
-    updated_package_urls: List[Dict[str, Union[UUID, datetime]]] = []
-    new_deps: List[LegacyDependency] = []
-    removed_deps: List[LegacyDependency] = []
+    new_packages: list[Package] = []
+    new_urls: dict[URLKey, URL] = {}  # we'll convert this later
+    new_package_urls: list[PackageURL] = []
+    updated_packages: list[dict[str, UUID | str | datetime]] = []
+    updated_package_urls: list[dict[str, UUID | datetime]] = []
+    new_deps: list[LegacyDependency] = []
+    removed_deps: list[LegacyDependency] = []
 
     diff = Diff(config, cache)
     for i, pkg in enumerate(brew):
@@ -85,10 +84,10 @@ def main(config: Config, db: HomebrewDB) -> None:
         new_packages,
         final_new_urls,
         new_package_urls,
-        updated_packages,
-        updated_package_urls,
         new_deps,
         removed_deps,
+        updated_packages,
+        updated_package_urls,
     )
 
 

@@ -1,7 +1,7 @@
 import time
+from collections.abc import Callable
 from os import getenv
 from threading import Thread
-from typing import Callable
 
 import schedule
 

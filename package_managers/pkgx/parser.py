@@ -1,6 +1,7 @@
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Tuple
+from typing import Any
 
 import yaml
 
@@ -50,7 +51,7 @@ class Dependency:
 @dataclass
 class EnvironmentVariable:
     name: str
-    value: str | List[str]
+    value: str | list[str]
 
 
 @dataclass
@@ -77,7 +78,7 @@ class Test:
 
 @dataclass
 class PkgxPackage:
-    distributable: List[Distributable]
+    distributable: list[Distributable]
     versions: Version
     build: Build | None = field(default=None)
     test: Test | None = field(default=None)
@@ -94,7 +95,7 @@ class PkgxParser:
     def __init__(self, repo_path: str):
         self.repo_path = repo_path
 
-    def find_package_yamls(self) -> Iterator[Tuple[Path, str]]:
+    def find_package_yamls(self) -> Iterator[tuple[Path, str]]:
         """Finds all package.yml files within the projects directory."""
         projects_path = Path(self.repo_path) / PROJECTS_DIR
         if not projects_path.is_dir():
@@ -112,7 +113,7 @@ class PkgxParser:
                 count += 1
         logger.debug(f"Found {count} {PACKAGE_FILE} files.")
 
-    def is_vendored(self, data: Dict[str, Any]) -> bool:
+    def is_vendored(self, data: dict[str, Any]) -> bool:
         """Checks if the package is vendored."""
         if "warnings" in data:
             warnings = data.get("warnings", [])
@@ -123,7 +124,7 @@ class PkgxParser:
     def parse_package_yaml(self, file_path: Path) -> PkgxPackage | None:
         """Parses a single package.yaml file."""
         try:
-            with open(file_path, "r") as f:
+            with open(file_path) as f:
                 data = yaml.safe_load(f)
                 if not isinstance(data, dict):
                     logger.warn(
@@ -147,7 +148,7 @@ class PkgxParser:
             raise e
             return None
 
-    def parse_packages(self) -> Iterator[Tuple[Dict[str, Any], str]]:
+    def parse_packages(self) -> Iterator[tuple[PkgxPackage, str]]:
         """Parses all package.yml files found in the repository."""
         for yaml_path, project_identifier in self.find_package_yamls():
             parsed_data = self.parse_package_yaml(yaml_path)
@@ -178,7 +179,7 @@ class PkgxParser:
                 for dep_name, semver in value.items():
                     if isinstance(semver, str):
                         platform_deps.append(Dependency(name=dep_name, semver=semver))
-                    elif isinstance(semver, int) or isinstance(semver, float):
+                    elif isinstance(semver, int | float):
                         platform_deps.append(
                             Dependency(name=dep_name, semver=str(semver))
                         )
@@ -317,7 +318,7 @@ class PkgxParser:
 
     def _parse_distributable_section(
         self, distributable_data: Any, file_path_str: str
-    ) -> Distributable | List[Distributable]:
+    ) -> Distributable | list[Distributable]:
         """Parses the distributable section from the package data."""
         if isinstance(distributable_data, list):
             # Convert keys for each dict in the list before creating Distributable
@@ -336,7 +337,7 @@ class PkgxParser:
             raise TypeError(f"Distributable in {file_path_str} is {distributable_type}")
 
     def map_package_yaml_to_pkgx_package(
-        self, data: Dict[str, Any], file_path_str: str
+        self, data: dict[str, Any], file_path_str: str
     ) -> PkgxPackage:
         """Maps a package.yml to a PkgxPackage."""
         # Keep the original data, do not normalize globally here

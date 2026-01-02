@@ -3,14 +3,12 @@
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, List
+from typing import Any
 from uuid import UUID
 
 import rustworkx as rx
 
 from core.logger import Logger
-from ranker.config import Config
-from ranker.db import GraphDB
 
 logger = Logger("ranker.chai_graph")
 
@@ -21,7 +19,7 @@ class PackageNode:
     This is based on canons!"""
 
     canon_id: UUID
-    package_manager_ids: List[UUID] = field(default_factory=list)
+    package_manager_ids: list[UUID] = field(default_factory=list)
     weight: Decimal = field(default_factory=Decimal)
     index: int = field(default_factory=lambda: -1)
 
@@ -135,44 +133,3 @@ class CHAI(rx.PyDiGraph):
         logger.log(f"Iterations: {iterations}. Ranks sum to {sum(result.values()):.9f}")
 
         return dict(result)
-
-
-if __name__ == "__main__":
-    config = Config()
-    G = CHAI()
-    # create a simple graph
-    uuid_1 = UUID("123e4567-e89b-12d3-a456-426614174000")
-    uuid_2 = UUID("123e4567-e89b-12d3-a456-426614174001")
-    uuid_3 = UUID("123e4567-e89b-12d3-a456-426614174002")
-    uuid_4 = UUID("123e4567-e89b-12d3-a456-426614174003")
-
-    a = PackageNode(canon_id=uuid_1)
-    b = PackageNode(canon_id=uuid_2)
-    c = PackageNode(canon_id=uuid_3)
-    d = PackageNode(canon_id=uuid_4)
-
-    a.index = G.add_node(a)
-    b.index = G.add_node(b)
-    c.index = G.add_node(c)
-    d.index = G.add_node(d)
-
-    G.add_edge(a.index, b.index, None)
-    G.add_edge(a.index, c.index, None)
-    G.add_edge(b.index, d.index, None)
-
-    initial_personalization = {
-        uuid_1: Decimal(0.3),  # Homebrew
-        uuid_2: Decimal(0.3),  # Homebrew
-        uuid_3: Decimal(0.4),  # Homebrew
-        uuid_4: Decimal(0.0),  # crates
-    }
-
-    ranks = G.distribute(
-        initial_personalization,
-        config.tearank_config.split_ratio,
-        config.tearank_config.tol,
-        max_iter=2,
-    )
-    for i, rank in ranks.items():
-        print(f"\tNode {i} has rank {rank:.9f}")
-    print(f"Sum of results: {sum(ranks.values()):.9f}")

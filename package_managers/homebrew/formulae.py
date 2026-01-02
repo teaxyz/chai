@@ -1,5 +1,5 @@
 import re
-from typing import Any, Dict, List
+from typing import Any
 
 from permalint import normalize_url
 from requests import get
@@ -21,7 +21,7 @@ class HomebrewFetcher(Fetcher):
             test=config.exec_config.test,
         )
 
-    def fetch(self) -> List[Actual]:
+    def fetch(self) -> list[Actual]:
         """Get the current state of Homebrew"""
         response = get(self.source)
         try:
@@ -31,10 +31,10 @@ class HomebrewFetcher(Fetcher):
             raise e
 
         # make json
-        data: List[Dict[str, Any]] = response.json()
+        data: list[dict[str, Any]] = response.json()
 
         # prep results
-        results: List[Actual] = []
+        results: list[Actual] = []
 
         for formula in data:
             # check if deprecated

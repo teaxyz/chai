@@ -323,10 +323,12 @@ pytest --markers
 2. **Missing Dependencies**: Install test requirements:
 
    ```bash
-   pip install -r tests/requirements.txt
+   uv sync --all-groups
+   source .venv/bin/activate
    ```
 
-3. **Database Connection Errors**: Tests should not require `CHAI_DATABASE_URL`. If a test fails due to database issues, it likely needs better mocking.
+3. **Database Connection Errors**: Tests should not require `CHAI_DATABASE_URL`. If a
+   test fails due to database issues, it likely needs better mocking.
 
 ### Debugging Tests
 

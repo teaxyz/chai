@@ -50,7 +50,7 @@ class Fetcher:
             os.makedirs(full_path, exist_ok=True)
 
             with open(os.path.join(full_path, file_name), "wb") as f:
-                if isinstance(file_content, (list, dict)):
+                if isinstance(file_content, list | dict):
                     # Convert JSON-serializable objects to string
                     file_content = json.dumps(file_content)
 

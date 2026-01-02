@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from decimal import Decimal, getcontext
-from typing import List, Tuple
 from uuid import UUID
 
 from sqlalchemy import func
@@ -35,8 +34,8 @@ class ConfigDB(DB):
         return self.get_pm_id_by_name("npm")[0][0]
 
     def get_canons_with_source_types(
-        self, source_types: List[str]
-    ) -> List[Tuple[UUID, List[str]]]:
+        self, source_types: list[str]
+    ) -> list[tuple[UUID, list[str]]]:
         with self.session() as session:
             return (
                 session.query(
@@ -51,7 +50,7 @@ class ConfigDB(DB):
                 .all()
             )
 
-    def get_pm_id_by_name(self, name: str | List[str]) -> UUID:
+    def get_pm_id_by_name(self, name: str | list[str]) -> UUID:
         if isinstance(name, str):
             name = [name]
 
@@ -70,38 +69,38 @@ class ConfigDB(DB):
 class TeaRankConfig:
     def __init__(self, db: ConfigDB) -> None:
         self.db = db
+        self.favorites: dict[str, Decimal] = {}
+        self.weights: dict[UUID, Decimal] = {}
+        self.personalization: dict[UUID, Decimal] = {}
         self.map_favorites(SYSTEM_PACKAGE_MANAGERS)
 
-    alpha: Decimal = Decimal(0.85)
-    favorites: dict[str, Decimal] = {}
-    weights: dict[UUID, Decimal] = {}
-    personalization: dict[UUID, Decimal] = {}
-    split_ratio: Decimal = Decimal(0.5)
-    tol: Decimal = Decimal(1e-6)
+    alpha: Decimal = Decimal("0.85")
+    split_ratio: Decimal = Decimal("0.5")
+    tol: Decimal = Decimal("1e-6")
     max_iter: int = 1000000
 
-    def map_favorites(self, package_managers: List[str]) -> None:
+    def map_favorites(self, package_managers: list[str]) -> None:
         for pm in package_managers:
             match pm:
                 case "homebrew":
                     pm_id = self.db.get_pm_id_by_name("homebrew")[0][0]
-                    self.favorites[pm_id] = Decimal(0.3)
+                    self.favorites[pm_id] = Decimal("0.3")
                 case "debian":
                     pm_id = self.db.get_pm_id_by_name("debian")[0][0]
-                    self.favorites[pm_id] = Decimal(0.6)
+                    self.favorites[pm_id] = Decimal("0.6")
                 case "pkgx":
                     pm_id = self.db.get_pm_id_by_name("pkgx")[0][0]
-                    self.favorites[pm_id] = Decimal(0.1)
+                    self.favorites[pm_id] = Decimal("0.1")
                 case _:
                     raise ValueError(f"Unknown system package manager: {pm}")
 
     def personalize(
-        self, canons_with_source_types: List[Tuple[UUID, List[str]]]
+        self, canons_with_source_types: list[tuple[UUID, list[str]]]
     ) -> None:
         """Adjust canon weights proportionally to the sum of `favorites` in their
         associated package managers, normalized to total 1."""
 
-        def coefficient(source_types: List[str]) -> Decimal:
+        def coefficient(source_types: list[str]) -> Decimal:
             return sum(self.favorites[source_type] for source_type in source_types)
 
         # calculate raw weights for each canon based on favorites
@@ -124,7 +123,7 @@ class TeaRankConfig:
         logger.debug(f"Personalization sum: {sum(self.personalization.values())}")
 
     def __str__(self) -> str:
-        return f"TeaRankConfig(alpha={self.alpha}, favorites={self.favorites}, weights={len(self.weights)}, personalization={len(self.personalization)})"  # noqa E501
+        return f"TeaRankConfig(alpha={self.alpha}, favorites={self.favorites}, weights={len(self.weights)}, personalization={len(self.personalization)})"  # E501
 
 
 class PMConfig:
@@ -158,7 +157,7 @@ class DedupeConfig:
         self.load = env_vars("LOAD", "true")
 
     def __str__(self) -> str:
-        return f"DedupeConfig(homepage_url_type_id={self.homepage_url_type_id}, load={self.load})"  # noqa E501
+        return f"DedupeConfig(homepage_url_type_id={self.homepage_url_type_id}, load={self.load})"  # E501
 
 
 @dataclass
@@ -170,7 +169,7 @@ class Config:
         self.url_types = URLTypes(db=db)
 
     def __str__(self) -> str:
-        return f"Config(tearank_config={self.tearank_config}, pm_config={self.pm_config}, url_types={self.url_types})"  # noqa E501
+        return f"Config(tearank_config={self.tearank_config}, pm_config={self.pm_config}, url_types={self.url_types})"  # E501
 
 
 def load_config() -> Config:

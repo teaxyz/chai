@@ -33,7 +33,7 @@ extensions that we'd need, so we've got a clean slate for our db structures.
 
 2. [Load](load-values.sql)
 
-The load script pre-populated some of the tables, with `enum`-like values - specifically
+The load script prepopulates some of the tables, with `enum`-like values - specifically
 for:
 
 - `url_types`: defines different types of URLs (e.g., source, homepage, documentation)

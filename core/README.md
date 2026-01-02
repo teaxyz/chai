@@ -5,11 +5,21 @@ database with package manager data, using python helpers. These tools provide a 
 foundation for fetching, transforming, and loading data from various package managers
 into the database.
 
+In general, the flow of an indexer is:
+
+1. Fetch data from source
+2. Fetch data from CHAI
+3. Do a giant diff
+4. Create new entries, updated entries for each package model in the db
+
+The best example is [Homebrew's](../package_managers/homebrew/main.py).
+
 ## Key Components
 
-### 1. [Config](config.py)
+### [Config](config.py)
 
-Config always runs first, and is the entrypoint for all loaders. It includes;
+Entrypoint for all loaders, generally has all the information needed for the pipeline
+to start. Includes:
 
 - Execution flags:
   - `FETCH` determines whether we request the data from source
@@ -19,23 +29,25 @@ Config always runs first, and is the entrypoint for all loaders. It includes;
   - `pm_id` gets the package manager id from the db, that we'd run the pipeline for
   - `source` is the data source for that package manager. `SOURCES` defines the map.
 
-The next 3 configuration classes retrieve the IDs for url types (homepage, documentation,
-etc.), dependency types (build, runtime, etc.) and user types (crates user, github user)
+The next 4 configuration classes retrieve the IDs for url types (homepage, documentation,
+etc.), dependency types (build, runtime, etc.), user types (crates user, github user),
+and all the package manager IDs as well.
 
 ### 2. [Database](db.py)
 
 The DB class offers a set of methods for interacting with the database, including:
 
-- Inserting and selecting data for packages, versions, users, dependencies, and more
-- Caching mechanisms to improve performance
-- Batch processing capabilities for efficient data insertion
+- Running queries to build a cache for the current state of the graph for a package
+  manager
+- Batching utilities
+- Some load functions
 
 ### 3. [Fetcher](fetcher.py)
 
 The Fetcher class provides functionality for downloading and extracting data from
 package manager sources. It supports:
 
-- Downloading tarball files
+- Downloading tarball / GZIP / Git files
 - Extracting contents to a specified directory
 - Maintaining a "latest" symlink so we always know where to look
 
@@ -75,7 +87,14 @@ To create a new loader for a package manager:
 1. Implement a custom Transformer class that inherits from the base Transformer, that
    figures out how to map the raw data provided by the package managers into the data
    model described in the [models](models/__init__.py) module.
-1. Create a main script that utilizes the core components (Config, DB, Fetcher,
-   Transformer, Scheduler) to fetch, transform, and load data.
+1. Load the cache for data currently in CHAI for that package manager
+1. Implement a diff to compare them
+1. Pass diff objects (lists of new / updated data points) to `db.ingest`
+1. Orchestrate via a `main.py`.
 
 Example usage can be found in the [crates](../package_managers/crates) loader.
+
+# TODOs
+
+- [ ] `Diff` currently has separate implementations for Homebrew and Crates, and could
+      be centralized - open to help here!

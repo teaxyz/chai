@@ -134,7 +134,7 @@ class Diff:
         }
 
         # for the correct URL type / URL for this package:
-        for url_type, url_id in resolved_urls.items():
+        for _url_type, url_id in resolved_urls.items():
             if url_id not in existing:
                 # new link!
                 new_links.append(
@@ -296,7 +296,7 @@ class Diff:
                 )
 
                 removed_deps.append(existing_dep)
-            except StopIteration:
+            except StopIteration as exc:
                 cache_deps_str = "\n".join(
                     [
                         f"{dep.dependency_id} / {dep.dependency_type_id}"
@@ -304,8 +304,8 @@ class Diff:
                     ]
                 )
                 raise ValueError(
-                    f"Removing {removed_dep_id} / {removed_dep_type} for {pkg_id} but not in Cache: \n{cache_deps_str}"  # noqa: E501
-                )
+                    f"Removing {removed_dep_id} / {removed_dep_type} for {pkg_id} but not in Cache: \n{cache_deps_str}"
+                ) from exc
 
         return new_deps, removed_deps
 

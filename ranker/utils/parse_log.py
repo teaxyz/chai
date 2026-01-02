@@ -15,10 +15,9 @@ Usage:
 import re
 import sys
 from statistics import mean
-from typing import List, Tuple
 
 
-def parse_log_line(line: str) -> Tuple[float, int]:
+def parse_log_line(line: str) -> tuple[float, int]:
     """
     Extract timestamp and package count from a log line.
 
@@ -37,7 +36,7 @@ def parse_log_line(line: str) -> Tuple[float, int]:
     return None
 
 
-def calculate_metrics(log_lines: List[str]) -> Tuple[float, float]:
+def calculate_metrics(log_lines: list[str]) -> tuple[float, float]:
     """
     Calculate processing metrics from log lines.
 
@@ -90,9 +89,9 @@ def main():
     if len(sys.argv) == 2:
         log_file = sys.argv[1]
         try:
-            with open(log_file, "r") as f:
+            with open(log_file) as f:
                 log_lines = f.readlines()
-        except IOError as e:
+        except OSError as e:
             print(f"Error reading log file: {e}")
             sys.exit(1)
     else:

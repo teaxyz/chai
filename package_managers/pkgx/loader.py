@@ -1,17 +1,11 @@
-from dataclasses import dataclass
-from typing import Dict, List, Set, Tuple
-from uuid import UUID, uuid4
-
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from core.config import Config
 from core.db import DB
 from core.models import (
-    URL,
     LegacyDependency,
     Package,
-    PackageURL,
 )
 from package_managers.pkgx.parser import DependencyBlock
 from package_managers.pkgx.transformer import Cache
@@ -21,7 +15,7 @@ BATCH_SIZE = 10000
 
 # NOTE: this is a separate instance of the db that is used in main
 class PkgxLoader(DB):
-    def __init__(self, config: Config, data: Dict[str, Cache]):
+    def __init__(self, config: Config, data: dict[str, Cache]):
         super().__init__("pkgx_db")
         self.config = config
         self.data = data
@@ -51,7 +45,7 @@ class PkgxLoader(DB):
             try:
                 package_dicts.append(pkg.to_dict())
             except Exception as e:
-                self.logger.error(f"Error in to_dict for package {pkg.name}: {str(e)}")
+                self.logger.error(f"Error in to_dict for package {pkg.name}: {e!s}")
 
         if not package_dicts:
             self.logger.log("No packages to insert")
@@ -74,7 +68,7 @@ class PkgxLoader(DB):
 
                 missing_derived_ids = [
                     derived_id
-                    for derived_id in unique_packages.keys()
+                    for derived_id in unique_packages
                     if derived_id not in inserted_packages
                 ]
                 self.logger.log(
@@ -100,7 +94,7 @@ class PkgxLoader(DB):
                 self.logger.log(f"Updated cache with IDs for {updated_count} packages")
 
             except Exception as e:
-                self.logger.error(f"Error inserting packages: {str(e)}")
+                self.logger.error(f"Error inserting packages: {e!s}")
                 self.logger.error(f"Error type: {type(e)}")
                 raise
 
@@ -126,10 +120,14 @@ class PkgxLoader(DB):
             package_id = cache.package.id
 
             # Helper to process a list of dependency names for a given type
-            def process_deps(dep_blocks: list[DependencyBlock], dep_type_id: str):
+            def process_deps(
+                dep_blocks: list[DependencyBlock],
+                dep_type_id: str,
+                key=key,
+                package_id=package_id,
+            ):
                 for dep_block in dep_blocks:
                     # TODO: do we need to use this?
-                    platform = dep_block.platform
                     for dep in dep_block.dependencies:
                         dep_name = dep.name
                         dep_semver = dep.semver
@@ -146,7 +144,7 @@ class PkgxLoader(DB):
                             or dep_cache.package.id is None
                         ):
                             self.logger.warn(
-                                f"Dependency package '{dep_name}' has no ID, skipping linkage for '{key}'"  # noqa
+                                f"Dependency package '{dep_name}' has no ID, skipping linkage for '{key}'"
                             )
                             continue
                         dependency_id = dep_cache.package.id
@@ -186,7 +184,7 @@ class PkgxLoader(DB):
                 for i in range(0, len(legacy_dependency_dicts), BATCH_SIZE):
                     batch = legacy_dependency_dicts[i : i + BATCH_SIZE]
                     self.logger.log(
-                        f"Processing LegacyDependency batch {i//BATCH_SIZE + 1}/{(len(legacy_dependency_dicts)-1)//BATCH_SIZE + 1} ({len(batch)} links)"  # noqa
+                        f"Processing LegacyDependency batch {i // BATCH_SIZE + 1}/{(len(legacy_dependency_dicts) - 1) // BATCH_SIZE + 1} ({len(batch)} links)"
                     )
                     stmt = (
                         pg_insert(LegacyDependency)
@@ -198,15 +196,6 @@ class PkgxLoader(DB):
                 self.logger.log("Successfully inserted all pkgx dependencies")
 
             except Exception as e:
-                self.logger.error(f"Error inserting legacy dependencies: {str(e)}")
+                self.logger.error(f"Error inserting legacy dependencies: {e!s}")
                 self.logger.error(f"Error type: {type(e)}")
                 raise
-
-
-if __name__ == "__main__":
-    from core.config import PackageManager
-
-    config = Config(PackageManager.PKGX)
-    db = DB(config)
-    loader = PkgxLoader(config, {})
-    loader.load_urls_v2()

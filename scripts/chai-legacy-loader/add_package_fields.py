@@ -15,16 +15,15 @@ Usage:
 import csv
 import sys
 import uuid
-from datetime import datetime, timezone
-from typing import List
+from datetime import UTC, datetime
 
 
 def validate_uuid(uuid_string: str) -> None:
     """Raises ValueError if the string is not a valid UUID."""
     try:
         uuid.UUID(uuid_string)
-    except ValueError:
-        raise ValueError(f"Invalid UUID format for package manager: {uuid_string}")
+    except ValueError as exc:
+        raise ValueError(f"Invalid UUID format: {uuid_string}") from exc
 
 
 def process_csv(input_file: str, output_file: str, package_manager_id: str) -> None:
@@ -40,9 +39,9 @@ def process_csv(input_file: str, output_file: str, package_manager_id: str) -> N
     Raises:
         ValueError: If the input CSV header is missing or incorrect.
     """
-    now = datetime.now(timezone.utc).isoformat()
-    expected_header: List[str] = ["derived_id", "name", "import_id"]
-    output_header: List[str] = [
+    now = datetime.now(UTC).isoformat()
+    expected_header: list[str] = ["derived_id", "name", "import_id"]
+    output_header: list[str] = [
         "id",
         "derived_id",
         "name",
@@ -52,14 +51,15 @@ def process_csv(input_file: str, output_file: str, package_manager_id: str) -> N
         "updated_at",
     ]
 
-    with open(input_file, "r", newline="") as infile, open(
-        output_file, "w", newline=""
-    ) as outfile:
+    with (
+        open(input_file, newline="") as infile,
+        open(output_file, "w", newline="") as outfile,
+    ):
         reader: csv._reader = csv.reader(infile)
         writer: csv._writer = csv.writer(outfile)
 
         # 1. Validate header row
-        header: List[str] | None = next(reader, None)
+        header: list[str] | None = next(reader, None)
         if header is None:
             raise ValueError(f"Input file '{input_file}' is missing a header row.")
         if header != expected_header:
@@ -82,7 +82,7 @@ def process_csv(input_file: str, output_file: str, package_manager_id: str) -> N
 
             row_uuid: str = str(uuid.uuid4())
             derived_id, name, import_id = row
-            output_row: List[str] = [
+            output_row: list[str] = [
                 row_uuid,
                 derived_id,
                 name,

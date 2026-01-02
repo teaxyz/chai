@@ -1,6 +1,5 @@
 import csv
 import os
-from typing import Dict, List
 
 from permalint import normalize_url, possible_names
 from sqlalchemy import UUID
@@ -23,14 +22,14 @@ class Transformer:
         self.name = name
         self.input = f"data/{name}/latest"
         self.logger = Logger(f"{name}_transformer")
-        self.files: Dict[str, str] = {
+        self.files: dict[str, str] = {
             "projects": "",
             "versions": "",
             "dependencies": "",
             "users": "",
             "urls": "",
         }
-        self.url_types: Dict[str, UUID] = {}
+        self.url_types: dict[str, UUID] = {}
 
     def finder(self, file_name: str) -> str:
         input_dir = os.path.realpath(self.input)
@@ -44,13 +43,13 @@ class Transformer:
 
     def open(self, file_name: str) -> str:
         file_path = self.finder(file_name)
-        with open(file_path, "r") as file:
+        with open(file_path) as file:
             return file.read()
 
     def canonicalize(self, url: str) -> str:
         return normalize_url(url)
 
-    def guess(self, db_client: DB, url: str, package_managers: List[UUID]) -> List[str]:
+    def guess(self, db_client: DB, url: str, package_managers: list[UUID]) -> list[str]:
         names = possible_names(url)
         urls = db_client.search_names(names, package_managers)
         return urls

@@ -16,9 +16,11 @@ class Logger:
     NORMAL = 1
     VERBOSE = 2
 
-    def __init__(self, name: str, mode=NORMAL, start=time.time()) -> None:
+    def __init__(
+        self, name: str, mode: int = NORMAL, start: float | None = None
+    ) -> None:
         self.name = name
-        self.start = start
+        self.start = start or time.time()
         self.mode = Logger.VERBOSE if DEBUG else mode
 
     def print(self, msg: str):

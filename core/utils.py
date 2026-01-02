@@ -1,6 +1,6 @@
-import re
 from os import getenv
-from typing import Any, Dict, List
+from os.path import exists, join
+from typing import Any
 
 
 def safe_int(val: str) -> int | None:
@@ -11,8 +11,8 @@ def safe_int(val: str) -> int | None:
 
 # TODO: needs explanation or simplification
 def build_query_params(
-    items: List[Dict[str, str]], cache: dict, attr: str
-) -> List[str]:
+    items: list[dict[str, str]], cache: dict, attr: str
+) -> list[str]:
     params = set()
     for item in items:
         if item[attr] not in cache:
@@ -28,7 +28,7 @@ def env_vars(env_var: str, default: str) -> bool:
 
 
 # convert keys to snake case
-def convert_keys_to_snake_case(data: Dict[str, Any]) -> Dict[str, Any]:
+def convert_keys_to_snake_case(data: dict[str, Any]) -> dict[str, Any]:
     """Recursively converts dictionary keys from hyphen-case to snake_case."""
     if isinstance(data, dict):
         new_dict = {}
@@ -45,3 +45,11 @@ def convert_keys_to_snake_case(data: Dict[str, Any]) -> Dict[str, Any]:
 def is_github_url(url: str) -> bool:
     """Assumes the url has been canonicalized by permalint"""
     return url.startswith("github.com/")
+
+
+def file_exists(*args) -> str:
+    """Confirms if a file exists"""
+    file_path = join(*args)
+    if not exists(file_path):
+        raise FileNotFoundError(f"{file_path} not found")
+    return file_path

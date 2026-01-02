@@ -1,15 +1,11 @@
-FROM python:3.11
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 
 # Copy everything
 COPY . .
 
-# Install core requirements
+# Install core requirements using uv
 WORKDIR /core
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Install debian requirements
-WORKDIR /package_managers/debian
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --system -r requirements.txt
 
 WORKDIR /
 # Run the main application
