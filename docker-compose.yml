@@ -22,7 +22,6 @@ services:
     environment:
       - CHAI_DATABASE_URL=${CHAI_DATABASE_URL:-postgresql://postgres:s3cr3t@db:5432/chai}
       - PGPASSWORD=${CHAI_DB_PASSWORD:-s3cr3t}
-      - CHAI_DATABASE_ADMIN_URL=${CHAI_DATABASE_ADMIN_URL:-postgresql://postgres:s3cr3t@db:5432/postgres}
     depends_on:
       db:
         condition: service_healthy
