@@ -13,27 +13,30 @@ set -uo pipefail
 # done
 
 # Check if the 'chai' database exists, create it if it doesn't
-if [ "$( psql -XtAc "SELECT 1 FROM pg_database WHERE datname='chai'" -h "$CHAI_DATABASE_URL" -U postgres)" = '1' ]
+# Parse CHAI_DATABASE_URL: postgresql://user:password@host:port/dbname
+# Extract components
+DB_USER=$(echo "$CHAI_DATABASE_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+DB_PASSWORD=$(echo "$CHAI_DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+DB_HOST=$(echo "$CHAI_DATABASE_URL" | sed -n 's|.*@\([^:]*\):.*|\1|p')
+DB_PORT=$(echo "$CHAI_DATABASE_URL" | sed -n 's|.*:\([0-9]*\)/.*|\1|p')
+DB_NAME=$(echo "$CHAI_DATABASE_URL" | sed -n 's|.*/\([^/]*\)$|\1|p')
+
+export PGPASSWORD="$DB_PASSWORD"
+
+# Connect to 'postgres' database to check if 'chai' exists
+if psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='chai'" | grep -q 1
 then
     echo "Database 'chai' already exists"
 else
     echo "Database 'chai' does not exist, creating..."
-    # Run the initialization script to create the database
-    psql -U postgres -h "$CHAI_DATABASE_URL" -f init-script.sql -a
+    psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -f init-script.sql -a
 fi
 
-# Run database migrations
+# Run migrations and load data (uses 'chai' database)
 echo "Current database version: $(alembic current)"
-if alembic upgrade head
-then
-  echo "Migrations completed successfully"
-else
-  echo "Migration failed"
-  exit 1
-fi
+alembic upgrade head || { echo "Migration failed"; exit 1; }
 
-# Load initial values into the database
 echo "Loading initial values into the database..."
-psql -U postgres -h "$CHAI_DATABASE_URL" -d chai -f load-values.sql -a
+psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f load-values.sql -a
 
 echo "Database setup and initialization complete"
