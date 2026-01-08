@@ -21,6 +21,7 @@ services:
       dockerfile: ./alembic/Dockerfile
     environment:
       - CHAI_DATABASE_URL=${CHAI_DATABASE_URL:-postgresql://postgres:s3cr3t@db:5432/chai}
+      - CHAI_DATABASE_ADMIN_URL=${CHAI_DATABASE_URL:-postgresql://postgres:s3cr3t@db:5432/postgres}
       - PGPASSWORD=${CHAI_DB_PASSWORD:-s3cr3t}
     depends_on:
       db:
